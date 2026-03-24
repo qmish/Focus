@@ -1,146 +1,43 @@
-# Release Notes Template
+# Release Notes
 
-## v0.9.0 — Тестирование и Production (24 марта 2026)
+## v0.5.0 — Интеграция с MS Exchange Calendar (24 марта 2026)
 
-### 🎯 Цель
-Завершающий этап: нагрузочное тестирование, security сканирование, production deployment.
-
-### ✨ Новое
-- **Load тесты (k6)**
-  - api-load-test.js — API нагрузочное тестирование (100 VUs)
-  - websocket-stress-test.js — WebSocket стресс тест (50 connections)
-  - Метрики: p95 < 500ms, error rate < 1%
-
-- **E2E тесты (Playwright)**
-  - app.spec.ts — 10+ сценариев
-  - Мультибраузерная поддержка (Chrome, Firefox, Safari)
-  - Mobile тесты (Pixel 5, iPhone 12)
-
-- **Security тесты**
-  - OWASP ZAP baseline/full scans
-  - security-checklist.md — OWASP Top 10 чек-лист
-  - scan.sh — автоматизация сканирования
-
-- **Production deployment**
-  - k8s/production.yaml — полный манифест
-  - HPA конфигурации для API, frontend, JVB
-  - Prometheus ServiceMonitor + 12 alert правил
-  - Backup/DR процедуры
-
-### 📊 Тесты
-- 150+ unit/integration
-- 10+ k6 сценариев
-- 10+ E2E тестов
-- Security scan checklist
-
-### 📈 Метрики
-- API p95: 320ms (цель < 500ms) ✅
-- WebSocket latency: 45ms (цель < 100ms) ✅
-- Error rate: 0.3% (цель < 1%) ✅
-
----
-
-## v0.8.0 — Админка и масштабирование (24 марта 2026)
+**Последний релиз** ✅
 
 ### 🎯 Цель
-Admin frontend и Kubernetes масштабирование.
+Интеграция с календарями MS Exchange для синхронизации встреч.
 
 ### ✨ Новое
-- **Admin Frontend (React)**
-  - DashboardPage — статистика системы
-  - UsersPage — управление пользователями
-  - ConferencesPage — мониторинг конференций
-  - SettingsPage — настройки системы
-  - Keycloak аутентификация
+- **Microsoft Graph API Integration**
+  - `internal/exchange/graph.go` — Graph API клиент
+  - `CreateEvent()` — создание встреч в Exchange
+  - `GetEvents()` — получение событий календаря
+  - `UpdateEvent()` / `DeleteEvent()` — управление событиями
 
-- **Kubernetes HPA**
-  - hpa-api.yaml — API (2-10 реплик)
-  - hpa-frontend.yaml — Frontend (2-6 реплик)
-  - hpa-jvb.yaml — JVB (2-20 реплик)
-
-- **Monitoring**
-  - servicemonitor-api.yaml — Prometheus интеграция
-  - prometheus-rules.yaml — 12 alert правил
-
-### 📊 Тесты
-- 150+ тестов (все проходят)
-
----
-
-## v0.7.0 — Административная панель API (24 марта 2026)
-
-### 🎯 Цель
-Admin API для управления системой.
-
-### ✨ Новое
-- **Admin API Endpoints**
-  - GET /api/v1/admin/users — список пользователей
-  - PUT /api/v1/admin/users/:id/roles — обновление ролей
-  - POST /api/v1/admin/users/:id/ban — блокировка
-  - GET /api/v1/admin/stats — статистика
-  - GET /api/v1/admin/conferences — активные конференции
-
-- **Безопасность**
-  - requireAdmin middleware
-  - Проверка роли 'admin'
-  - RBAC для всех endpoints
-
-### 📊 Тесты
-- 148 тестов (18 новых для admin handlers)
-
----
-
-## v0.6.0 — Вебхуки и чат-боты (24 марта 2026)
-
-### 🎯 Цель
-Система вебхуков и платформа чат-ботов.
-
-### ✨ Новое
-- **Webhooks**
-  - WebhookHandler — обработка входящих webhook
-  - WebhookDispatcher — рассылка исходящих
-  - HMAC-SHA256 подпись
-  - События: conference.created/ended, participant.joined/left
-
-- **Chat Bots**
-  - BotEngine — движок ботов
-  - Meeting Bot: /create meeting [название]
-  - Help Bot: /help
-  - Status Bot: /status
-
-- **Репозитории**
-  - WebhookRepository — CRUD для вебхуков
-  - BotRepository — CRUD для ботов
-
-### 📊 Тесты
-- 130 тестов (22 новых)
-
----
-
-## v0.5.0 — Интеграция с MS Exchange (24 марта 2026)
-
-### 🎯 Цель
-Синхронизация с календарями MS Exchange.
-
-### ✨ Новое
-- **Graph API Integration**
-  - graph.go — Microsoft Graph клиент
-  - CreateEvent — создание встреч
-  - GetEvents — получение событий
-  - UpdateEvent/DeleteEvent — управление
-
-- **Calendar API**
-  - GET /api/v1/calendar/events
-  - POST /api/v1/calendar/events — создание с Jitsi
-  - PUT/DELETE /api/v1/calendar/events/:id
+- **Calendar REST API**
+  - `GET /api/v1/calendar/events` — список событий
+  - `POST /api/v1/calendar/events` — создание встречи с Jitsi комнатой
+  - `PUT /api/v1/calendar/events/:id` — обновление
+  - `DELETE /api/v1/calendar/events/:id` — отмена
 
 - **Функционал**
-  - Автоматическое создание Jitsi комнаты
-  - Отправка приглашений
-  - Синхронизация с Exchange
+  - Автоматическое создание Jitsi комнаты при создании встречи
+  - Генерация уникального room name
+  - Сохранение связи meeting ↔ room
+  - Вставка Jitsi URL в описание события
+  - Отправка приглашений участникам через Exchange
 
 ### 📊 Тесты
-- 130 тестов (14 новых для exchange)
+- 86 тестов (все проходят)
+- 14 тестов для exchange модуля
+
+### 📦 Зависимости
+- `github.com/microsoftgraph/msgraph-sdk-go` v1.96.0
+- `github.com/Azure/azure-sdk-for-go/sdk/azidentity` v1.13.1
+
+### 🔗 Ссылки
+- Релиз: https://github.com/qmish/Focus/releases/tag/v0.5.0
+- Документация: `docs/Integration.md`
 
 ---
 
@@ -187,7 +84,7 @@ Real-time сообщения через WebSocket.
   - Поиск по содержимому
 
 - **Join Room Handler**
-  - POST /api/v1/rooms/:id/join
+  - `POST /api/v1/rooms/:id/join`
   - Генерация Jitsi JWT
   - Проверка прав доступа
 
@@ -203,7 +100,7 @@ Real-time сообщения через WebSocket.
 
 ### ✨ Новое
 - **OIDC Authentication**
-  - oidc.go — Keycloak OIDC провайдер
+  - `internal/auth/oidc.go` — Keycloak OIDC провайдер
   - Login/Callback handlers
   - Session JWT генерация
   - Auth middleware
@@ -251,13 +148,28 @@ Real-time сообщения через WebSocket.
 
 ---
 
-## 📈 Общая статистика
+## 📈 Итоговая статистика проекта
 
 | Метрика | Значение |
 |---------|----------|
-| Релизов | 9 |
-| Недель разработки | 14 |
-| Файлов | 110+ |
-| Строк кода | 11,000+ |
-| Тестов | 170+ |
-| Документов | 13 |
+| **Релизов** | 5 |
+| **Недель разработки** | 10 |
+| **Файлов** | 75+ |
+| **Строк кода** | 8,000+ |
+| **Тестов** | 86 |
+| **Документов** | 11 |
+
+### Прогресс по этапам
+
+| Этап | Статус | Релиз |
+|------|--------|-------|
+| Этап 0: Инициализация | ✅ 100% | v0.1.0 |
+| Этап 1: Инфраструктура | ✅ 100% | v0.1.0 |
+| Этап 2: Аутентификация и API | ✅ 100% | v0.2.0, v0.3.0 |
+| Этап 3: Фронтенд | ✅ 100% | v0.4.0 |
+| Этап 4: Интеграция с MS Exchange | ✅ 100% | v0.5.0 |
+| Этап 5: Вебхуки и чат-боты | ⏳ В плане | — |
+| Этап 6: Админка и масштабирование | ⏳ В плане | — |
+| Этап 7: Тестирование и внедрение | ⏳ В плане | — |
+
+**5 из 8 этапов завершены (62.5% проекта)** ✅
