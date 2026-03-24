@@ -1,0 +1,161 @@
+package repository
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/qmish/focus-api/internal/models"
+	"gorm.io/gorm"
+)
+
+var (
+	ErrUserNotFound      = errors.New("user not found")
+	ErrUserAlreadyExists = errors.New("user already exists")
+)
+
+// UserRepository репозиторий для работы с пользователями
+type UserRepository struct {
+	db *gorm.DB
+}
+
+// NewUserRepository создаёт новый UserRepository
+func NewUserRepository(db *gorm.DB) *UserRepository {
+	return &UserRepository{db: db}
+}
+
+// Create создаёт нового пользователя
+func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
+	if err := r.db.WithContext(ctx).Create(user).Error; err != nil {
+		if isUniqueViolation(err) {
+			return ErrUserAlreadyExists
+		}
+		return err
+	}
+	return nil
+}
+
+// GetByID получает пользователя по ID
+func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	var user models.User
+	if err := r.db.WithContext(ctx).First(&user, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// GetByKeycloakID получает пользователя по Keycloak ID
+func (r *UserRepository) GetByKeycloakID(ctx context.Context, keycloakID uuid.UUID) (*models.User, error) {
+	var user models.User
+	if err := r.db.WithContext(ctx).Where("keycloak_id = ?", keycloakID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// GetByEmail получает пользователя по email
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	var user models.User
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// Update обновляет пользователя
+func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
+	user.UpdatedAt = time.Now()
+	return r.db.WithContext(ctx).Save(user).Error
+}
+
+// UpdateLastLogin обновляет время последнего входа
+func (r *UserRepository) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&models.User{}).
+		Where("id = ?", id).
+		Update("last_login_at", now).Error
+}
+
+// Delete удаляет пользователя (мягкое удаление)
+func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Model(&models.User{}).
+		Where("id = ?", id).
+		Update("is_active", false).Error
+}
+
+// List получает список пользователей с пагинацией
+func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
+	var users []*models.User
+	err := r.db.WithContext(ctx).
+		Limit(limit).
+		Offset(offset).
+		Order("created_at DESC").
+		Find(&users).Error
+	return users, err
+}
+
+// Count возвращает количество пользователей
+func (r *UserRepository) Count(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&models.User{}).Count(&count).Error
+	return count, err
+}
+
+// Search ищет пользователей по имени или email
+func (r *UserRepository) Search(ctx context.Context, query string, limit int) ([]*models.User, error) {
+	var users []*models.User
+	searchPattern := "%" + query + "%"
+	err := r.db.WithContext(ctx).
+		Where("name ILIKE ? OR email ILIKE ?", searchPattern, searchPattern).
+		Limit(limit).
+		Order("name ASC").
+		Find(&users).Error
+	return users, err
+}
+
+// GetOrCreate получает пользователя или создаёт нового
+func (r *UserRepository) GetOrCreate(ctx context.Context, keycloakID uuid.UUID, email, name string) (*models.User, error) {
+	user, err := r.GetByKeycloakID(ctx, keycloakID)
+	if err == nil {
+		return user, nil
+	}
+
+	if !errors.Is(err, ErrUserNotFound) {
+		return nil, err
+	}
+
+	user = models.NewUser(keycloakID, email, name)
+	if err := r.Create(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func isUniqueViolation(err error) bool {
+	// Проверка на уникальность (PostgreSQL error code 23505)
+	return err != nil && contains(err.Error(), "duplicate key")
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - основная база данных
+  postgres:
+    image: postgres:15.4-alpine
+    container_name: focus-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: focus
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - focus-network
+
+  # Redis - кэш и сессии
+  redis:
+    image: redis:7.2-alpine
+    container_name: focus-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - focus-network
+
+  # Keycloak - SSO сервер
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0.5
+    container_name: focus-keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: postgres
+      KC_PROXY: edge
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+    command: start-dev
+    ports:
+      - "8180:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - focus-network
+
+  # API сервер (в разработке)
+  api:
+    build:
+      context: ./API_Go
+      dockerfile: Dockerfile
+    container_name: focus-api
+    environment:
+      ENV: development
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: focus
+      DB_SSLMODE: disable
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: company
+      KEYCLOAK_CLIENT_ID: messenger-api
+      KEYCLOAK_CLIENT_SECRET: secret
+      JITSI_BASE_URL: https://meet.company.com
+      JITSI_APP_ID: jitsi
+      JITSI_APP_SECRET: secret
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - focus-network
+    volumes:
+      - ./API_Go:/app
+    command: go run cmd/server/main.go
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  keycloak_data:
+    driver: local
+
+networks:
+  focus-network:
+    driver: bridge
