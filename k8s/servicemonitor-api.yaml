@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-go-monitor
+  namespace: messenger
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: api-go
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - messenger

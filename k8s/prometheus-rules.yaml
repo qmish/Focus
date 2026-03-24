@@ -1,0 +1,122 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: messenger-alerts
+  namespace: messenger
+  labels:
+    release: prometheus
+spec:
+  groups:
+  - name: messenger.rules
+    rules:
+    # High error rate
+    - alert: HighErrorRate
+      expr: |
+        sum(rate(http_requests_total{status=~"5..",namespace="messenger"}[5m])) 
+        / sum(rate(http_requests_total{namespace="messenger"}[5m])) > 0.05
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Высокий уровень ошибок API"
+        description: "Уровень ошибок {{ $value | humanizePercentage }} превышает 5%"
+
+    # High latency
+    - alert: HighLatency
+      expr: |
+        histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="messenger"}[5m])) by (le)) > 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Высокая задержка API"
+        description: "P95 задержка {{ $value | humanize }}s превышает 1s"
+
+    # Pod restart
+    - alert: PodRestarting
+      expr: |
+        increase(kube_pod_container_status_restarts_total{namespace="messenger"}[1h]) > 3
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Частые перезапуски пода"
+        description: "Под {{ $labels.pod }} перезапустился {{ $value }} раз за час"
+
+    # Low replicas
+    - alert: LowReplicaCount
+      expr: |
+        kube_deployment_status_replicas_available{namespace="messenger"} 
+        < kube_deployment_spec_replicas{namespace="messenger"}
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Недостаточно реплик"
+        description: "Деплоймент {{ $labels.deployment }} имеет меньше реплик чем требуется"
+
+    # Database connection pool exhausted
+    - alert: DatabasePoolExhausted
+      expr: |
+        db_pool_connections_max - db_pool_connections_in_use < 5
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Пул соединений БД исчерпан"
+        description: "Осталось менее 5 свободных соединений"
+
+    # Jitsi high participants
+    - alert: JitsiHighParticipants
+      expr: |
+        sum(jitsi_participants{namespace="jitsi"}) > 500
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Много участников в конференциях"
+        description: "{{ $value }} участников в конференциях"
+
+    # JVB down
+    - alert: JVBDown
+      expr: |
+        up{job="jvb",namespace="jitsi"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Jitsi Videobridge недоступен"
+        description: "JVB {{ $labels.pod }} не отвечает"
+
+    # Keycloak down
+    - alert: KeycloakDown
+      expr: |
+        up{job="keycloak",namespace="infra"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Keycloak недоступен"
+        description: "Keycloak {{ $labels.pod }} не отвечает"
+
+    # PostgreSQL down
+    - alert: PostgreSQLDown
+      expr: |
+        pg_up{namespace="infra"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "PostgreSQL недоступен"
+        description: "PostgreSQL {{ $labels.instance }} не отвечает"
+
+    # Redis down
+    - alert: RedisDown
+      expr: |
+        redis_up{namespace="infra"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Redis недоступен"
+        description: "Redis {{ $labels.instance }} не отвечает"
