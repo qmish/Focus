@@ -1,0 +1,335 @@
+# Production Deployment Configuration
+
+## Namespace
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: messenger-prod
+  labels:
+    name: messenger-prod
+    environment: production
+```
+
+## Resource Quotas
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: messenger-quota
+  namespace: messenger-prod
+spec:
+  hard:
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    pods: "50"
+    services: "20"
+    secrets: "30"
+    configmaps: "30"
+```
+
+## Network Policies
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: messenger-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress
+  namespace: messenger-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: messenger-prod
+  - ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+```
+
+## Pod Security Standards
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: messenger-prod
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+```
+
+## Backup Configuration
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: messenger-prod
+data:
+  POSTGRES_DB: "focus"
+  BACKUP_RETENTION_DAYS: "30"
+  BACKUP_SCHEDULE: "0 2 * * *"
+```
+
+## Monitoring Stack
+```yaml
+# PrometheusRule already defined in k8s/prometheus-rules.yaml
+
+# Alertmanager config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      receiver: 'email'
+    receivers:
+    - name: 'email'
+      email_configs:
+      - to: 'alerts@company.com'
+        from: 'alertmanager@company.com'
+        smarthost: 'smtp.company.com:587'
+```
+
+## Ingress Configuration
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: messenger-ingress
+  namespace: messenger-prod
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+spec:
+  rules:
+  - host: api.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-go
+            port:
+              number: 80
+  - host: chat.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+  - host: admin.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-admin
+            port:
+              number: 80
+  - host: meet.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: jitsi-meet-web
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - api.company.com
+    secretName: api-tls
+  - hosts:
+    - chat.company.com
+    secretName: chat-tls
+  - hosts:
+    - admin.company.com
+    secretName: admin-tls
+  - hosts:
+    - meet.company.com
+    secretName: meet-tls
+```
+
+## Secrets Management
+```bash
+# Create secrets (run before deployment)
+kubectl create namespace messenger-prod
+
+# Database password
+kubectl create secret generic postgres-secret \
+  --from-literal=password=$(openssl rand -base64 32) \
+  --namespace messenger-prod
+
+# Redis password
+kubectl create secret generic redis-secret \
+  --from-literal=password=$(openssl rand -base64 32) \
+  --namespace messenger-prod
+
+# JWT secret
+kubectl create secret generic jwt-secret \
+  --from-literal=secret=$(openssl rand -base64 32) \
+  --namespace messenger-prod
+
+# Keycloak secret
+kubectl create secret generic keycloak-secret \
+  --from-literal=client-secret=YOUR_KEYCLOAK_SECRET \
+  --namespace messenger-prod
+
+# Exchange secret
+kubectl create secret generic exchange-secret \
+  --from-literal=client-secret=YOUR_EXCHANGE_SECRET \
+  --namespace messenger-prod
+```
+
+## Deployment Steps
+
+1. **Prepare cluster**
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/resource-quota.yaml
+kubectl apply -f k8s/network-policy.yaml
+```
+
+2. **Create secrets**
+```bash
+./scripts/create-secrets.sh
+```
+
+3. **Deploy infrastructure**
+```bash
+kubectl apply -f k8s/postgres-statefulset.yaml
+kubectl apply -f k8s/redis-statefulset.yaml
+```
+
+4. **Deploy application**
+```bash
+kubectl apply -f k8s/api-deployment.yaml
+kubectl apply -f k8s/frontend-deployment.yaml
+kubectl apply -f k8s/frontend-admin-deployment.yaml
+```
+
+5. **Deploy Jitsi**
+```bash
+helm install jitsi-meet jitsi/jitsi-meet \
+  --namespace jitsi \
+  -f k8s/jitsi-values.yaml
+```
+
+6. **Configure ingress**
+```bash
+kubectl apply -f k8s/ingress.yaml
+```
+
+7. **Setup monitoring**
+```bash
+kubectl apply -f k8s/servicemonitor-api.yaml
+kubectl apply -f k8s/prometheus-rules.yaml
+```
+
+8. **Verify deployment**
+```bash
+kubectl get pods -n messenger-prod
+kubectl get services -n messenger-prod
+kubectl get ingress -n messenger-prod
+```
+
+9. **Run smoke tests**
+```bash
+./tests/smoke-test.sh
+```
+
+## Rollback Plan
+
+```bash
+# Check rollout status
+kubectl rollout status deployment/api-go -n messenger-prod
+
+# Rollback if needed
+kubectl rollout undo deployment/api-go -n messenger-prod
+
+# Rollback to specific revision
+kubectl rollout undo deployment/api-go -n messenger-prod --to-revision=2
+```
+
+## Disaster Recovery
+
+### Backup
+```bash
+# PostgreSQL backup
+pg_dump -h postgres -U focus focus | gzip > backup.sql.gz
+
+# Upload to S3
+aws s3 cp backup.sql.gz s3://backups/focus/$(date +%Y%m%d).sql.gz
+```
+
+### Restore
+```bash
+# Download backup
+aws s3 cp s3://backups/focus/20240101.sql.gz .
+
+# Restore
+gunzip backup.sql.gz
+psql -h postgres -U focus focus < backup.sql
+```
+
+## Health Checks
+
+```bash
+# API health
+curl https://api.company.com/health
+
+# Readiness
+curl https://api.company.com/ready
+
+# Frontend
+curl https://chat.company.com
+
+# Admin
+curl https://admin.company.com
+
+# Jitsi
+curl https://meet.company.com
+```

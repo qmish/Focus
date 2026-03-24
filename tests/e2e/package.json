@@ -1,0 +1,15 @@
+{
+  "name": "focus-e2e-tests",
+  "version": "1.0.0",
+  "description": "E2E tests for Focus Messenger",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:chromium": "playwright test --project=chromium",
+    "test:report": "playwright show-report tests/e2e/results/"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

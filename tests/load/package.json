@@ -1,0 +1,14 @@
+{
+  "name": "focus-load-tests",
+  "version": "1.0.0",
+  "description": "Load tests for Focus API",
+  "scripts": {
+    "load:api": "k6 run tests/load/api-load-test.js",
+    "load:ws": "k6 run tests/load/websocket-stress-test.js",
+    "load:smoke": "k6 run --vus 5 --duration 30s tests/load/api-load-test.js",
+    "load:stress": "k6 run --vus 100 --duration 5m tests/load/api-load-test.js"
+  },
+  "devDependencies": {
+    "k6": "^0.45.0"
+  }
+}
