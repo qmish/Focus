@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/qmish/focus-api/internal/api/handlers"
+	"github.com/qmish/focus-api/internal/auth"
 	"github.com/qmish/focus-api/internal/config"
 	"github.com/qmish/focus-api/internal/database"
 	"github.com/qmish/focus-api/internal/jitsi"
@@ -64,6 +66,19 @@ func main() {
 	userRepo := repository.NewUserRepository(db.DB)
 	roomRepo := repository.NewRoomRepository(db.DB)
 
+	// Инициализация OIDC провайдера
+	oidcProvider, err := auth.NewOIDCProvider(auth.OIDCConfig{
+		IssuerURL:    fmt.Sprintf("%s/realms/%s", cfg.Keycloak.ServerURL, cfg.Keycloak.Realm),
+		ClientID:     cfg.Keycloak.ClientID,
+		ClientSecret: cfg.Keycloak.ClientSecret,
+		RedirectURL:  cfg.Keycloak.RedirectURL,
+		Scopes:       []string{"openid", "profile", "email", "roles"},
+	})
+	if err != nil {
+		logger.Error("Failed to create OIDC provider", zap.Error(err))
+		// Продолжаем без OIDC для разработки
+	}
+
 	// Инициализация Jitsi генератора токенов
 	jitsiGen := jitsi.NewTokenGenerator(
 		cfg.Jitsi.BaseURL,
@@ -73,6 +88,14 @@ func main() {
 		cfg.Jitsi.Audience,
 		cfg.Jitsi.TokenLifetime,
 	)
+
+	// Создание handlers
+	authHandler := handlers.NewAuthHandler(oidcProvider, userRepo, jitsiGen, cfg, logger.WithContext(context.Background()))
+	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo)
+	messageHandler := handlers.NewMessageHandler()
+
+	// Создание auth middleware
+	authMiddleware := auth.NewAuthMiddleware([]byte(cfg.Jitsi.AppSecret))
 
 	// Создание роутера
 	r := chi.NewRouter()
@@ -92,32 +115,41 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes
 		r.Route("/auth", func(r chi.Router) {
-			// TODO: Implement auth handlers
-			r.Get("/login", func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte("Login endpoint - TODO"))
-			})
-			r.Get("/callback", func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte("Callback endpoint - TODO"))
-			})
+			r.Get("/login", authHandler.Login)
+			r.Get("/callback", authHandler.Callback)
+			r.Post("/refresh", authHandler.Refresh)
+			r.Post("/logout", authHandler.Logout)
 		})
 
-		// Protected routes (TODO: Add auth middleware)
-		r.Route("/rooms", func(r chi.Router) {
-			// r.Use(authMiddleware)
-			r.Get("/", listRooms(roomRepo))
-			r.Post("/", createRoom(roomRepo, userRepo, jitsiGen))
-			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", getRoom(roomRepo))
-				r.Put("/", updateRoom(roomRepo))
-				r.Delete("/", deleteRoom(roomRepo))
-				r.Post("/join", joinRoom(roomRepo, jitsiGen))
-			})
-		})
+		// Protected routes
+		r.Group(func(r chi.Router) {
+			r.Use(authMiddleware.Middleware)
 
-		r.Route("/messages", func(r chi.Router) {
-			// r.Use(authMiddleware)
-			r.Get("/", listMessages)
-			r.Post("/", createMessage)
+			// User info
+			r.Get("/auth/me", authHandler.Me)
+
+			// Rooms
+			r.Route("/rooms", func(r chi.Router) {
+				r.Get("/", roomHandler.ListRooms)
+				r.Post("/", roomHandler.CreateRoom)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", roomHandler.GetRoom)
+					r.Put("/", roomHandler.UpdateRoom)
+					r.Delete("/", roomHandler.DeleteRoom)
+					r.Post("/join", roomHandler.JoinRoom)
+				})
+			})
+
+			// Messages
+			r.Route("/messages", func(r chi.Router) {
+				r.Get("/", messageHandler.ListMessages)
+				r.Post("/", messageHandler.CreateMessage)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", messageHandler.GetMessage)
+					r.Put("/", messageHandler.UpdateMessage)
+					r.Delete("/", messageHandler.DeleteMessage)
+				})
+			})
 		})
 	})
 
@@ -179,80 +211,4 @@ func readinessCheck(db *database.Database) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ready"}`))
 	}
-}
-
-// listRooms обработчик GET /rooms
-func listRooms(repo *repository.RoomRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Implement
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"rooms":[],"pagination":{"page":1,"per_page":20,"total":0}}`))
-	}
-}
-
-// createRoom обработчик POST /rooms
-func createRoom(repo *repository.RoomRepository, userRepo *repository.UserRepository, jitsiGen *jitsi.TokenGenerator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Implement
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte(`{"error":"not implemented"}`))
-	}
-}
-
-// getRoom обработчик GET /rooms/{id}
-func getRoom(repo *repository.RoomRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Implement
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte(`{"error":"not implemented"}`))
-	}
-}
-
-// updateRoom обработчик PUT /rooms/{id}
-func updateRoom(repo *repository.RoomRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Implement
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte(`{"error":"not implemented"}`))
-	}
-}
-
-// deleteRoom обработчик DELETE /rooms/{id}
-func deleteRoom(repo *repository.RoomRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Implement
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte(`{"error":"not implemented"}`))
-	}
-}
-
-// joinRoom обработчик POST /rooms/{id}/join
-func joinRoom(repo *repository.RoomRepository, jitsiGen *jitsi.TokenGenerator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Implement
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte(`{"error":"not implemented"}`))
-	}
-}
-
-// listMessages обработчик GET /messages
-func listMessages(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"error":"not implemented"}`))
-}
-
-// createMessage обработчик POST /messages
-func createMessage(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"error":"not implemented"}`))
 }
