@@ -15,6 +15,7 @@ import (
 	"github.com/qmish/focus-api/internal/auth"
 	"github.com/qmish/focus-api/internal/config"
 	"github.com/qmish/focus-api/internal/database"
+	"github.com/qmish/focus-api/internal/exchange"
 	"github.com/qmish/focus-api/internal/jitsi"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
@@ -68,6 +69,21 @@ func main() {
 	roomRepo := repository.NewRoomRepository(db.DB)
 	messageRepo := repository.NewMessageRepository(db.DB)
 
+	// Инициализация Graph API клиента (Exchange)
+	var graphClient *exchange.GraphClient
+	if cfg.Exchange.TenantID != "" && cfg.Exchange.ClientID != "" {
+		graphClient, err = exchange.NewGraphClient(exchange.GraphConfig{
+			TenantID:     cfg.Exchange.TenantID,
+			ClientID:     cfg.Exchange.ClientID,
+			ClientSecret: cfg.Exchange.ClientSecret,
+		})
+		if err != nil {
+			logger.Warn("Failed to create Graph client, calendar features disabled", zap.Error(err))
+		} else {
+			logger.Info("Graph API client initialized")
+		}
+	}
+
 	// Инициализация OIDC провайдера
 	oidcProvider, err := auth.NewOIDCProvider(auth.OIDCConfig{
 		IssuerURL:    fmt.Sprintf("%s/realms/%s", cfg.Keycloak.ServerURL, cfg.Keycloak.Realm),
@@ -99,6 +115,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(oidcProvider, userRepo, jitsiGen, cfg, logger.WithContext(context.Background()))
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub)
+	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
 
 	// Создание auth middleware
 	authMiddleware := auth.NewAuthMiddleware([]byte(cfg.Jitsi.AppSecret))
@@ -162,6 +179,18 @@ func main() {
 					r.Delete("/", messageHandler.DeleteMessage)
 				})
 			})
+
+			// Calendar
+			if graphClient != nil {
+				r.Route("/calendar", func(r chi.Router) {
+					r.Get("/events", calendarHandler.GetEvents)
+					r.Post("/events", calendarHandler.CreateEvent)
+					r.Route("/events/:id", func(r chi.Router) {
+						r.Put("/", calendarHandler.UpdateEvent)
+						r.Delete("/", calendarHandler.DeleteEvent)
+					})
+				})
+			}
 		})
 	})
 

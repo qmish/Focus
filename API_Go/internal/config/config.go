@@ -8,13 +8,14 @@ import (
 
 // Config хранит конфигурацию приложения
 type Config struct {
-	Env        string
-	Server     ServerConfig
-	Database   DatabaseConfig
-	Redis      RedisConfig
-	Keycloak   KeycloakConfig
-	Jitsi      JitsiConfig
-	Log        LogConfig
+	Env      string
+	Server   ServerConfig
+	Database DatabaseConfig
+	Redis    RedisConfig
+	Keycloak KeycloakConfig
+	Jitsi    JitsiConfig
+	Exchange ExchangeConfig
+	Log      LogConfig
 }
 
 // ServerConfig конфигурация HTTP сервера
@@ -66,6 +67,13 @@ type JitsiConfig struct {
 	TokenLifetime time.Duration
 }
 
+// ExchangeConfig конфигурация MS Exchange
+type ExchangeConfig struct {
+	TenantID     string
+	ClientID     string
+	ClientSecret string
+}
+
 // LogConfig конфигурация логирования
 type LogConfig struct {
 	Level  string
@@ -114,6 +122,11 @@ func Load() *Config {
 			Issuer:        getEnv("JITSI_ISSUER", "jitsi"),
 			Audience:      getEnv("JITSI_AUDIENCE", "jitsi"),
 			TokenLifetime: getDurationEnv("JITSI_TOKEN_LIFETIME", 8*time.Hour),
+		},
+		Exchange: ExchangeConfig{
+			TenantID:     getEnv("EXCHANGE_TENANT_ID", ""),
+			ClientID:     getEnv("EXCHANGE_CLIENT_ID", ""),
+			ClientSecret: getEnv("EXCHANGE_CLIENT_SECRET", ""),
 		},
 		Log: LogConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),
