@@ -13,6 +13,11 @@ import (
 var (
 	ErrUserNotFound      = errors.New("user not found")
 	ErrUserAlreadyExists = errors.New("user already exists")
+	ErrRoomNotFound      = errors.New("room not found")
+	ErrRoomAlreadyExists = errors.New("room already exists")
+	ErrMessageNotFound   = errors.New("message not found")
+	ErrWebhookNotFound   = errors.New("webhook not found")
+	ErrBotNotFound       = errors.New("bot not found")
 )
 
 // UserRepository репозиторий для работы с пользователями

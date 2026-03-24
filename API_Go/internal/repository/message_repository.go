@@ -10,10 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	ErrMessageNotFound = errors.New("message not found")
-)
-
 // MessageRepository репозиторий для работы с сообщениями
 type MessageRepository struct {
 	db *gorm.DB

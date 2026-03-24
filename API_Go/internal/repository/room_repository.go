@@ -10,11 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	ErrRoomNotFound      = errors.New("room not found")
-	ErrRoomAlreadyExists = errors.New("room already exists")
-)
-
 // RoomRepository репозиторий для работы с комнатами
 type RoomRepository struct {
 	db *gorm.DB
