@@ -116,6 +116,7 @@ func main() {
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub)
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
+	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
 
 	// Создание auth middleware
 	authMiddleware := auth.NewAuthMiddleware([]byte(cfg.Jitsi.AppSecret))
@@ -191,6 +192,18 @@ func main() {
 					})
 				})
 			}
+
+			// Admin routes
+			r.Route("/admin", func(r chi.Router) {
+				r.Get("/users", adminHandler.ListUsers)
+				r.Get("/users/:id", adminHandler.GetUser)
+				r.Put("/users/:id/roles", adminHandler.UpdateUserRoles)
+				r.Post("/users/:id/ban", adminHandler.BanUser)
+				r.Post("/users/:id/unban", adminHandler.UnbanUser)
+				r.Get("/conferences", adminHandler.ListConferences)
+				r.Post("/conferences/:id/end", adminHandler.EndConference)
+				r.Get("/stats", adminHandler.GetStats)
+			})
 		})
 	})
 
