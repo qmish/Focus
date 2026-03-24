@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/auth"
+	"github.com/qmish/focus-api/internal/jitsi"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
 )
@@ -16,13 +18,15 @@ import (
 type RoomHandler struct {
 	roomRepo *repository.RoomRepository
 	userRepo *repository.UserRepository
+	jitsiGen *jitsi.TokenGenerator
 }
 
 // NewRoomHandler создаёт новый RoomHandler
-func NewRoomHandler(roomRepo *repository.RoomRepository, userRepo *repository.UserRepository) *RoomHandler {
+func NewRoomHandler(roomRepo *repository.RoomRepository, userRepo *repository.UserRepository, jitsiGen *jitsi.TokenGenerator) *RoomHandler {
 	return &RoomHandler{
 		roomRepo: roomRepo,
 		userRepo: userRepo,
+		jitsiGen: jitsiGen,
 	}
 }
 
@@ -71,9 +75,9 @@ func (h *RoomHandler) ListRooms(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"data": rooms,
 		"pagination": map[string]interface{}{
-			"page":      page,
-			"per_page":  perPage,
-			"total":     total,
+			"page":        page,
+			"per_page":    perPage,
+			"total":       total,
 			"total_pages": (int(total) + perPage - 1) / perPage,
 		},
 	}
@@ -85,9 +89,9 @@ func (h *RoomHandler) ListRooms(w http.ResponseWriter, r *http.Request) {
 // CreateRoom POST /api/v1/rooms
 func (h *RoomHandler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name        string   `json:"name"`
-		Description string   `json:"description"`
-		Type        string   `json:"type"`
+		Name           string   `json:"name"`
+		Description    string   `json:"description"`
+		Type           string   `json:"type"`
 		ParticipantIDs []string `json:"participant_ids"`
 	}
 
@@ -186,8 +190,8 @@ func (h *RoomHandler) UpdateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name        string              `json:"name"`
-		Description string              `json:"description"`
+		Name        string               `json:"name"`
+		Description string               `json:"description"`
 		Settings    *models.RoomSettings `json:"settings"`
 	}
 
@@ -245,8 +249,102 @@ func (h *RoomHandler) DeleteRoom(w http.ResponseWriter, r *http.Request) {
 
 // JoinRoom POST /api/v1/rooms/{id}/join
 func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
-	// Реализация будет добавлена позже
+	id := chi.URLParam(r, "id")
+	roomID, err := uuid.Parse(id)
+	if err != nil {
+		http.Error(w, "invalid room id", http.StatusBadRequest)
+		return
+	}
+
+	// Получаем пользователя из контекста
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusInternalServerError)
+		return
+	}
+
+	// Проверяем, является ли пользователь участником комнаты
+	isParticipant, err := h.roomRepo.IsParticipant(r.Context(), roomID, userID)
+	if err != nil {
+		http.Error(w, "failed to check participation", http.StatusInternalServerError)
+		return
+	}
+
+	if !isParticipant {
+		// Если комната публичная, добавляем пользователя
+		room, err := h.roomRepo.GetByID(r.Context(), roomID)
+		if err != nil {
+			http.Error(w, "room not found", http.StatusNotFound)
+			return
+		}
+
+		if room.Type == models.RoomTypePublic {
+			if err := h.roomRepo.AddParticipant(r.Context(), roomID, userID, models.ParticipantRoleMember); err != nil {
+				http.Error(w, "failed to join room", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			http.Error(w, "you are not a participant of this room", http.StatusForbidden)
+			return
+		}
+	}
+
+	// Получаем комнату для генерации JWT
+	room, err := h.roomRepo.GetByID(r.Context(), roomID)
+	if err != nil {
+		http.Error(w, "room not found", http.StatusNotFound)
+		return
+	}
+
+	// Получаем пользователя для определения роли модератора
+	user, err := h.userRepo.GetByID(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	// Проверяем роль в комнате
+	participant, err := h.roomRepo.GetParticipant(r.Context(), roomID, userID)
+	isModerator := false
+	if err == nil && participant != nil {
+		isModerator = participant.Role == models.ParticipantRoleAdmin || participant.Role == models.ParticipantRoleModerator
+	}
+
+	// Генерируем Jitsi JWT
+	jitsiJWT, err := h.jitsiGen.GenerateTokenForUser(
+		room.JitsiRoomName,
+		user.ID.String(),
+		user.Name,
+		user.Email,
+		isModerator,
+	)
+	if err != nil {
+		http.Error(w, "failed to generate jitsi token", http.StatusInternalServerError)
+		return
+	}
+
+	// Формируем ответ
+	response := map[string]interface{}{
+		"room_id":         room.ID.String(),
+		"room_name":       room.Name,
+		"jitsi_room_name": room.JitsiRoomName,
+		"jitsi_url":       h.jitsiGen.BaseURL() + "/" + room.JitsiRoomName + "?jwt=" + jitsiJWT,
+		"jitsi_jwt":       jitsiJWT,
+		"user": map[string]interface{}{
+			"id":        user.ID.String(),
+			"name":      user.Name,
+			"email":     user.Email,
+			"moderator": isModerator,
+		},
+		"expires_at": time.Now().Add(8 * time.Hour).Format(time.RFC3339),
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	json.NewEncoder(w).Encode(map[string]string{"error": "not implemented"})
+	json.NewEncoder(w).Encode(response)
 }

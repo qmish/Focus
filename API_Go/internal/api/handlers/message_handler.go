@@ -9,16 +9,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/auth"
 	"github.com/qmish/focus-api/internal/models"
+	"github.com/qmish/focus-api/internal/repository"
+	"github.com/qmish/focus-api/internal/websocket"
 )
 
 // MessageHandler обработчики для messages
 type MessageHandler struct {
-	// TODO: Добавить message repository
+	msgRepo *repository.MessageRepository
+	wsHub   *websocket.Hub
 }
 
 // NewMessageHandler создаёт новый MessageHandler
-func NewMessageHandler() *MessageHandler {
-	return &MessageHandler{}
+func NewMessageHandler(msgRepo *repository.MessageRepository, wsHub *websocket.Hub) *MessageHandler {
+	return &MessageHandler{
+		msgRepo: msgRepo,
+		wsHub:   wsHub,
+	}
 }
 
 // ListMessages GET /api/v1/messages
@@ -30,7 +36,7 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := uuid.Parse(roomIDStr)
+	roomID, err := uuid.Parse(roomIDStr)
 	if err != nil {
 		http.Error(w, "invalid room_id", http.StatusBadRequest)
 		return
@@ -42,12 +48,29 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 
-	// TODO: Реализовать получение сообщений из БД
-	messages := []models.Message{}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Получаем сообщения из БД
+	messages, err := h.msgRepo.GetByRoomID(r.Context(), roomID, limit, offset)
+	if err != nil {
+		http.Error(w, "failed to get messages", http.StatusInternalServerError)
+		return
+	}
+
+	// Переворачиваем порядок (новые сверху)
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+
+	// Проверяем, есть ли ещё сообщения
+	hasMore := len(messages) == limit
 
 	response := map[string]interface{}{
 		"data":        messages,
-		"has_more":    false,
+		"has_more":    hasMore,
 		"next_cursor": "",
 	}
 
@@ -58,10 +81,11 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 // CreateMessage POST /api/v1/messages
 func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RoomID    string `json:"room_id"`
-		Content   string `json:"content"`
-		Type      string `json:"type"`
-		ReplyToID string `json:"reply_to_id"`
+		RoomID    string          `json:"room_id"`
+		Content   string          `json:"content"`
+		Type      string          `json:"type"`
+		ReplyToID string          `json:"reply_to_id"`
+		Metadata  json.RawMessage `json:"metadata"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -117,7 +141,24 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// TODO: Сохранить сообщение в БД
+	// Сохраняем сообщение в БД
+	if err := h.msgRepo.Create(r.Context(), message); err != nil {
+		http.Error(w, "failed to create message", http.StatusInternalServerError)
+		return
+	}
+
+	// Рассылаем сообщение через WebSocket
+	h.wsHub.BroadcastToRoom(roomID.String(), websocket.WSMessage{
+		Type: websocket.MessageTypeMessage,
+		Payload: json.RawMessage(`{
+			"id": "` + message.ID.String() + `",
+			"room_id": "` + roomID.String() + `",
+			"user_id": "` + userID.String() + `",
+			"content": "` + req.Content + `",
+			"type": "` + string(msgType) + `",
+			"created_at": "` + message.CreatedAt.Format("2006-01-02T15:04:05Z07:00") + `"
+		}`),
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -133,13 +174,18 @@ func (h *MessageHandler) GetMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Получить сообщение из БД
+	message, err := h.msgRepo.GetByID(r.Context(), messageID)
+	if err != nil {
+		if err == repository.ErrMessageNotFound {
+			http.Error(w, "message not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to get message", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"id":    messageID.String(),
-		"error": "not implemented",
-	})
+	json.NewEncoder(w).Encode(message)
 }
 
 // UpdateMessage PUT /api/v1/messages/{id}
@@ -160,26 +206,43 @@ func (h *MessageHandler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Обновить сообщение в БД
+	message, err := h.msgRepo.GetByID(r.Context(), messageID)
+	if err != nil {
+		if err == repository.ErrMessageNotFound {
+			http.Error(w, "message not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to get message", http.StatusInternalServerError)
+		return
+	}
+
+	// Обновляем содержимое
+	message.Content = req.Content
+	edited := true
+	message.Metadata.Edited = &edited
+
+	if err := h.msgRepo.Update(r.Context(), message); err != nil {
+		http.Error(w, "failed to update message", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"id":      messageID.String(),
-		"content": req.Content,
-		"error":   "not implemented",
-	})
+	json.NewEncoder(w).Encode(message)
 }
 
 // DeleteMessage DELETE /api/v1/messages/{id}
 func (h *MessageHandler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	_, err := uuid.Parse(id)
+	messageID, err := uuid.Parse(id)
 	if err != nil {
 		http.Error(w, "invalid message id", http.StatusBadRequest)
 		return
 	}
 
-	// TODO: Удалить сообщение (мягкое удаление)
+	if err := h.msgRepo.Delete(r.Context(), messageID); err != nil {
+		http.Error(w, "failed to delete message", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/qmish/focus-api/internal/jitsi"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
+	"github.com/qmish/focus-api/internal/websocket"
 	"github.com/qmish/focus-api/pkg/logger"
 	"go.uber.org/zap"
 )
@@ -65,6 +66,7 @@ func main() {
 	// Инициализация репозиториев
 	userRepo := repository.NewUserRepository(db.DB)
 	roomRepo := repository.NewRoomRepository(db.DB)
+	messageRepo := repository.NewMessageRepository(db.DB)
 
 	// Инициализация OIDC провайдера
 	oidcProvider, err := auth.NewOIDCProvider(auth.OIDCConfig{
@@ -89,10 +91,14 @@ func main() {
 		cfg.Jitsi.TokenLifetime,
 	)
 
+	// Инициализация WebSocket Hub
+	wsHub := websocket.NewHub(logger.WithContext(context.Background()))
+	go wsHub.Run()
+
 	// Создание handlers
 	authHandler := handlers.NewAuthHandler(oidcProvider, userRepo, jitsiGen, cfg, logger.WithContext(context.Background()))
-	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo)
-	messageHandler := handlers.NewMessageHandler()
+	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
+	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub)
 
 	// Создание auth middleware
 	authMiddleware := auth.NewAuthMiddleware([]byte(cfg.Jitsi.AppSecret))
@@ -119,6 +125,12 @@ func main() {
 			r.Get("/callback", authHandler.Callback)
 			r.Post("/refresh", authHandler.Refresh)
 			r.Post("/logout", authHandler.Logout)
+		})
+
+		// WebSocket endpoint
+		r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
+			// TODO: Добавить аутентификацию
+			wsHub.HandleWebSocket(w, r)
 		})
 
 		// Protected routes

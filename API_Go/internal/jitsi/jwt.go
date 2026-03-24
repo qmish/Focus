@@ -124,6 +124,11 @@ func (g *TokenGenerator) ValidateToken(tokenString string) (*JitsiClaims, error)
 	return claims, nil
 }
 
+// GetTokenLifetime возвращает время жизни токена
+func (g *TokenGenerator) GetTokenLifetime() time.Duration {
+	return g.config.TokenLifetime
+}
+
 // GetBaseURL возвращает базовый URL Jitsi
 func (g *TokenGenerator) BaseURL() string {
 	return g.config.BaseURL
