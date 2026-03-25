@@ -1,0 +1,20 @@
+name: Stage Jitsi Branding Regression
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Stage API URL"
+        required: true
+        default: "https://api-stage.company.com"
+
+jobs:
+  branding-regression:
+    name: Run Jitsi branding regression checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute branding regression script
+        run: |
+          chmod +x tests/smoke/jitsi-branding-regression.sh
+          tests/smoke/jitsi-branding-regression.sh "${{ github.event.inputs.api_url }}"

@@ -2,6 +2,14 @@
 
 ## 2026-03-25
 
+- Добавлен stage regression harness для Jitsi branding:
+  - `tests/smoke/jitsi-branding-regression.sh`,
+  - `.github/workflows/stage-jitsi-branding-regression.yml`,
+  - `docs/Jitsi_Branding_Regression.md`.
+- Усилены API e2e проверки branding payload в `tests/e2e/ci-api.spec.ts`.
+- В `docs/Roadmap_v2.md`:
+  - закрыт пункт `Кастомизация воспроизводима из pics + manifest`,
+  - добавлен и закрыт пункт подготовки stage branding regression harness.
 - В auth flow добавлен group policy mapping (`AD/Keycloak groups -> Focus roles/scopes`):
   - `API_Go/internal/auth/oidc.go`: `GroupPolicyMapper` и загрузка правил из `KEYCLOAK_GROUP_POLICY_MAPPING` (JSON),
   - `API_Go/internal/api/handlers/auth_handler.go`: применение mapping в `callback/refresh` перед выпуском session JWT.

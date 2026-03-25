@@ -137,7 +137,7 @@
 
 ### Критерии готовности этапа 4
 - [ ] Jitsi UI визуально соответствует бренду компании.
-- [ ] Кастомизация воспроизводима из `pics` + manifest без ручных правок.
+- [x] Кастомизация воспроизводима из `pics` + manifest без ручных правок.
 - [ ] Focus стабильно работает с форкнутым Jitsi.
 
 ---
@@ -195,6 +195,7 @@
 - [ ] Добавить e2e сценарии с реальной аутентификацией и пользовательскими happy-path потоками (auth -> room -> chat -> call -> admin).
 - [x] Покрыть e2e: auth, room, chat, call, webhook, bot, admin flows.
 - [x] Подготовить целевые load-профили и manual pipeline для stage (`API + Jitsi/JVB`) с фиксированными thresholds.
+- [x] Подготовить stage regression harness для бренд-кастомизаций Jitsi (`dynamicBrandingUrl`/assets/config).
 - [ ] Прогнать load-тесты API + Jitsi/JVB в целевых профилях нагрузки.
 - [ ] Прогнать регрессию после бренд-кастомизаций Jitsi.
 

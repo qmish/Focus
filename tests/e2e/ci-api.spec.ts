@@ -75,6 +75,13 @@ test.describe('API Smoke', () => {
     const body = await response.json()
     expect(body).toHaveProperty('appName')
     expect(body).toHaveProperty('dynamicBrandingUrl')
+    expect(body).toHaveProperty('logoImageUrl')
+    expect(body).toHaveProperty('faviconUrl')
+    expect(body).toHaveProperty('backgroundImageUrl')
+    expect(body).toHaveProperty('customTheme')
+    expect(body).toHaveProperty('customIcons')
+    expect(String(body.logoImageUrl)).toContain('/pics/')
+    expect(String(body.faviconUrl)).toContain('/pics/')
   })
 })
 
