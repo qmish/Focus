@@ -2,6 +2,9 @@ package webhooks
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -219,6 +222,70 @@ func TestDispatchNoWebhooks(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestDispatchSuccessWithDeliveryLog(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "conference.created", r.Header.Get("X-Webhook-Event"))
+		assert.NotEmpty(t, r.Header.Get("X-Webhook-Signature"))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	webhook := &Webhook{
+		ID:     uuid.New(),
+		URL:    server.URL,
+		Secret: "test-secret",
+	}
+	provider := &fakeActiveWebhookProvider{hooks: []*Webhook{webhook}}
+	store := &fakeDeliveryStore{}
+	dispatcher := NewWebhookDispatcherWithConfig(provider, store, nil, 2, time.Millisecond)
+	dispatcher.sleep = func(time.Duration) {}
+
+	err := dispatcher.Dispatch(context.Background(), "conference.created", map[string]string{"room": "room-1"})
+	assert.NoError(t, err)
+	assert.Len(t, store.deliveries, 1)
+	assert.True(t, store.deliveries[0].Success)
+	assert.Equal(t, 0, store.deliveries[0].RetryCount)
+}
+
+func TestDispatchRetriesAndDeadLetter(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("failure"))
+	}))
+	defer server.Close()
+
+	webhook := &Webhook{
+		ID:     uuid.New(),
+		URL:    server.URL,
+		Secret: "test-secret",
+	}
+	provider := &fakeActiveWebhookProvider{hooks: []*Webhook{webhook}}
+	store := &fakeDeliveryStore{}
+	dispatcher := NewWebhookDispatcherWithConfig(provider, store, nil, 1, time.Millisecond)
+	dispatcher.sleep = func(time.Duration) {}
+
+	err := dispatcher.Dispatch(context.Background(), "conference.ended", map[string]string{"room": "room-1"})
+	assert.Error(t, err)
+	assert.Equal(t, 2, attempts) // initial + one retry
+	assert.Len(t, store.deliveries, 1)
+	assert.False(t, store.deliveries[0].Success)
+	assert.Equal(t, 1, store.deliveries[0].RetryCount)
+	assert.Contains(t, store.deliveries[0].ResponseBody, "dead_letter")
+}
+
+func TestDispatchWithRepositoryError(t *testing.T) {
+	provider := &fakeActiveWebhookProvider{err: assert.AnError}
+	dispatcher := NewWebhookDispatcherWithConfig(provider, nil, nil, 0, time.Millisecond)
+	dispatcher.sleep = func(time.Duration) {}
+
+	err := dispatcher.Dispatch(context.Background(), "conference.created", map[string]string{"room": "room-1"})
+	assert.Error(t, err)
+}
+
 func TestOutgoingWebhook(t *testing.T) {
 	webhook := OutgoingWebhook{
 		WebhookID: uuid.New(),
@@ -246,5 +313,29 @@ func (s *testIncomingStore) StoreIncomingEvent(ctx context.Context, event *Incom
 		return ErrWebhookEventAlreadyProcessed
 	}
 	s.items[key] = true
+	return nil
+}
+
+type fakeActiveWebhookProvider struct {
+	hooks []*Webhook
+	err   error
+}
+
+func (f *fakeActiveWebhookProvider) GetActiveByEventType(ctx context.Context, eventType string) ([]*Webhook, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.hooks, nil
+}
+
+type fakeDeliveryStore struct {
+	mu         sync.Mutex
+	deliveries []*WebhookDelivery
+}
+
+func (f *fakeDeliveryStore) CreateDelivery(ctx context.Context, delivery *WebhookDelivery) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deliveries = append(f.deliveries, delivery)
 	return nil
 }

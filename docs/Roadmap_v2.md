@@ -98,7 +98,7 @@
 ### 3.1 Webhooks inbound/outbound
 - [x] Реализовать проверку подписи входящих webhook.
 - [x] Сохранять входящие события в БД с трассировкой и idempotency key.
-- [ ] Реализовать outbound dispatcher с retry/backoff и dead-letter логикой.
+- [x] Реализовать outbound dispatcher с retry/backoff и dead-letter логикой.
 - [ ] Добавить админ-видимость доставок webhook и ошибок.
 
 ### 3.2 Bots engine

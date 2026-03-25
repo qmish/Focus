@@ -1,6 +1,7 @@
 package webhooks
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -9,6 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -197,26 +200,136 @@ type OutgoingWebhook struct {
 	EventType string
 }
 
+// ActiveWebhookProvider provides active webhooks by event type.
+type ActiveWebhookProvider interface {
+	GetActiveByEventType(ctx context.Context, eventType string) ([]*Webhook, error)
+}
+
+// DeliveryStore stores webhook delivery results.
+type DeliveryStore interface {
+	CreateDelivery(ctx context.Context, delivery *WebhookDelivery) error
+}
+
+// HTTPDoer abstracts http.Client for testing.
+type HTTPDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // WebhookDispatcher диспетчер исходящих вебхуков
-type WebhookDispatcher struct{}
+type WebhookDispatcher struct {
+	provider   ActiveWebhookProvider
+	store      DeliveryStore
+	httpClient HTTPDoer
+	maxRetries int
+	baseDelay  time.Duration
+	sleep      func(time.Duration)
+}
 
 // NewWebhookDispatcher создаёт новый WebhookDispatcher
 func NewWebhookDispatcher() *WebhookDispatcher {
-	return &WebhookDispatcher{}
+	return &WebhookDispatcher{
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+		maxRetries: 2,
+		baseDelay:  250 * time.Millisecond,
+		sleep:      time.Sleep,
+	}
+}
+
+// NewWebhookDispatcherWithConfig creates dispatcher with dependencies and retry policy.
+func NewWebhookDispatcherWithConfig(
+	provider ActiveWebhookProvider,
+	store DeliveryStore,
+	httpClient HTTPDoer,
+	maxRetries int,
+	baseDelay time.Duration,
+) *WebhookDispatcher {
+	dispatcher := NewWebhookDispatcher()
+	dispatcher.provider = provider
+	dispatcher.store = store
+	if httpClient != nil {
+		dispatcher.httpClient = httpClient
+	}
+	if maxRetries >= 0 {
+		dispatcher.maxRetries = maxRetries
+	}
+	if baseDelay > 0 {
+		dispatcher.baseDelay = baseDelay
+	}
+	return dispatcher
 }
 
 // Dispatch рассылает событие всем подписанным вебхукам
 func (d *WebhookDispatcher) Dispatch(ctx context.Context, eventType string, payload interface{}) error {
-	// TODO: Реализовать получение вебхуков из БД и рассылку
+	if d.provider == nil {
+		return nil
+	}
+
+	payloadBytes, err := marshalWebhookPayload(payload)
+	if err != nil {
+		return err
+	}
+
+	webhooks, err := d.provider.GetActiveByEventType(ctx, eventType)
+	if err != nil {
+		return err
+	}
+	if len(webhooks) == 0 {
+		return nil
+	}
+
+	var failures []string
+	for _, webhook := range webhooks {
+		if webhook == nil {
+			continue
+		}
+		if err := d.sendWebhook(ctx, webhook, payloadBytes, eventType); err != nil {
+			failures = append(failures, err.Error())
+		}
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("outbound webhook dispatch failures: %s", strings.Join(failures, "; "))
+	}
 	return nil
 }
 
 func (d *WebhookDispatcher) sendWebhook(ctx context.Context, webhook *Webhook, payload []byte, eventType string) error {
-	// Создаём подпись
-	_ = d.createSignature(webhook.Secret, payload, time.Now())
+	attempts := d.maxRetries + 1
+	if attempts < 1 {
+		attempts = 1
+	}
 
-	// TODO: Реализовать HTTP запрос
-	return nil
+	var lastCode int
+	var lastBody string
+	var lastErr error
+
+	for attempt := 0; attempt < attempts; attempt++ {
+		code, body, err := d.doRequest(ctx, webhook, payload, eventType)
+		lastCode = code
+		lastBody = body
+		lastErr = err
+
+		if err == nil && code >= 200 && code < 300 {
+			d.recordDelivery(ctx, webhook.ID, payload, code, body, true, attempt)
+			return nil
+		}
+
+		if attempt < attempts-1 && d.sleep != nil {
+			d.sleep(d.backoff(attempt))
+		}
+	}
+
+	deadLetterBody := lastBody
+	if lastErr != nil {
+		deadLetterBody = fmt.Sprintf("dead_letter: %v", lastErr)
+	} else {
+		deadLetterBody = fmt.Sprintf("dead_letter: status=%d body=%s", lastCode, lastBody)
+	}
+	d.recordDelivery(ctx, webhook.ID, payload, lastCode, deadLetterBody, false, d.maxRetries)
+
+	if lastErr != nil {
+		return fmt.Errorf("webhook %s delivery failed: %w", webhook.ID.String(), lastErr)
+	}
+	return fmt.Errorf("webhook %s delivery failed with status %d", webhook.ID.String(), lastCode)
 }
 
 func (d *WebhookDispatcher) createSignature(secret string, payload []byte, timestamp time.Time) string {
@@ -225,6 +338,74 @@ func (d *WebhookDispatcher) createSignature(secret string, payload []byte, times
 	h.Write([]byte("."))
 	h.Write(payload)
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
+func (d *WebhookDispatcher) backoff(attempt int) time.Duration {
+	delay := d.baseDelay
+	for i := 0; i < attempt; i++ {
+		delay *= 2
+	}
+	return delay
+}
+
+func (d *WebhookDispatcher) doRequest(ctx context.Context, webhook *Webhook, payload []byte, eventType string) (int, string, error) {
+	if d.httpClient == nil {
+		return 0, "", fmt.Errorf("http client is not configured")
+	}
+	timestamp := time.Now().UTC()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook.URL, bytes.NewReader(payload))
+	if err != nil {
+		return 0, "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Webhook-Event", eventType)
+	req.Header.Set("X-Webhook-Timestamp", timestamp.Format(time.RFC3339))
+	req.Header.Set("X-Webhook-Signature", d.createSignature(webhook.Secret, payload, timestamp))
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return 0, "", err
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+	return resp.StatusCode, string(bodyBytes), nil
+}
+
+func (d *WebhookDispatcher) recordDelivery(
+	ctx context.Context,
+	webhookID uuid.UUID,
+	payload []byte,
+	responseCode int,
+	responseBody string,
+	success bool,
+	retryCount int,
+) {
+	if d.store == nil {
+		return
+	}
+	now := time.Now().UTC()
+	_ = d.store.CreateDelivery(ctx, &WebhookDelivery{
+		ID:           uuid.New(),
+		WebhookID:    webhookID,
+		Payload:      payload,
+		ResponseCode: responseCode,
+		ResponseBody: responseBody,
+		Success:      success,
+		RetryCount:   retryCount,
+		DeliveredAt:  &now,
+		CreatedAt:    now,
+	})
+}
+
+func marshalWebhookPayload(payload interface{}) ([]byte, error) {
+	switch v := payload.(type) {
+	case []byte:
+		return v, nil
+	case json.RawMessage:
+		return []byte(v), nil
+	default:
+		return json.Marshal(payload)
+	}
 }
 
 // VerifySignature проверяет подпись вебхука

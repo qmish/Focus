@@ -905,6 +905,23 @@ Authorization: Bearer <session_token>
 
 ---
 
+### 6.5. Политика outbound-доставки
+
+Для исходящих webhook-событий используется dispatcher со следующей политикой:
+- выборка только активных webhook по `event_type`;
+- до `3` попыток доставки (1 основная + 2 retry);
+- exponential backoff между retry (базовая задержка 250ms);
+- при исчерпании retry событие фиксируется как `dead_letter` в delivery log.
+
+Служебные заголовки исходящих webhook:
+```
+X-Webhook-Event: <event_type>
+X-Webhook-Timestamp: <RFC3339>
+X-Webhook-Signature: <base64(hmac_sha256(timestamp + "." + payload))>
+```
+
+---
+
 ## 7. Bots API
 
 ### 7.1. Список ботов
