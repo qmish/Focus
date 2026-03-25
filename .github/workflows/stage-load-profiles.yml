@@ -1,0 +1,38 @@
+name: Stage Load Profiles
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Stage API URL"
+        required: true
+        default: "https://api-stage.company.com"
+      jitsi_url:
+        description: "Stage Jitsi URL"
+        required: true
+        default: "https://meet-stage.company.com"
+      jvb_health_url:
+        description: "Stage JVB health URL"
+        required: true
+        default: "https://jvb-stage.company.com/about/health"
+
+jobs:
+  load-profiles:
+    name: Run stage load target profiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install k6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnupg software-properties-common
+          curl -s https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+      - name: Run k6 target profiles
+        run: |
+          API_URL="${{ github.event.inputs.api_url }}" \
+          JITSI_URL="${{ github.event.inputs.jitsi_url }}" \
+          JVB_HEALTH_URL="${{ github.event.inputs.jvb_health_url }}" \
+          k6 run tests/load/target-profiles.js

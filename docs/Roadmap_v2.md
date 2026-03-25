@@ -193,6 +193,7 @@
 - [x] Подготовить отдельный stage-harness для e2e с реальной OIDC аутентификацией (manual workflow + browser flow).
 - [ ] Добавить e2e сценарии с реальной аутентификацией и пользовательскими happy-path потоками (auth -> room -> chat -> call -> admin).
 - [x] Покрыть e2e: auth, room, chat, call, webhook, bot, admin flows.
+- [x] Подготовить целевые load-профили и manual pipeline для stage (`API + Jitsi/JVB`) с фиксированными thresholds.
 - [ ] Прогнать load-тесты API + Jitsi/JVB в целевых профилях нагрузки.
 - [ ] Прогнать регрессию после бренд-кастомизаций Jitsi.
 

@@ -2,6 +2,10 @@
 
 ## 2026-03-25
 
+- Добавлены целевые load-профили `tests/load/target-profiles.js` для `API + Jitsi/JVB`.
+- Добавлен manual workflow `.github/workflows/stage-load-profiles.yml` для прогона k6 профилей в stage.
+- Добавлен `docs/Load_Testing_Target_Profiles.md` (профили, thresholds, порядок запуска и ограничения).
+- Обновлены `README.md` и `docs/Roadmap_v2.md` для фиксации load-profile pipeline.
 - Добавлен manual workflow `.github/workflows/stage-oidc-e2e.yml` для запуска реального OIDC e2e в stage.
 - Добавлен `tests/e2e/real-oidc.spec.ts` (browser redirect flow к Keycloak, включается через `E2E_REAL_OIDC=1`).
 - Добавлен `docs/UAT_Pilot_Protocol.md` с чек-листом приемки, критериями успешности и шаблоном результатов.
