@@ -147,7 +147,10 @@ func main() {
 
 		// WebSocket endpoint
 		r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
-			// TODO: Добавить аутентификацию
+			if _, err := websocket.AuthenticateRequest(r, []byte(cfg.Jitsi.AppSecret)); err != nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
 			wsHub.HandleWebSocket(w, r)
 		})
 
