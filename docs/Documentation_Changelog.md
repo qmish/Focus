@@ -2,6 +2,20 @@
 
 ## 2026-03-25
 
+- В `API_Go/internal/auth/oidc.go` добавлена централизованная модель проверки доступов:
+  - поддержка `scope/scopes` в session claims,
+  - `RequireAccess` middleware (roles + scopes) для API маршрутов.
+- В `API_Go/cmd/server/main.go` подключены централизованные access-policy middleware для `admin` и `calendar` маршрутов.
+- Добавлены/обновлены тесты:
+  - `API_Go/internal/auth/oidc_test.go` (scope merge + access middleware),
+  - `API_Go/internal/api/handlers/branding_handler_test.go`,
+  - расширение `tests/e2e/ci-api.spec.ts` (public branding endpoint).
+- Добавлен managed слой форка Jitsi:
+  - `jitsi-meet-master/README.md` (upstream strategy + customization boundary),
+  - `jitsi-meet-master/config/custom/branding-overrides.js` (dynamicBrandingUrl/customTheme/customIcons/policy toggles),
+  - усилен `.github/workflows/jitsi-fork-ci.yml` проверкой branding contract.
+- Добавлен backend endpoint `GET /api/v1/branding/jitsi` (`API_Go/internal/api/handlers/branding_handler.go`).
+- Обновлен `docs/Roadmap_v2.md`: закрыты пункты `1.1 (role model)`, `1.2 (centralized role/scope middleware)`, `4.1`, `4.2`, и quick-track `базовый брендинг Jitsi`.
 - Добавлены целевые load-профили `tests/load/target-profiles.js` для `API + Jitsi/JVB`.
 - Добавлен manual workflow `.github/workflows/stage-load-profiles.yml` для прогона k6 профилей в stage.
 - Добавлен `docs/Load_Testing_Target_Profiles.md` (профили, thresholds, порядок запуска и ограничения).

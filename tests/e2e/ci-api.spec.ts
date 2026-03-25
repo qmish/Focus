@@ -68,6 +68,14 @@ test.describe('API Smoke', () => {
     const response = await request.get(`${API_URL}/api/v1/admin/stats`)
     expect(response.status()).toBe(401)
   })
+
+  test('public jitsi branding endpoint responds with branding payload', async ({ request }) => {
+    const response = await request.get(`${API_URL}/api/v1/branding/jitsi`)
+    expect(response.status()).toBe(200)
+    const body = await response.json()
+    expect(body).toHaveProperty('appName')
+    expect(body).toHaveProperty('dynamicBrandingUrl')
+  })
 })
 
 test.describe('API Flows', () => {

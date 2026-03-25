@@ -27,6 +27,9 @@
 ## Ограничения и next steps
 
 - `pics/hdphoto1.wdp` (формат `wdp`) конвертирован в `pics/hdphoto1.png` для web UI.
+- Для форка Jitsi добавлен config-only baseline:
+  - `jitsi-meet-master/config/custom/branding-overrides.js`,
+  - `dynamicBrandingUrl`: `GET /api/v1/branding/jitsi`.
 - Для production-пайплайна рекомендована физическая нормализация структуры:
   - `pics/logo/`
   - `pics/favicon/`

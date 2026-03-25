@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -44,6 +45,8 @@ type UserInfo struct {
 	Name          string   `json:"name"`
 	EmailVerified bool     `json:"email_verified"`
 	Roles         []string `json:"roles"`
+	Scopes        []string `json:"scopes,omitempty"`
+	Scope         string   `json:"scope,omitempty"`
 }
 
 // SessionClaims claims для сессионного JWT
@@ -52,6 +55,8 @@ type SessionClaims struct {
 	Email      string   `json:"email"`
 	Name       string   `json:"name"`
 	Roles      []string `json:"roles"`
+	Scopes     []string `json:"scopes,omitempty"`
+	Scope      string   `json:"scope,omitempty"`
 	KeycloakID string   `json:"keycloak_id"`
 	SessionID  string   `json:"session_id"`
 	jwt.RegisteredClaims
@@ -168,6 +173,7 @@ func GenerateSessionJWT(userInfo *UserInfo, sessionID string, secret []byte, lif
 		Email:      userInfo.Email,
 		Name:       userInfo.Name,
 		Roles:      userInfo.Roles,
+		Scopes:     userInfo.AllScopes(),
 		KeycloakID: userInfo.Sub,
 		SessionID:  sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -268,6 +274,20 @@ func GetUserClaimsFromContext(ctx context.Context) *SessionClaims {
 	return claims
 }
 
+// AllScopes returns combined scopes from both "scope" and "scopes" claims.
+func (u *UserInfo) AllScopes() []string {
+	scopes := parseScopeString(u.Scope)
+	scopes = append(scopes, u.Scopes...)
+	return dedupeStrings(scopes)
+}
+
+// AllScopes returns combined scopes from both "scope" and "scopes" claims.
+func (c *SessionClaims) AllScopes() []string {
+	scopes := parseScopeString(c.Scope)
+	scopes = append(scopes, c.Scopes...)
+	return dedupeStrings(scopes)
+}
+
 // RequireRole middleware для проверки роли
 func RequireRole(requiredRole string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -294,4 +314,88 @@ func RequireRole(requiredRole string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// AccessRule задает централизованную политику проверки ролей/скоупов.
+type AccessRule struct {
+	AnyRoles  []string
+	AllScopes []string
+	AnyScopes []string
+}
+
+// RequireAccess проверяет доступ по ролям и скопам из claims.
+func RequireAccess(rule AccessRule) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := GetUserClaimsFromContext(r.Context())
+			if claims == nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if !hasAccess(claims, rule) {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func hasAccess(claims *SessionClaims, rule AccessRule) bool {
+	anyRolesOk := len(rule.AnyRoles) == 0
+	if !anyRolesOk {
+		for _, role := range claims.Roles {
+			if slices.Contains(rule.AnyRoles, role) {
+				anyRolesOk = true
+				break
+			}
+		}
+	}
+
+	allScopesOk := true
+	allScopes := claims.AllScopes()
+	for _, required := range rule.AllScopes {
+		if !slices.Contains(allScopes, required) {
+			allScopesOk = false
+			break
+		}
+	}
+
+	anyScopesOk := len(rule.AnyScopes) == 0
+	if !anyScopesOk {
+		for _, scope := range allScopes {
+			if slices.Contains(rule.AnyScopes, scope) {
+				anyScopesOk = true
+				break
+			}
+		}
+	}
+
+	// If both AnyRoles and AnyScopes are provided, allow either path.
+	if len(rule.AnyRoles) > 0 && len(rule.AnyScopes) > 0 {
+		return (anyRolesOk || anyScopesOk) && allScopesOk
+	}
+	return anyRolesOk && anyScopesOk && allScopesOk
+}
+
+func parseScopeString(scope string) []string {
+	if strings.TrimSpace(scope) == "" {
+		return nil
+	}
+	return strings.Fields(scope)
+}
+
+func dedupeStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" || slices.Contains(result, trimmed) {
+			continue
+		}
+		result = append(result, trimmed)
+	}
+	return result
 }

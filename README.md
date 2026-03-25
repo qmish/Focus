@@ -53,6 +53,7 @@
 | [Security Findings Triage](./docs/Security_Findings_Triage.md) | Процесс triage и закрытия high/critical findings |
 | [UAT Pilot Protocol](./docs/UAT_Pilot_Protocol.md) | Регламент приемки с пилотной группой |
 | [Load Testing Target Profiles](./docs/Load_Testing_Target_Profiles.md) | Целевые k6-профили для stage API+Jitsi/JVB |
+| [Jitsi Fork Contract](./jitsi-meet-master/README.md) | Стратегия сопровождения форка и границы кастомизаций |
 
 Stage smoke check script: `tests/smoke/stage-smoke.sh` (manual run via GitHub Action `Stage Smoke`).
 

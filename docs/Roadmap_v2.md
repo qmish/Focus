@@ -41,14 +41,14 @@
 - [ ] Настроить Keycloak как брокер идентичности к AD (Azure AD или on-prem AD FS, по целевой инфраструктуре).
 - [ ] Подключить OIDC/SAML provider в Keycloak для AD.
 - [ ] Настроить маппинг групп и ролей AD в claims Keycloak.
-- [ ] Определить и внедрить role model: `user`, `moderator`, `admin`, `service`.
+- [x] Определить и внедрить role model: `user`, `moderator`, `admin`, `service`.
 - [ ] Настроить SCIM/LDAP sync (если требуется по инфраструктуре компании).
 
 ### 1.2 Авторизация для корпоративных ресурсов
 - [ ] Определить перечень корп. ресурсов, требующих SSO (внутренние API, порталы, файловые ресурсы, сервисы).
 - [ ] Реализовать policy mapping в Keycloak: группы AD -> роли/скоупы в Focus API.
 - [ ] Настроить audience/scope для сервисных клиентов.
-- [ ] Внедрить централизованную проверку ролей и скопов в backend middleware.
+- [x] Внедрить централизованную проверку ролей и скопов в backend middleware.
 - [ ] Внедрить ABAC policy engine (resource/action/context) поверх RBAC для критичных операций.
 
 ### 1.3 Интеграция с MS Exchange (через Microsoft Graph)
@@ -119,15 +119,15 @@
 ## Этап 4. Форк `jitsi-meet-master` и корпоративная кастомизация UI
 
 ### 4.1 Форк и структура сопровождения
-- [ ] Создать/подключить форк `jitsi-meet-master` как отдельный управляемый компонент проекта.
-- [ ] Зафиксировать стратегию обновления upstream (частота, merge-policy, owner).
-- [ ] Описать "границу кастомизаций": config-only vs code-level изменения.
+- [x] Создать/подключить форк `jitsi-meet-master` как отдельный управляемый компонент проекта.
+- [x] Зафиксировать стратегию обновления upstream (частота, merge-policy, owner).
+- [x] Описать "границу кастомизаций": config-only vs code-level изменения.
 
 ### 4.2 Брендинг через `pics`
-- [ ] Подключить logo/favicon/backgrounds/icons из `pics` в Jitsi UI.
-- [ ] Реализовать/подключить `dynamicBrandingUrl` endpoint.
-- [ ] Настроить `customTheme` и `customIcons` на базе корпоративного брендбука.
-- [ ] Отключить нежелательные публичные функции (по security/policy требованиям).
+- [x] Подключить logo/favicon/backgrounds/icons из `pics` в Jitsi UI.
+- [x] Реализовать/подключить `dynamicBrandingUrl` endpoint.
+- [x] Настроить `customTheme` и `customIcons` на базе корпоративного брендбука.
+- [x] Отключить нежелательные публичные функции (по security/policy требованиям).
 
 ### 4.3 Интеграция с Focus frontend
 - [ ] Обновить точку встраивания Jitsi в `Focus` с учетом форка.
@@ -228,6 +228,6 @@
 
 - [x] Закрыть auth-модель и WS auth.
 - [x] Закрыть TODO в webhooks/bots/admin/calendar.
-- [ ] Внедрить базовый брендинг Jitsi из `pics`.
+- [x] Внедрить базовый брендинг Jitsi из `pics`.
 - [x] Стабилизировать stage + e2e smoke.
 

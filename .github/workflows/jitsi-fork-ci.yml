@@ -23,6 +23,11 @@ jobs:
             echo "jitsi-meet-master directory not found"
             exit 1
           fi
+      - name: Validate branding overrides contract
+        run: |
+          test -f "jitsi-meet-master/config/custom/branding-overrides.js"
+          test -f "jitsi-meet-master/README.md"
+          grep -q "dynamicBrandingUrl" "jitsi-meet-master/config/custom/branding-overrides.js"
       - name: Report changed files
         run: |
           echo "Jitsi fork pipeline triggered."

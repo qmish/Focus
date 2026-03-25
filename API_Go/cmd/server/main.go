@@ -155,6 +155,7 @@ func main() {
 	adminHandler.SetMessageRepository(messageRepo)
 	adminHandler.SetWebhookRepository(webhookRepo)
 	adminHandler.SetBotRepository(botRepo)
+	brandingHandler := handlers.NewJitsiBrandingHandler()
 	inboundWebhookHandler := handlers.NewInboundWebhookHandler(
 		webhooks.NewWebhookHandlerWithConfig(cfg.Jitsi.AppSecret, webhookRepo),
 	)
@@ -179,6 +180,10 @@ func main() {
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes
+		r.Route("/branding", func(r chi.Router) {
+			r.Get("/jitsi", brandingHandler.DynamicBranding)
+		})
+
 		r.Route("/webhooks", func(r chi.Router) {
 			r.Post("/jitsi", inboundWebhookHandler.JitsiWebhook)
 		})
@@ -245,6 +250,14 @@ func main() {
 			// Calendar
 			if graphClient != nil {
 				r.Route("/calendar", func(r chi.Router) {
+					r.Use(auth.RequireAccess(auth.AccessRule{
+						AnyRoles: []string{"user", "moderator", "admin", "service"},
+						AnyScopes: []string{
+							"focus.calendar",
+							"exchange.calendar",
+							"Calendars.ReadWrite",
+						},
+					}))
 					r.Get("/events", calendarHandler.GetEvents)
 					r.Post("/events", calendarHandler.CreateEvent)
 					r.Route("/events/:id", func(r chi.Router) {
@@ -256,7 +269,10 @@ func main() {
 
 			// Admin routes
 			r.Route("/admin", func(r chi.Router) {
-				r.Use(auth.RequireRole("admin"))
+				r.Use(auth.RequireAccess(auth.AccessRule{
+					AnyRoles:  []string{"admin"},
+					AnyScopes: []string{"focus.admin"},
+				}))
 
 				r.Get("/users", adminHandler.ListUsers)
 				r.Get("/users/:id", adminHandler.GetUser)

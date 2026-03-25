@@ -151,6 +151,7 @@ func TestSessionClaimsStructure(t *testing.T) {
 		Email: "test@example.com",
 		Name:  "Test User",
 		Roles: []string{"user", "admin"},
+		Scope: "focus.read focus.write",
 	}
 
 	sessionID := "session-456"
@@ -169,6 +170,8 @@ func TestSessionClaimsStructure(t *testing.T) {
 	assert.NotNil(t, claims.ExpiresAt)
 	assert.NotNil(t, claims.IssuedAt)
 	assert.Len(t, claims.Roles, 2)
+	assert.Contains(t, claims.AllScopes(), "focus.read")
+	assert.Contains(t, claims.AllScopes(), "focus.write")
 }
 
 func TestGetUserClaimsFromContext(t *testing.T) {
@@ -253,6 +256,74 @@ func TestRequireRole(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusUnauthorized, rr.statusCode)
+	})
+}
+
+func TestAllScopesMergesScopeFormats(t *testing.T) {
+	userInfo := &UserInfo{
+		Scope:  "focus.admin focus.read",
+		Scopes: []string{"focus.read", "focus.calendar"},
+	}
+	all := userInfo.AllScopes()
+	assert.Len(t, all, 3)
+	assert.Contains(t, all, "focus.admin")
+	assert.Contains(t, all, "focus.read")
+	assert.Contains(t, all, "focus.calendar")
+}
+
+func TestRequireAccess(t *testing.T) {
+	t.Run("allows by role when any role matches", func(t *testing.T) {
+		claims := &SessionClaims{
+			Roles: []string{"admin"},
+		}
+		ctx := context.WithValue(context.Background(), ContextKeyUserClaims, claims)
+		handler := RequireAccess(AccessRule{
+			AnyRoles: []string{"admin"},
+		})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+		req = req.WithContext(ctx)
+		rr := &testResponseWriter{}
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.statusCode)
+	})
+
+	t.Run("allows by scope when any scope matches", func(t *testing.T) {
+		claims := &SessionClaims{
+			Scope: "focus.admin focus.read",
+		}
+		ctx := context.WithValue(context.Background(), ContextKeyUserClaims, claims)
+		handler := RequireAccess(AccessRule{
+			AnyScopes: []string{"focus.admin"},
+		})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+		req = req.WithContext(ctx)
+		rr := &testResponseWriter{}
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.statusCode)
+	})
+
+	t.Run("requires all scopes when configured", func(t *testing.T) {
+		claims := &SessionClaims{
+			Scopes: []string{"focus.read"},
+		}
+		ctx := context.WithValue(context.Background(), ContextKeyUserClaims, claims)
+		handler := RequireAccess(AccessRule{
+			AllScopes: []string{"focus.read", "focus.write"},
+		})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+		req = req.WithContext(ctx)
+		rr := &testResponseWriter{}
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.statusCode)
 	})
 }
 
