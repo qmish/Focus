@@ -40,7 +40,7 @@
 ### 1.1 Интеграция Keycloak с AD (Identity Brokering)
 - [ ] Настроить Keycloak как брокер идентичности к AD (Azure AD или on-prem AD FS, по целевой инфраструктуре).
 - [ ] Подключить OIDC/SAML provider в Keycloak для AD.
-- [ ] Настроить маппинг групп и ролей AD в claims Keycloak.
+- [x] Настроить маппинг групп и ролей AD в claims Keycloak.
 - [x] Определить и внедрить role model: `user`, `moderator`, `admin`, `service`.
 - [ ] Настроить SCIM/LDAP sync (если требуется по инфраструктуре компании).
 

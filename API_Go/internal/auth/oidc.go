@@ -121,6 +121,10 @@ func (p *OIDCProvider) VerifyIDToken(ctx context.Context, rawIDToken string) (*U
 	if err := idToken.Claims(&userInfo); err != nil {
 		return nil, fmt.Errorf("failed to parse claims: %w", err)
 	}
+	var rawClaims map[string]interface{}
+	if err := idToken.Claims(&rawClaims); err == nil {
+		mergeKeycloakClaims(&userInfo, rawClaims, p.OAuth2Config.ClientID)
+	}
 
 	return &userInfo, nil
 }
@@ -466,6 +470,61 @@ func dedupeStrings(values []string) []string {
 			continue
 		}
 		result = append(result, trimmed)
+	}
+	return result
+}
+
+func mergeKeycloakClaims(userInfo *UserInfo, rawClaims map[string]interface{}, clientID string) {
+	if userInfo == nil || rawClaims == nil {
+		return
+	}
+	roles := append([]string{}, userInfo.Roles...)
+	groups := append([]string{}, userInfo.Groups...)
+
+	roles = append(roles, readNestedStringSlice(rawClaims, "realm_access", "roles")...)
+	if strings.TrimSpace(clientID) != "" {
+		roles = append(roles, readNestedStringSlice(rawClaims, "resource_access", clientID, "roles")...)
+	}
+	groups = append(groups, readStringSlice(rawClaims["groups"])...)
+
+	if scope, ok := rawClaims["scope"].(string); ok && strings.TrimSpace(scope) != "" {
+		userInfo.Scope = scope
+	}
+
+	userInfo.Roles = dedupeStrings(roles)
+	userInfo.Groups = dedupeStrings(groups)
+	userInfo.Scopes = userInfo.AllScopes()
+	userInfo.Scope = ""
+}
+
+func readNestedStringSlice(root map[string]interface{}, path ...string) []string {
+	current := interface{}(root)
+	for _, key := range path {
+		asMap, ok := current.(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		next, ok := asMap[key]
+		if !ok {
+			return nil
+		}
+		current = next
+	}
+	return readStringSlice(current)
+}
+
+func readStringSlice(value interface{}) []string {
+	items, ok := value.([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		str, ok := item.(string)
+		if !ok || strings.TrimSpace(str) == "" {
+			continue
+		}
+		result = append(result, strings.TrimSpace(str))
 	}
 	return result
 }

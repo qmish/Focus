@@ -441,6 +441,48 @@ func TestGroupPolicyMapperFromInvalidJSON(t *testing.T) {
 	assert.Nil(t, mapper)
 }
 
+func TestMergeKeycloakClaims(t *testing.T) {
+	userInfo := &UserInfo{
+		Roles: []string{"user"},
+	}
+	rawClaims := map[string]interface{}{
+		"realm_access": map[string]interface{}{
+			"roles": []interface{}{"moderator", "admin"},
+		},
+		"resource_access": map[string]interface{}{
+			"messenger-api": map[string]interface{}{
+				"roles": []interface{}{"service"},
+			},
+		},
+		"groups": []interface{}{"/corp/it", "/corp/admins"},
+		"scope":  "focus.read focus.write",
+	}
+
+	mergeKeycloakClaims(userInfo, rawClaims, "messenger-api")
+
+	assert.Contains(t, userInfo.Roles, "user")
+	assert.Contains(t, userInfo.Roles, "moderator")
+	assert.Contains(t, userInfo.Roles, "admin")
+	assert.Contains(t, userInfo.Roles, "service")
+	assert.Contains(t, userInfo.Groups, "/corp/it")
+	assert.Contains(t, userInfo.Groups, "/corp/admins")
+	assert.Contains(t, userInfo.Scopes, "focus.read")
+	assert.Contains(t, userInfo.Scopes, "focus.write")
+}
+
+func TestMergeKeycloakClaimsWithoutClientID(t *testing.T) {
+	userInfo := &UserInfo{}
+	rawClaims := map[string]interface{}{
+		"resource_access": map[string]interface{}{
+			"messenger-api": map[string]interface{}{
+				"roles": []interface{}{"service"},
+			},
+		},
+	}
+	mergeKeycloakClaims(userInfo, rawClaims, "")
+	assert.NotContains(t, userInfo.Roles, "service")
+}
+
 // testResponseWriter тестовая реализация http.ResponseWriter
 type testResponseWriter struct {
 	statusCode int

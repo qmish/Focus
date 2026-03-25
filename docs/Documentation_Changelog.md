@@ -2,6 +2,13 @@
 
 ## 2026-03-25
 
+- В `API_Go/internal/auth/oidc.go` добавлен парсинг стандартных Keycloak claims:
+  - `realm_access.roles`,
+  - `resource_access.<client_id>.roles`,
+  - `groups`,
+  - `scope`.
+- Добавлены тесты `mergeKeycloakClaims` в `API_Go/internal/auth/oidc_test.go`.
+- В `docs/Roadmap_v2.md` закрыт пункт `1.1` про маппинг групп и ролей в claims Keycloak.
 - В auth middleware добавлена политика для сервисных клиентов:
   - `AUTH_SERVICE_AUDIENCES`, `AUTH_SERVICE_SCOPES` в конфиге (`config/.env.example/docker-compose`),
   - проверка `audience/scope` для токенов с ролью `service` в `API_Go/internal/auth/oidc.go`.
