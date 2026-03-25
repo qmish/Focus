@@ -143,7 +143,7 @@
 
 ### 5.1 Frontend
 - [ ] Завершить интеграцию страниц комнат/сообщений с реальными API-ответами.
-- [ ] Добавить единый API client, обработку ошибок, loading/retry states.
+- [x] Добавить единый API client, обработку ошибок, loading/retry states.
 - [ ] Реализовать realtime UX на websocket (новые сообщения, системные события, reconnect).
 
 ### 5.2 Admin frontend

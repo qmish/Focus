@@ -1,15 +1,16 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useRoomsStore, useRoomsStore as roomsStore } from '../store/roomsStore'
+import { useRoomsStore, type Message, type Room } from '../store/roomsStore'
 import { JitsiMeeting } from '../components/JitsiMeeting'
+import { apiClient } from '../lib/apiClient'
 
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
-  const { currentRoom, setCurrentRoom, fetchRooms } = useRoomsStore()
+  const { currentRoom, setCurrentRoom } = useRoomsStore()
   const [showVideo, setShowVideo] = useState(false)
   const [jitsiJWT, setJitsiJWT] = useState<string>('')
-  const [messages, setMessages] = useState<any[]>([])
+  const [messages, setMessages] = useState<Message[]>([])
   const [messageInput, setMessageInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -26,29 +27,12 @@ export default function RoomPage() {
 
   const loadRoom = async (id: string) => {
     try {
-      const response = await fetch(`/api/v1/rooms/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${useAuthStore.getState().token}`,
-        },
-      })
-      
-      if (!response.ok) throw new Error('Failed to load room')
-      
-      const room = await response.json()
+      const room = await apiClient.get<Room>(`/api/v1/rooms/${id}`)
       setCurrentRoom(room)
 
       // Получаем Jitsi JWT
-      const joinResponse = await fetch(`/api/v1/rooms/${id}/join`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${useAuthStore.getState().token}`,
-        },
-      })
-      
-      if (joinResponse.ok) {
-        const data = await joinResponse.json()
-        setJitsiJWT(data.jitsi_jwt)
-      }
+      const data = await apiClient.post<{ jitsi_jwt?: string }>(`/api/v1/rooms/${id}/join`, {})
+      setJitsiJWT(data.jitsi_jwt || '')
     } catch (error) {
       console.error('Failed to load room:', error)
     }
@@ -56,15 +40,7 @@ export default function RoomPage() {
 
   const loadMessages = async (id: string) => {
     try {
-      const response = await fetch(`/api/v1/messages?room_id=${id}`, {
-        headers: {
-          'Authorization': `Bearer ${useAuthStore.getState().token}`,
-        },
-      })
-      
-      if (!response.ok) throw new Error('Failed to load messages')
-      
-      const data = await response.json()
+      const data = await apiClient.get<{ data?: Message[] }>(`/api/v1/messages?room_id=${id}`)
       setMessages(data.data || [])
     } catch (error) {
       console.error('Failed to load messages:', error)
@@ -76,22 +52,11 @@ export default function RoomPage() {
     if (!messageInput.trim() || !roomId) return
 
     try {
-      const response = await fetch('/api/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${useAuthStore.getState().token}`,
-        },
-        body: JSON.stringify({
+      const message = await apiClient.post<Message>('/api/v1/messages', {
           room_id: roomId,
           content: messageInput,
           type: 'text',
-        }),
       })
-
-      if (!response.ok) throw new Error('Failed to send message')
-
-      const message = await response.json()
       setMessages(prev => [...prev, message])
       setMessageInput('')
     } catch (error) {
@@ -184,6 +149,3 @@ export default function RoomPage() {
     </div>
   )
 }
-
-// Импортируем useAuthStore
-import { useAuthStore } from '../store/authStore'

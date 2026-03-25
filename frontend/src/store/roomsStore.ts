@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { apiClient } from '../lib/apiClient'
 
 export interface Room {
   id: string
@@ -46,15 +47,7 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
   fetchRooms: async () => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch('/api/v1/rooms', {
-        headers: {
-          'Authorization': `Bearer ${useAuthStore.getState().token}`,
-        },
-      })
-      
-      if (!response.ok) throw new Error('Failed to fetch rooms')
-      
-      const data = await response.json()
+      const data = await apiClient.get<{ data?: Room[] }>('/api/v1/rooms')
       set({ rooms: data.data || [], isLoading: false })
     } catch (error) {
       set({ 
@@ -67,18 +60,7 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
   createRoom: async (name, type, description = '') => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch('/api/v1/rooms', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${useAuthStore.getState().token}`,
-        },
-        body: JSON.stringify({ name, type, description }),
-      })
-      
-      if (!response.ok) throw new Error('Failed to create room')
-      
-      const room = await response.json()
+      const room = await apiClient.post<Room>('/api/v1/rooms', { name, type, description })
       set(state => ({ 
         rooms: [...state.rooms, room],
         isLoading: false 
@@ -100,14 +82,7 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
   deleteRoom: async (roomId) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`/api/v1/rooms/${roomId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${useAuthStore.getState().token}`,
-        },
-      })
-      
-      if (!response.ok) throw new Error('Failed to delete room')
+      await apiClient.delete(`/api/v1/rooms/${roomId}`)
       
       set(state => ({
         rooms: state.rooms.filter(r => r.id !== roomId),
@@ -123,6 +98,3 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
     }
   },
 }))
-
-// Импортируем useAuthStore для токена
-import { useAuthStore } from './authStore'
