@@ -2,6 +2,12 @@
 
 ## 2026-03-25
 
+- Расширено API e2e покрытие в `tests/e2e/ci-api.spec.ts`:
+  - auth redirect flow,
+  - unauth room/chat/bot/admin checks,
+  - webhook invalid signature check.
+- Обновлен CI шаг запуска e2e smoke (`API Smoke|API Flows`).
+- Детализирован backlog `7.1` в `docs/Roadmap_v2.md` с отдельным закрытым API-level e2e подпунктом.
 - Конвертирован `pics/hdphoto1.wdp` -> `pics/hdphoto1.png` (web-совместимый формат).
 - Обновлены `docs/branding-manifest.json` и `docs/Branding.md` под новый background asset.
 - Обновлен статус задачи `0.2` в `docs/Roadmap_v2.md`.

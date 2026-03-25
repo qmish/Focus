@@ -25,3 +25,44 @@ test.describe('API Smoke', () => {
     expect(response.status()).toBe(401)
   })
 })
+
+test.describe('API Flows', () => {
+  test('auth login starts OIDC redirect flow', async ({ request }) => {
+    const response = await request.get(`${API_URL}/api/v1/auth/login`, {
+      maxRedirects: 0,
+    })
+    expect(response.status()).toBe(302)
+  })
+
+  test('messages endpoint rejects unauthenticated bot command', async ({ request }) => {
+    const response = await request.post(`${API_URL}/api/v1/messages`, {
+      data: {
+        room_id: '00000000-0000-0000-0000-000000000000',
+        content: '/status',
+        type: 'text',
+      },
+    })
+    expect(response.status()).toBe(401)
+  })
+
+  test('admin users endpoint rejects unauthenticated request', async ({ request }) => {
+    const response = await request.get(`${API_URL}/api/v1/admin/users`)
+    expect(response.status()).toBe(401)
+  })
+
+  test('webhook endpoint rejects invalid signature', async ({ request }) => {
+    const response = await request.post(`${API_URL}/api/v1/webhooks/jitsi`, {
+      headers: {
+        'X-Jitsi-Signature': 'sha256=invalid',
+        'Content-Type': 'application/json',
+      },
+      data: {
+        event: 'conference.created',
+        conference: {
+          room_name: 'api-e2e',
+        },
+      },
+    })
+    expect(response.status()).toBe(401)
+  })
+})

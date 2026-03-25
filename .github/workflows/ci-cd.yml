@@ -174,7 +174,7 @@ jobs:
         run: npm install
       - name: Run API-only E2E smoke
         working-directory: tests/e2e
-        run: npx playwright test --grep "API Smoke"
+        run: npx playwright test --grep "API Smoke|API Flows"
 
   load-smoke:
     name: Load smoke gate
