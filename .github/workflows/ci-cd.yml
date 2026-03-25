@@ -159,7 +159,7 @@ jobs:
       - name: Start API in background
         working-directory: API_Go
         run: |
-          ENV=development DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=postgres DB_NAME=focus REDIS_HOST=localhost REDIS_PORT=6379 SERVER_PORT=8080 go run cmd/server/main.go > /tmp/focus-api.log 2>&1 &
+          ENV=development DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=postgres DB_NAME=focus REDIS_HOST=localhost REDIS_PORT=6379 SERVER_PORT=8080 SESSION_SECRET=ci-session-secret JITSI_APP_SECRET=ci-jitsi-secret go run cmd/server/main.go > /tmp/focus-api.log 2>&1 &
           for i in {1..30}; do
             if curl -sSf http://localhost:8080/health >/dev/null; then
               exit 0
@@ -211,7 +211,7 @@ jobs:
       - name: Start API in background
         working-directory: API_Go
         run: |
-          ENV=development DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=postgres DB_NAME=focus REDIS_HOST=localhost REDIS_PORT=6379 SERVER_PORT=8080 go run cmd/server/main.go > /tmp/focus-api-load.log 2>&1 &
+          ENV=development DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=postgres DB_NAME=focus REDIS_HOST=localhost REDIS_PORT=6379 SERVER_PORT=8080 SESSION_SECRET=ci-session-secret JITSI_APP_SECRET=ci-jitsi-secret go run cmd/server/main.go > /tmp/focus-api-load.log 2>&1 &
           for i in {1..30}; do
             if curl -sSf http://localhost:8080/health >/dev/null; then
               exit 0

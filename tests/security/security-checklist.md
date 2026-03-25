@@ -18,9 +18,9 @@
 - [ ] Command injection tests
 
 ### A04: Insecure Design
-- [ ] Review authentication flow
+- [x] Review authentication flow
 - [ ] Review authorization model
-- [ ] Review session management
+- [x] Review session management
 
 ### A05: Security Misconfiguration
 - [ ] Check security headers
@@ -35,7 +35,7 @@
 ### A07: Authentication Failures
 - [ ] Test brute force protection
 - [ ] Test session fixation
-- [ ] Test JWT expiration
+- [x] Test JWT expiration
 
 ### A08: Software & Data Integrity
 - [ ] Verify dependency signatures

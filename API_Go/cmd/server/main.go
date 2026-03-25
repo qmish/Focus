@@ -40,6 +40,11 @@ func main() {
 		zap.String("port", cfg.Server.Port),
 	)
 
+	if err := cfg.ValidateSecurity(); err != nil {
+		logger.Error("Security configuration validation failed", zap.Error(err))
+		os.Exit(1)
+	}
+
 	// Подключение к базе данных
 	db, err := database.NewDatabase(&cfg.Database)
 	if err != nil {
@@ -155,7 +160,7 @@ func main() {
 	)
 
 	// Создание auth middleware
-	authMiddleware := auth.NewAuthMiddleware([]byte(cfg.Jitsi.AppSecret))
+	authMiddleware := auth.NewAuthMiddleware([]byte(cfg.Auth.SessionSecret))
 
 	// Создание роутера
 	r := chi.NewRouter()
@@ -187,7 +192,7 @@ func main() {
 
 		// WebSocket endpoint
 		r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
-			claims, err := websocket.AuthenticateRequest(r, []byte(cfg.Jitsi.AppSecret))
+			claims, err := websocket.AuthenticateRequest(r, []byte(cfg.Auth.SessionSecret))
 			if err != nil {
 				if errors.Is(err, websocket.ErrExpiredWebSocketToken) {
 					http.Error(w, "token_expired", http.StatusUnauthorized)

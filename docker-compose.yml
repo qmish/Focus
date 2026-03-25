@@ -89,6 +89,7 @@ services:
       JITSI_BASE_URL: ${JITSI_BASE_URL:-https://meet.company.com}
       JITSI_APP_ID: ${JITSI_APP_ID:-jitsi}
       JITSI_APP_SECRET: ${JITSI_APP_SECRET:-secret}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
     ports:
       - "8080:8080"
     depends_on:

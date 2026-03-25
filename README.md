@@ -46,6 +46,7 @@
 | [Integration](./docs/Integration.md) | Интеграции с внешними системами |
 | [Rollout/Rollback Runbook](./docs/Runbook_RolloutRollback.md) | Порядок релиза и отката stage -> prod |
 | [K8s Manifests Guide](./k8s/README.md) | Применение stage/prod манифестов |
+| [Security Review](./docs/Security_Review_Auth_WS_Webhooks.md) | Security review auth/ws/webhook/token flows |
 
 ## 🚀 Быстрый старт
 

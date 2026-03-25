@@ -41,7 +41,7 @@ func NewAuthHandler(
 		jitsiGen:      jitsiGen,
 		config:        cfg,
 		logger:        logger,
-		sessionSecret: []byte(cfg.Jitsi.AppSecret), // В production использовать отдельный секрет
+		sessionSecret: []byte(cfg.Auth.SessionSecret),
 	}
 }
 

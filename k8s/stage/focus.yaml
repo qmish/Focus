@@ -21,7 +21,7 @@ stringData:
   db-password: CHANGE_ME_STAGE_DB_PASSWORD
   redis-password: CHANGE_ME_STAGE_REDIS_PASSWORD
   keycloak-client-secret: CHANGE_ME_STAGE_KEYCLOAK_CLIENT_SECRET
-  jwt-secret: CHANGE_ME_STAGE_JWT_SECRET
+  session-secret: CHANGE_ME_STAGE_SESSION_SECRET
   jitsi-app-secret: CHANGE_ME_STAGE_JITSI_SECRET
   exchange-client-secret: CHANGE_ME_STAGE_EXCHANGE_CLIENT_SECRET
 ---
@@ -96,7 +96,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: focus-secrets
-              key: jwt-secret
+              key: session-secret
         livenessProbe:
           httpGet:
             path: /health

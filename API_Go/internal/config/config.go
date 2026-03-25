@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -12,10 +13,16 @@ type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	Redis    RedisConfig
+	Auth     AuthConfig
 	Keycloak KeycloakConfig
 	Jitsi    JitsiConfig
 	Exchange ExchangeConfig
 	Log      LogConfig
+}
+
+// AuthConfig конфигурация сессионных токенов API/WS
+type AuthConfig struct {
+	SessionSecret string
 }
 
 // ServerConfig конфигурация HTTP сервера
@@ -108,6 +115,9 @@ func Load() *Config {
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getIntEnv("REDIS_DB", 0),
 		},
+		Auth: AuthConfig{
+			SessionSecret: getEnv("SESSION_SECRET", "dev-session-secret-change-me"),
+		},
 		Keycloak: KeycloakConfig{
 			ServerURL:    getEnv("KEYCLOAK_URL", "http://localhost:8180"),
 			Realm:        getEnv("KEYCLOAK_REALM", "company"),
@@ -135,6 +145,38 @@ func Load() *Config {
 	}
 
 	return cfg
+}
+
+// ValidateSecurity проверяет минимальные security-инварианты для токенов и секретов.
+func (c *Config) ValidateSecurity() error {
+	sessionSecret := strings.TrimSpace(c.Auth.SessionSecret)
+	jitsiSecret := strings.TrimSpace(c.Jitsi.AppSecret)
+
+	if sessionSecret == "" {
+		return fmt.Errorf("SESSION_SECRET must not be empty")
+	}
+
+	if jitsiSecret == "" {
+		return fmt.Errorf("JITSI_APP_SECRET must not be empty")
+	}
+
+	if sessionSecret == jitsiSecret {
+		return fmt.Errorf("SESSION_SECRET must be different from JITSI_APP_SECRET")
+	}
+
+	if c.Env != "development" {
+		weakValues := map[string]struct{}{
+			"secret":                        {},
+			"changeme":                      {},
+			"dev-session-secret-change-me":  {},
+			"change_me":                     {},
+		}
+		if _, weak := weakValues[strings.ToLower(sessionSecret)]; weak {
+			return fmt.Errorf("SESSION_SECRET is too weak for %s environment", c.Env)
+		}
+	}
+
+	return nil
 }
 
 func getEnv(key, defaultValue string) string {

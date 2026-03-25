@@ -86,7 +86,10 @@ func newAuthHandlerForTest(secret string) *AuthHandler {
 		nil,
 		nil,
 		nil,
-		&config.Config{Jitsi: config.JitsiConfig{AppSecret: secret}},
+		&config.Config{
+			Auth:  config.AuthConfig{SessionSecret: secret},
+			Jitsi: config.JitsiConfig{AppSecret: "jitsi-secret-for-tests"},
+		},
 		zap.NewNop(),
 	)
 }

@@ -191,7 +191,7 @@
 - [ ] Прогнать регрессию после бренд-кастомизаций Jitsi.
 
 ### 7.2 Security hardening
-- [ ] Провести security-review auth/WS/webhook/token flows.
+- [x] Провести security-review auth/WS/webhook/token flows.
 - [ ] Проверить RBAC/ABAC политики по ролям AD.
 - [x] Провести сканы зависимостей и контейнеров.
 - [ ] Закрыть критические и высокие findings до go-live.
