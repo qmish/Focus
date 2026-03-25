@@ -5,8 +5,11 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,12 +50,52 @@ type WebhookDelivery struct {
 	CreatedAt    time.Time  `json:"created_at"`
 }
 
+var (
+	ErrMissingWebhookSignature      = errors.New("missing webhook signature")
+	ErrInvalidWebhookSignature      = errors.New("invalid webhook signature")
+	ErrWebhookEventAlreadyProcessed = errors.New("webhook event already processed")
+)
+
+// IncomingEvent stores inbound webhooks for tracing/idempotency.
+type IncomingEvent struct {
+	ID             uuid.UUID  `gorm:"type:uuid;primary_key" json:"id"`
+	Source         string     `gorm:"type:varchar(32);not null;index" json:"source"`
+	EventType      string     `gorm:"type:varchar(128);not null" json:"event_type"`
+	IdempotencyKey string     `gorm:"type:varchar(128);not null;uniqueIndex:idx_incoming_source_idem" json:"idempotency_key"`
+	Signature      string     `gorm:"type:text" json:"signature"`
+	Payload        string     `gorm:"type:text;not null" json:"payload"`
+	ReceivedAt     time.Time  `gorm:"not null" json:"received_at"`
+	ProcessedAt    *time.Time `json:"processed_at,omitempty"`
+}
+
+// TableName returns the table name for incoming events.
+func (IncomingEvent) TableName() string {
+	return "incoming_webhook_events"
+}
+
+// IncomingEventStore persists inbound webhook events.
+type IncomingEventStore interface {
+	IsIncomingEventProcessed(ctx context.Context, source, idempotencyKey string) (bool, error)
+	StoreIncomingEvent(ctx context.Context, event *IncomingEvent) error
+}
+
 // WebhookHandler обработчик вебхуков
-type WebhookHandler struct{}
+type WebhookHandler struct {
+	secret string
+	store  IncomingEventStore
+}
 
 // NewWebhookHandler создаёт новый WebhookHandler
 func NewWebhookHandler() *WebhookHandler {
 	return &WebhookHandler{}
+}
+
+// NewWebhookHandlerWithConfig creates webhook handler with signature/idempotency config.
+func NewWebhookHandlerWithConfig(secret string, store IncomingEventStore) *WebhookHandler {
+	return &WebhookHandler{
+		secret: strings.TrimSpace(secret),
+		store:  store,
+	}
 }
 
 // JitsiWebhookEvent событие от Jitsi
@@ -66,15 +109,48 @@ type JitsiWebhookEvent struct {
 
 // HandleJitsiWebhook обрабатывает входящий вебхук от Jitsi
 func (h *WebhookHandler) HandleJitsiWebhook(ctx context.Context, payload []byte, signature string) error {
-	// Проверяем подпись (если есть)
-	if signature != "" {
-		// TODO: Реализовать проверку подписи
+	return h.HandleJitsiWebhookWithIdempotency(ctx, payload, signature, "")
+}
+
+// HandleJitsiWebhookWithIdempotency validates signature, deduplicates, and processes webhook.
+func (h *WebhookHandler) HandleJitsiWebhookWithIdempotency(ctx context.Context, payload []byte, signature, idempotencyKey string) error {
+	if h.secret != "" {
+		if strings.TrimSpace(signature) == "" {
+			return ErrMissingWebhookSignature
+		}
+		if err := verifyWebhookSignature(h.secret, payload, signature); err != nil {
+			return ErrInvalidWebhookSignature
+		}
 	}
 
 	// Парсим событие
 	var event JitsiWebhookEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("failed to parse jitsi webhook: %w", err)
+	}
+	if h.store != nil {
+		key := normalizeIdempotencyKey(idempotencyKey, payload)
+		processed, err := h.store.IsIncomingEventProcessed(ctx, string(WebhookTypeJitsi), key)
+		if err != nil {
+			return err
+		}
+		if processed {
+			return ErrWebhookEventAlreadyProcessed
+		}
+		processedAt := time.Now().UTC()
+		err = h.store.StoreIncomingEvent(ctx, &IncomingEvent{
+			ID:             uuid.New(),
+			Source:         string(WebhookTypeJitsi),
+			EventType:      event.Event,
+			IdempotencyKey: key,
+			Signature:      signature,
+			Payload:        string(payload),
+			ReceivedAt:     processedAt,
+			ProcessedAt:    &processedAt,
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	// Обрабатываем по типу события
@@ -164,4 +240,38 @@ func createSignatureForVerify(secret string, payload []byte) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write(payload)
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
+func verifyWebhookSignature(secret string, payload []byte, rawSignature string) error {
+	signature := normalizeSignature(rawSignature)
+	// Backward-compatible base64 signature.
+	expectedBase64 := createSignatureForVerify(secret, payload)
+	if hmac.Equal([]byte(signature), []byte(expectedBase64)) {
+		return nil
+	}
+
+	// Jitsi-compatible hex signature.
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write(payload)
+	expectedHex := hex.EncodeToString(h.Sum(nil))
+	if hmac.Equal([]byte(strings.ToLower(signature)), []byte(expectedHex)) {
+		return nil
+	}
+	return ErrInvalidWebhookSignature
+}
+
+func normalizeSignature(rawSignature string) string {
+	sig := strings.TrimSpace(rawSignature)
+	if strings.HasPrefix(strings.ToLower(sig), "sha256=") {
+		return strings.TrimSpace(sig[7:])
+	}
+	return sig
+}
+
+func normalizeIdempotencyKey(idempotencyKey string, payload []byte) string {
+	if key := strings.TrimSpace(idempotencyKey); key != "" {
+		return key
+	}
+	hash := sha256.Sum256(payload)
+	return hex.EncodeToString(hash[:])
 }

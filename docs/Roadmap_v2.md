@@ -96,8 +96,8 @@
 ## Этап 3. Webhooks и Bots (production-реализация)
 
 ### 3.1 Webhooks inbound/outbound
-- [ ] Реализовать проверку подписи входящих webhook.
-- [ ] Сохранять входящие события в БД с трассировкой и idempotency key.
+- [x] Реализовать проверку подписи входящих webhook.
+- [x] Сохранять входящие события в БД с трассировкой и idempotency key.
 - [ ] Реализовать outbound dispatcher с retry/backoff и dead-letter логикой.
 - [ ] Добавить админ-видимость доставок webhook и ошибок.
 

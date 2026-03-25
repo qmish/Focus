@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,4 +82,37 @@ func (r *WebhookRepository) GetDeliveries(ctx context.Context, webhookID uuid.UU
 		Limit(limit).
 		Find(&deliveries).Error
 	return deliveries, err
+}
+
+// IsIncomingEventProcessed checks whether source/idempotency key pair already exists.
+func (r *WebhookRepository) IsIncomingEventProcessed(ctx context.Context, source, idempotencyKey string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&webhooks.IncomingEvent{}).
+		Where("source = ? AND idempotency_key = ?", source, idempotencyKey).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// StoreIncomingEvent saves incoming webhook event for tracing/idempotency.
+func (r *WebhookRepository) StoreIncomingEvent(ctx context.Context, event *webhooks.IncomingEvent) error {
+	if err := r.db.WithContext(ctx).Create(event).Error; err != nil {
+		if isDuplicateKey(err) {
+			return webhooks.ErrWebhookEventAlreadyProcessed
+		}
+		return err
+	}
+	return nil
+}
+
+func isDuplicateKey(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "duplicate key")
 }

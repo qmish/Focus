@@ -168,6 +168,28 @@ func TestHandleJitsiWebhookUnknownEvent(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestHandleJitsiWebhookRequiresSignatureWhenSecretConfigured(t *testing.T) {
+	handler := NewWebhookHandlerWithConfig("test-secret", nil)
+	ctx := context.Background()
+	payload := []byte(`{"event":"conference.created","room":"room-123"}`)
+
+	err := handler.HandleJitsiWebhook(ctx, payload, "")
+	assert.ErrorIs(t, err, ErrMissingWebhookSignature)
+}
+
+func TestHandleJitsiWebhookIdempotencyByPayloadHash(t *testing.T) {
+	store := &testIncomingStore{items: map[string]bool{}}
+	handler := NewWebhookHandlerWithConfig("", store)
+	ctx := context.Background()
+	payload := []byte(`{"event":"conference.created","room":"room-123"}`)
+
+	err := handler.HandleJitsiWebhookWithIdempotency(ctx, payload, "", "")
+	assert.NoError(t, err)
+
+	err = handler.HandleJitsiWebhookWithIdempotency(ctx, payload, "", "")
+	assert.ErrorIs(t, err, ErrWebhookEventAlreadyProcessed)
+}
+
 func TestWebhookDispatcher(t *testing.T) {
 	dispatcher := NewWebhookDispatcher()
 
@@ -208,4 +230,21 @@ func TestOutgoingWebhook(t *testing.T) {
 
 	assert.Equal(t, "https://example.com/webhook", webhook.URL)
 	assert.Equal(t, "test.event", webhook.EventType)
+}
+
+type testIncomingStore struct {
+	items map[string]bool
+}
+
+func (s *testIncomingStore) IsIncomingEventProcessed(ctx context.Context, source, idempotencyKey string) (bool, error) {
+	return s.items[source+":"+idempotencyKey], nil
+}
+
+func (s *testIncomingStore) StoreIncomingEvent(ctx context.Context, event *IncomingEvent) error {
+	key := event.Source + ":" + event.IdempotencyKey
+	if s.items[key] {
+		return ErrWebhookEventAlreadyProcessed
+	}
+	s.items[key] = true
+	return nil
 }

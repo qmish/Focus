@@ -21,6 +21,7 @@ import (
 	"github.com/qmish/focus-api/internal/jitsi"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
+	"github.com/qmish/focus-api/internal/webhooks"
 	"github.com/qmish/focus-api/internal/websocket"
 	"github.com/qmish/focus-api/pkg/logger"
 	"go.uber.org/zap"
@@ -60,6 +61,7 @@ func main() {
 		&models.RoomParticipant{},
 		&models.Message{},
 		&models.MessageReaction{},
+		&webhooks.IncomingEvent{},
 	); err != nil {
 		logger.Error("Database migration failed", zap.Error(err))
 		os.Exit(1)
@@ -70,6 +72,7 @@ func main() {
 	userRepo := repository.NewUserRepository(db.DB)
 	roomRepo := repository.NewRoomRepository(db.DB)
 	messageRepo := repository.NewMessageRepository(db.DB)
+	webhookRepo := repository.NewWebhookRepository(db.DB)
 
 	// Инициализация Graph API клиента (Exchange)
 	var graphClient *exchange.GraphClient
@@ -130,6 +133,9 @@ func main() {
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub)
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
 	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
+	inboundWebhookHandler := handlers.NewInboundWebhookHandler(
+		webhooks.NewWebhookHandlerWithConfig(cfg.Jitsi.AppSecret, webhookRepo),
+	)
 
 	// Создание auth middleware
 	authMiddleware := auth.NewAuthMiddleware([]byte(cfg.Jitsi.AppSecret))
@@ -151,6 +157,10 @@ func main() {
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes
+		r.Route("/webhooks", func(r chi.Router) {
+			r.Post("/jitsi", inboundWebhookHandler.JitsiWebhook)
+		})
+
 		r.Route("/auth", func(r chi.Router) {
 			r.Get("/login", authHandler.Login)
 			r.Get("/callback", authHandler.Callback)

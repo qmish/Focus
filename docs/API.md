@@ -849,8 +849,14 @@ Content-Type: application/json
 
 **Headers:**
 ```
-X-Jitsi-Signature: sha256=xxx
+X-Jitsi-Signature: sha256=<hmac_sha256_hex(payload)>
+X-Idempotency-Key: <optional_unique_event_key>
 ```
+
+Поведение:
+- подпись проверяется относительно `JITSI_APP_SECRET`;
+- если `X-Idempotency-Key` не передан, используется `sha256(payload)`;
+- дубликаты по `source + idempotency_key` не обрабатываются повторно.
 
 **Body:**
 ```json
@@ -866,6 +872,23 @@ X-Jitsi-Signature: sha256=xxx
 ```
 
 **Ответ:** `200 OK`
+
+```json
+{
+  "status": "accepted"
+}
+```
+
+Для дубликата:
+```json
+{
+  "status": "duplicate"
+}
+```
+
+**Ошибки:**
+- `401 Unauthorized` — отсутствует/неверная подпись.
+- `400 Bad Request` — невалидный payload.
 
 ---
 
