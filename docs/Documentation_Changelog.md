@@ -2,6 +2,15 @@
 
 ## 2026-03-25
 
+- Исправлена конфигурация `tests/e2e/playwright.config.ts`:
+  - `testDir` переключен на фактический каталог со spec-файлами,
+  - пути `results` в reporters/outputDir приведены к корректным локальным артефактам.
+- В `docs/Roadmap_v2.md` добавлен и закрыт пункт `7.1` по стабилизации Playwright e2e harness.
+- Расширен `tests/e2e/ci-api.spec.ts`:
+  - добавлены happy-path проверки admin audit endpoint'ов
+    (`/api/v1/admin/auth/audit`, `/api/v1/admin/calendar/audit`),
+  - добавлены ролевые негативные кейсы (user -> `403`).
+- В `docs/Roadmap_v2.md` добавлен и закрыт пункт `7.1` по e2e проверкам admin audit endpoint'ов.
 - Расширен `frontend-admin` раздел наблюдаемости:
   - `frontend-admin/src/pages/ObservabilityPage.tsx` теперь показывает ошибки `auth audit` и `calendar audit`,
   - добавлены мапперы статусов/операций в `frontend-admin/src/lib/observability.ts`,

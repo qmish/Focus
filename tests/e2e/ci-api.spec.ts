@@ -203,6 +203,43 @@ test.describe('API Happy Paths', () => {
     expect(body).toHaveProperty('users')
     expect(body).toHaveProperty('rooms')
   })
+
+  test('admin auth and calendar audit endpoints work for admin role', async ({ request }) => {
+    const adminToken = createSessionToken(['admin'], {
+      email: 'audit-admin@example.com',
+      name: 'Audit Admin',
+    })
+
+    const authAuditResponse = await request.get(`${API_URL}/api/v1/admin/auth/audit?limit=20&failed=true`, {
+      headers: authHeaders(adminToken),
+    })
+    expect(authAuditResponse.status()).toBe(200)
+    const authAuditBody = await authAuditResponse.json()
+    expect(authAuditBody).toHaveProperty('data')
+    expect(Array.isArray(authAuditBody.data)).toBeTruthy()
+
+    const calendarAuditResponse = await request.get(`${API_URL}/api/v1/admin/calendar/audit?limit=20&failed=true`, {
+      headers: authHeaders(adminToken),
+    })
+    expect(calendarAuditResponse.status()).toBe(200)
+    const calendarAuditBody = await calendarAuditResponse.json()
+    expect(calendarAuditBody).toHaveProperty('data')
+    expect(Array.isArray(calendarAuditBody.data)).toBeTruthy()
+  })
+
+  test('admin audit endpoints reject non-admin role', async ({ request }) => {
+    const userToken = createSessionToken(['user'])
+
+    const authAuditResponse = await request.get(`${API_URL}/api/v1/admin/auth/audit`, {
+      headers: authHeaders(userToken),
+    })
+    expect(authAuditResponse.status()).toBe(403)
+
+    const calendarAuditResponse = await request.get(`${API_URL}/api/v1/admin/calendar/audit`, {
+      headers: authHeaders(userToken),
+    })
+    expect(calendarAuditResponse.status()).toBe(403)
+  })
 })
 
 test.describe('API User Journey', () => {

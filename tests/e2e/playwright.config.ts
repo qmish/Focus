@@ -1,15 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './e2e',
+  testDir: '.',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: [
     ['html'],
-    ['json', { outputFile: 'tests/e2e/results.json' }],
-    ['junit', { outputFile: 'tests/e2e/results.xml' }],
+    ['json', { outputFile: 'results.json' }],
+    ['junit', { outputFile: 'results.xml' }],
   ],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:3000',
@@ -39,5 +39,5 @@ export default defineConfig({
       use: { ...devices['iPhone 12'] },
     },
   ],
-  outputDir: 'tests/e2e/results/',
+  outputDir: 'results/',
 });
