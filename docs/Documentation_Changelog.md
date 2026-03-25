@@ -2,6 +2,9 @@
 
 ## 2026-03-25
 
+- В `docs/Roadmap_v2.md` закрыт пункт `1.4` по разделению секретов session JWT и Jitsi JWT.
+  Подтверждение в коде: отдельные конфиги/секреты `SESSION_SECRET` и `JITSI_APP_SECRET`
+  + security-валидация запрета одинаковых значений (`API_Go/internal/config/config.go`).
 - Добавлен документ `docs/Corp_Resources_SSO_Catalog.md` с перечнем корпоративных ресурсов,
   моделью доступа (roles/scopes/audience) и границами ответственности по SSO.
 - Обновлены `README.md` (ссылка на SSO каталог) и `docs/Roadmap_v2.md`:
