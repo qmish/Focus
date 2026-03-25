@@ -172,14 +172,14 @@
 - [ ] Настроить ingress/TLS, сетевые политики, секреты и ротацию.
 
 ### 6.3 CI/CD
-- [ ] Включить e2e/load/security проверки в pipeline gates.
-- [ ] Разделить pipelines для Focus и Jitsi fork (с согласованными релизными окнами).
-- [ ] Реализовать стратегию rollout/rollback (stage -> prod).
+- [x] Включить e2e/load/security проверки в pipeline gates.
+- [x] Разделить pipelines для Focus и Jitsi fork (с согласованными релизными окнами).
+- [x] Реализовать стратегию rollout/rollback (stage -> prod).
 
 ### Критерии готовности этапа 6
 - [ ] Локальная и stage среды поднимаются и воспроизводимы.
-- [ ] Pipeline блокирует релизы при провале quality/security gates.
-- [ ] Есть отработанный rollback на production.
+- [x] Pipeline блокирует релизы при провале quality/security gates.
+- [x] Есть отработанный rollback на production.
 
 ---
 

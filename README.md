@@ -44,6 +44,7 @@
 | [API](./docs/API.md) | Спецификация REST API |
 | [Database](./docs/Database.md) | Проектирование БД |
 | [Integration](./docs/Integration.md) | Интеграции с внешними системами |
+| [Rollout/Rollback Runbook](./docs/Runbook_RolloutRollback.md) | Порядок релиза и отката stage -> prod |
 
 ## 🚀 Быстрый старт
 

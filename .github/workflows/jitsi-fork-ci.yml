@@ -1,0 +1,29 @@
+name: Jitsi Fork Pipeline
+
+on:
+  push:
+    branches: [master, develop]
+    paths:
+      - "jitsi-meet-master/**"
+  pull_request:
+    branches: [master]
+    paths:
+      - "jitsi-meet-master/**"
+  workflow_dispatch:
+
+jobs:
+  jitsi-fork-validate:
+    name: Validate jitsi fork changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure jitsi fork path exists
+        run: |
+          if [ ! -d "jitsi-meet-master" ]; then
+            echo "jitsi-meet-master directory not found"
+            exit 1
+          fi
+      - name: Report changed files
+        run: |
+          echo "Jitsi fork pipeline triggered."
+          git status --short
