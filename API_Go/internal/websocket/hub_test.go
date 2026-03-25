@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"testing"
 	"time"
 
@@ -187,6 +188,41 @@ func TestSubscribeAuthorization(t *testing.T) {
 		msg := mustReadWSMessage(t, client.Send)
 		assert.Equal(t, MessageTypeSubscribe, msg.Type)
 	})
+}
+
+func TestStrictRoomAccessWithoutChecker(t *testing.T) {
+	hub := NewHub(zap.NewNop())
+	hub.SetStrictRoomAccess(true)
+	client := &Client{
+		ID:     "client-1",
+		UserID: "user-1",
+		Hub:    hub,
+		Rooms:  map[string]bool{},
+		Send:   make(chan []byte, 1),
+	}
+	client.handleSubscribe(json.RawMessage(`{"room_id":"room-1"}`))
+
+	assert.Empty(t, client.Rooms)
+	msg := mustReadWSMessage(t, client.Send)
+	assert.Equal(t, MessageTypeError, msg.Type)
+
+	var payload ErrorPayload
+	err := json.Unmarshal(msg.Payload, &payload)
+	assert.NoError(t, err)
+	assert.Equal(t, "forbidden_room", payload.Code)
+}
+
+func TestOriginAllowList(t *testing.T) {
+	hub := NewHub(zap.NewNop())
+	hub.SetAllowedOrigins([]string{"https://chat.company.com", "https://admin.company.com"})
+
+	allowedRequest := &http.Request{Header: http.Header{}}
+	allowedRequest.Header.Set("Origin", "https://chat.company.com")
+	assert.True(t, hub.isOriginAllowed(allowedRequest))
+
+	deniedRequest := &http.Request{Header: http.Header{}}
+	deniedRequest.Header.Set("Origin", "https://evil.example.com")
+	assert.False(t, hub.isOriginAllowed(deniedRequest))
 }
 
 func TestMessageAndTypingRequireSubscription(t *testing.T) {

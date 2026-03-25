@@ -32,6 +32,9 @@ func TestValidateSecurityAllowsDifferentSecrets(t *testing.T) {
 		Jitsi: JitsiConfig{
 			AppSecret: "prod-jitsi-secret-value",
 		},
+		WebSocket: WebSocketConfig{
+			AllowedOrigins: []string{"https://chat.company.com"},
+		},
 	}
 
 	if err := cfg.ValidateSecurity(); err != nil {
@@ -66,8 +69,30 @@ func TestValidateSecurityRejectsTooShortSessionLifetime(t *testing.T) {
 		Jitsi: JitsiConfig{
 			AppSecret: "prod-jitsi-secret-value",
 		},
+		WebSocket: WebSocketConfig{
+			AllowedOrigins: []string{"https://chat.company.com"},
+		},
 	}
 	if err := cfg.ValidateSecurity(); err == nil {
 		t.Fatalf("expected error for too short session token lifetime")
+	}
+}
+
+func TestValidateSecurityRejectsEmptyWebSocketOriginsInProd(t *testing.T) {
+	cfg := &Config{
+		Env: "production",
+		Auth: AuthConfig{
+			SessionSecret:        "prod-session-secret-value",
+			SessionTokenLifetime: 24 * time.Hour,
+		},
+		Jitsi: JitsiConfig{
+			AppSecret: "prod-jitsi-secret-value",
+		},
+		WebSocket: WebSocketConfig{
+			AllowedOrigins: []string{},
+		},
+	}
+	if err := cfg.ValidateSecurity(); err == nil {
+		t.Fatalf("expected error when WS_ALLOWED_ORIGINS is empty in production")
 	}
 }

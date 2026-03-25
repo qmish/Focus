@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,13 +18,13 @@ import (
 type MessageType string
 
 const (
-	MessageTypeSubscribe    MessageType = "subscribe"
-	MessageTypeUnsubscribe  MessageType = "unsubscribe"
-	MessageTypeMessage      MessageType = "message"
-	MessageTypeTyping       MessageType = "typing"
-	MessageTypeUserJoined   MessageType = "user_joined"
-	MessageTypeUserLeft     MessageType = "user_left"
-	MessageTypeError        MessageType = "error"
+	MessageTypeSubscribe   MessageType = "subscribe"
+	MessageTypeUnsubscribe MessageType = "unsubscribe"
+	MessageTypeMessage     MessageType = "message"
+	MessageTypeTyping      MessageType = "typing"
+	MessageTypeUserJoined  MessageType = "user_joined"
+	MessageTypeUserLeft    MessageType = "user_left"
+	MessageTypeError       MessageType = "error"
 )
 
 // WSMessage сообщение WebSocket
@@ -69,27 +71,29 @@ type ErrorPayload struct {
 
 // Client представляет WebSocket клиента
 type Client struct {
-	ID       string
-	UserID   string
+	ID        string
+	UserID    string
 	ExpiresAt time.Time
-	Conn     *websocket.Conn
-	Hub      *Hub
-	Rooms    map[string]bool // комнаты, на которые подписан
-	Send     chan []byte
-	mu       sync.RWMutex
-	closed   bool
+	Conn      *websocket.Conn
+	Hub       *Hub
+	Rooms     map[string]bool // комнаты, на которые подписан
+	Send      chan []byte
+	mu        sync.RWMutex
+	closed    bool
 }
 
 // Hub управляет клиентами
 type Hub struct {
-	Clients    map[string]*Client
-	Rooms      map[string]map[string]*Client // room_id -> client_id -> client
-	Register   chan *Client
-	Unregister chan *Client
-	Broadcast  chan *BroadcastMessage
-	mu         sync.RWMutex
-	logger     *zap.Logger
-	roomAccess RoomAccessChecker
+	Clients          map[string]*Client
+	Rooms            map[string]map[string]*Client // room_id -> client_id -> client
+	Register         chan *Client
+	Unregister       chan *Client
+	Broadcast        chan *BroadcastMessage
+	mu               sync.RWMutex
+	logger           *zap.Logger
+	roomAccess       RoomAccessChecker
+	allowedOrigins   map[string]struct{}
+	strictRoomAccess bool
 }
 
 // RoomAccessChecker checks if user can access a room.
@@ -101,26 +105,23 @@ type BroadcastMessage struct {
 	Message []byte
 }
 
-// Upgrader для WebSocket
-var upgrader = websocket.Upgrader{
+// baseUpgrader for websocket connections.
+var baseUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// Разрешаем все origin для разработки
-		// В production нужно проверять
-		return true
-	},
 }
 
 // NewHub создаёт новый Hub
 func NewHub(logger *zap.Logger) *Hub {
 	return &Hub{
-		Clients:    make(map[string]*Client),
-		Rooms:      make(map[string]map[string]*Client),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		Broadcast:  make(chan *BroadcastMessage, 256),
-		logger:     logger,
+		Clients:          make(map[string]*Client),
+		Rooms:            make(map[string]map[string]*Client),
+		Register:         make(chan *Client),
+		Unregister:       make(chan *Client),
+		Broadcast:        make(chan *BroadcastMessage, 256),
+		logger:           logger,
+		allowedOrigins:   map[string]struct{}{},
+		strictRoomAccess: false,
 	}
 }
 
@@ -129,6 +130,27 @@ func (h *Hub) SetRoomAccessChecker(checker RoomAccessChecker) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.roomAccess = checker
+}
+
+// SetAllowedOrigins configures websocket origin allowlist.
+func (h *Hub) SetAllowedOrigins(origins []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.allowedOrigins = make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		normalized := normalizeOrigin(origin)
+		if normalized == "" {
+			continue
+		}
+		h.allowedOrigins[normalized] = struct{}{}
+	}
+}
+
+// SetStrictRoomAccess enables fail-closed room authorization mode.
+func (h *Hub) SetStrictRoomAccess(enabled bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.strictRoomAccess = enabled
 }
 
 // Run запускает Hub
@@ -250,6 +272,10 @@ func (h *Hub) BroadcastToRoom(roomID string, msg WSMessage) {
 
 // HandleWebSocket обрабатывает WebSocket подключение
 func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request, userID string, expiresAt time.Time) {
+	upgrader := baseUpgrader
+	upgrader.CheckOrigin = func(r *http.Request) bool {
+		return h.isOriginAllowed(r)
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.Error("websocket upgrade failed", zap.Error(err))
@@ -257,14 +283,14 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request, userID str
 	}
 
 	client := &Client{
-		ID:       uuid.New().String(),
-		UserID:   userID,
+		ID:        uuid.New().String(),
+		UserID:    userID,
 		ExpiresAt: expiresAt,
-		Conn:     conn,
-		Hub:      h,
-		Rooms:    make(map[string]bool),
-		Send:     make(chan []byte, 256),
-		closed:   false,
+		Conn:      conn,
+		Hub:       h,
+		Rooms:     make(map[string]bool),
+		Send:      make(chan []byte, 256),
+		closed:    false,
 	}
 
 	h.Register <- client
@@ -386,7 +412,7 @@ func (c *Client) handleSubscribe(payload json.RawMessage) {
 
 	// Отправляем подтверждение
 	c.sendWSMessage(WSMessage{
-		Type: MessageTypeSubscribe,
+		Type:    MessageTypeSubscribe,
 		Payload: json.RawMessage(`{"room_id":"` + sub.RoomID + `","status":"subscribed"}`),
 	})
 }
@@ -474,7 +500,7 @@ func (c *Client) sendWSMessage(msg WSMessage) {
 
 func (c *Client) sendError(code, message string) {
 	c.sendWSMessage(WSMessage{
-		Type: MessageTypeError,
+		Type:    MessageTypeError,
 		Payload: json.RawMessage(`{"code":"` + code + `","message":"` + message + `"}`),
 	})
 }
@@ -482,9 +508,10 @@ func (c *Client) sendError(code, message string) {
 func (h *Hub) canAccessRoom(ctx context.Context, userID, roomID string) bool {
 	h.mu.RLock()
 	checker := h.roomAccess
+	strictRoomAccess := h.strictRoomAccess
 	h.mu.RUnlock()
 	if checker == nil {
-		return true
+		return !strictRoomAccess
 	}
 	allowed, err := checker(ctx, userID, roomID)
 	if err != nil {
@@ -495,6 +522,32 @@ func (h *Hub) canAccessRoom(ctx context.Context, userID, roomID string) bool {
 		return false
 	}
 	return allowed
+}
+
+func (h *Hub) isOriginAllowed(r *http.Request) bool {
+	originHeader := normalizeOrigin(r.Header.Get("Origin"))
+	if originHeader == "" {
+		return true
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if len(h.allowedOrigins) == 0 {
+		return false
+	}
+	_, ok := h.allowedOrigins[originHeader]
+	return ok
+}
+
+func normalizeOrigin(raw string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(raw))
+	if trimmed == "" {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	return parsed.Scheme + "://" + parsed.Host
 }
 
 func (c *Client) isSubscribed(roomID string) bool {

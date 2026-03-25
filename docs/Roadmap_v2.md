@@ -83,6 +83,7 @@
 - [x] Добавить обязательную аутентификацию на `/api/v1/ws`.
 - [x] Внедрить room-level authorization на websocket события.
 - [x] Добавить обработку reconnect с проверкой истекшего токена.
+- [x] Внедрить origin allowlist и fail-closed политику подписки на room при отсутствии access-checker.
 
 ### 2.3 Завершение TODO-критики в backend
 - [x] Реализовать TODO по `admin conferences` (получение активных конференций и завершение через backend room lifecycle).

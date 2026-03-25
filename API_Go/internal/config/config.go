@@ -9,15 +9,16 @@ import (
 
 // Config хранит конфигурацию приложения
 type Config struct {
-	Env      string
-	Server   ServerConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	Auth     AuthConfig
-	Keycloak KeycloakConfig
-	Jitsi    JitsiConfig
-	Exchange ExchangeConfig
-	Log      LogConfig
+	Env       string
+	Server    ServerConfig
+	Database  DatabaseConfig
+	Redis     RedisConfig
+	Auth      AuthConfig
+	WebSocket WebSocketConfig
+	Keycloak  KeycloakConfig
+	Jitsi     JitsiConfig
+	Exchange  ExchangeConfig
+	Log       LogConfig
 }
 
 // AuthConfig конфигурация сессионных токенов API/WS
@@ -28,6 +29,12 @@ type AuthConfig struct {
 	RequiredAudience         string
 	ServiceAudiences         []string
 	ServiceScopes            []string
+}
+
+// WebSocketConfig конфигурация websocket безопасности.
+type WebSocketConfig struct {
+	AllowedOrigins   []string
+	StrictRoomAccess bool
 }
 
 // ServerConfig конфигурация HTTP сервера
@@ -95,8 +102,13 @@ type LogConfig struct {
 
 // Load загружает конфигурацию из переменных окружения
 func Load() *Config {
+	env := getEnv("ENV", "development")
+	strictRoomAccessDefault := true
+	if env == "development" {
+		strictRoomAccessDefault = false
+	}
 	cfg := &Config{
-		Env: getEnv("ENV", "development"),
+		Env: env,
 		Server: ServerConfig{
 			Host:         getEnv("SERVER_HOST", "0.0.0.0"),
 			Port:         getEnv("SERVER_PORT", "8080"),
@@ -128,6 +140,15 @@ func Load() *Config {
 			RequiredAudience:         getEnv("AUTH_REQUIRED_AUDIENCE", "focus-frontend"),
 			ServiceAudiences:         getListEnv("AUTH_SERVICE_AUDIENCES", []string{"focus-service"}),
 			ServiceScopes:            getListEnv("AUTH_SERVICE_SCOPES", []string{"focus.service"}),
+		},
+		WebSocket: WebSocketConfig{
+			AllowedOrigins: getListEnv("WS_ALLOWED_ORIGINS", []string{
+				"http://localhost:3000",
+				"http://localhost:3001",
+				"http://localhost:5173",
+				"http://localhost:5174",
+			}),
+			StrictRoomAccess: getBoolEnv("WS_STRICT_ROOM_ACCESS", strictRoomAccessDefault),
 		},
 		Keycloak: KeycloakConfig{
 			ServerURL:          getEnv("KEYCLOAK_URL", "http://localhost:8180"),
@@ -191,6 +212,9 @@ func (c *Config) ValidateSecurity() error {
 	if c.Auth.SessionTokenLifetime < 15*time.Minute {
 		return fmt.Errorf("AUTH_SESSION_TOKEN_LIFETIME must be at least 15m")
 	}
+	if c.Env != "development" && len(c.WebSocket.AllowedOrigins) == 0 {
+		return fmt.Errorf("WS_ALLOWED_ORIGINS must not be empty in %s environment", c.Env)
+	}
 
 	return nil
 }
@@ -219,6 +243,21 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 		}
 	}
 	return defaultValue
+}
+
+func getBoolEnv(key string, defaultValue bool) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if value == "" {
+		return defaultValue
+	}
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return defaultValue
+	}
 }
 
 func getListEnv(key string, defaultValue []string) []string {

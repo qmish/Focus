@@ -2,6 +2,13 @@
 
 ## 2026-03-25
 
+- Усилен security-hardening WebSocket:
+  - `API_Go/internal/websocket/hub.go`: origin allowlist (`WS_ALLOWED_ORIGINS`),
+    strict room-access режим (`WS_STRICT_ROOM_ACCESS`) и fail-closed поведение без checker.
+  - `API_Go/cmd/server/main.go`: wiring новых WebSocket политик из конфигурации.
+  - `API_Go/internal/websocket/hub_test.go`: тесты на strict room access и origin allowlist.
+  - `API_Go/internal/config/config.go|config_test.go`: новые env-параметры и security-валидация.
+- Обновлены `.env.example`, `docker-compose.yml` и `docs/Roadmap_v2.md` (закрыт подпункт `2.2` по WS hardening).
 - Добавлен `tests/e2e/.gitignore` для исключения локальных e2e-артефактов:
   `node_modules`, `playwright-report`, `results`, `results.json`, `results.xml`.
 - В `docs/Roadmap_v2.md` добавлен и закрыт пункт `7.1` по hygiene e2e артефактов.

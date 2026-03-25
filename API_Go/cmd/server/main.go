@@ -128,6 +128,8 @@ func main() {
 
 	// Инициализация WebSocket Hub
 	wsHub := websocket.NewHub(logger.WithContext(context.Background()))
+	wsHub.SetAllowedOrigins(cfg.WebSocket.AllowedOrigins)
+	wsHub.SetStrictRoomAccess(cfg.WebSocket.StrictRoomAccess)
 	wsHub.SetRoomAccessChecker(func(ctx context.Context, userID, roomID string) (bool, error) {
 		userUUID, err := uuid.Parse(userID)
 		if err != nil {
