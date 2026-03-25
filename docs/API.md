@@ -1323,6 +1323,40 @@ Authorization: Bearer <admin_token>
 
 ---
 
+### 8.9. Сводная статистика админ-панели
+
+**Endpoint:** `GET /api/v1/admin/stats`
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Ответ:** `200 OK`
+
+```json
+{
+  "users": {
+    "total": 152
+  },
+  "rooms": {
+    "total": 47
+  },
+  "conferences": {
+    "active": 6
+  },
+  "messages": {
+    "today": 1243
+  }
+}
+```
+
+Примечания:
+- `conferences.active` считается по meeting-room (`type = meeting`);
+- `messages.today` считается по не удаленным сообщениям, созданным с начала текущих суток.
+
+---
+
 ## 9. Health Check API
 
 ### 9.1. Health check

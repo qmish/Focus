@@ -214,7 +214,11 @@ func TestAdminHandlerEndConferenceNotFound(t *testing.T) {
 }
 
 func TestAdminHandlerGetStats(t *testing.T) {
-	handler := NewAdminHandler(&fakeAdminUserRepo{count: 3}, &fakeAdminRoomRepo{count: 7})
+	handler := NewAdminHandler(
+		&fakeAdminUserRepo{count: 3},
+		&fakeAdminRoomRepo{count: 7, countByType: map[models.RoomType]int64{models.RoomTypeMeeting: 2}},
+	)
+	handler.SetMessageRepository(&fakeAdminMessageRepo{countSince: 11})
 
 	claims := &auth.SessionClaims{
 		Roles: []string{"admin"},
@@ -229,6 +233,8 @@ func TestAdminHandlerGetStats(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), `"total":3`)
 	assert.Contains(t, rr.Body.String(), `"total":7`)
+	assert.Contains(t, rr.Body.String(), `"active":2`)
+	assert.Contains(t, rr.Body.String(), `"today":11`)
 }
 
 func TestAdminHandlerGetStatsForbidden(t *testing.T) {
@@ -268,7 +274,12 @@ type fakeAdminRoomRepo struct {
 	rooms             map[uuid.UUID]*models.Room
 	deleted           map[uuid.UUID]bool
 	count             int64
+	countByType       map[models.RoomType]int64
 	participantByRoom map[uuid.UUID]int64
+}
+
+type fakeAdminMessageRepo struct {
+	countSince int64
 }
 
 type fakeAdminWebhookRepo struct {
@@ -296,6 +307,12 @@ func (f *fakeAdminRoomRepo) Count(ctx context.Context) (int64, error) {
 	}
 	return int64(len(f.rooms)), nil
 }
+func (f *fakeAdminRoomRepo) CountByType(ctx context.Context, roomType models.RoomType) (int64, error) {
+	if f.countByType == nil {
+		return 0, nil
+	}
+	return f.countByType[roomType], nil
+}
 func (f *fakeAdminRoomRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Room, error) {
 	room, ok := f.rooms[id]
 	if !ok || room == nil || room.DeletedAt != nil {
@@ -321,6 +338,10 @@ func (f *fakeAdminRoomRepo) CountParticipants(ctx context.Context, roomID uuid.U
 		return 0, nil
 	}
 	return f.participantByRoom[roomID], nil
+}
+
+func (f *fakeAdminMessageRepo) CountSince(ctx context.Context, since time.Time) (int64, error) {
+	return f.countSince, nil
 }
 
 func (f *fakeAdminWebhookRepo) ListRecentDeliveries(ctx context.Context, limit int, onlyFailed bool) ([]*webhooks.WebhookDelivery, error) {

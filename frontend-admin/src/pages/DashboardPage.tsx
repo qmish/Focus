@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAdminStore } from '../store/adminStore'
 
 export default function DashboardPage() {
-  const { stats, fetchStats } = useAdminStore()
+  const { stats, error, fetchStats } = useAdminStore()
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -16,6 +16,7 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-page">
       <h1>Панель управления</h1>
+      {error && <p className="error">{error}</p>}
       
       <div className="stats-grid">
         <div className="stat-card">

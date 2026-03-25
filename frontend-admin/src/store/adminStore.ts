@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { getAdminAccessToken } from '../lib/authToken'
+import { normalizeStats, type AdminStats } from '../lib/adminStats'
 
-interface User {
+export interface User {
   id: string
   email: string
   name: string
@@ -10,16 +11,20 @@ interface User {
   created_at: string
 }
 
-interface Stats {
-  users: { total: number }
-  rooms: { total: number }
-  conferences: { active: number }
-  messages: { today: number }
+type Stats = AdminStats
+
+interface Pagination {
+  page: number
+  per_page: number
+  total: number
+  total_pages: number
 }
 
 interface AdminState {
   users: User[]
   stats: Stats
+  pagination: Pagination
+  currentPage: number
   loading: boolean
   error: string | null
   fetchUsers: (page: number) => Promise<void>
@@ -37,11 +42,18 @@ export const useAdminStore = create<AdminState>((set, get) => ({
     conferences: { active: 0 },
     messages: { today: 0 },
   },
+  pagination: {
+    page: 1,
+    per_page: 20,
+    total: 0,
+    total_pages: 1,
+  },
+  currentPage: 1,
   loading: false,
   error: null,
 
   fetchUsers: async (page) => {
-    set({ loading: true, error: null })
+    set({ loading: true, error: null, currentPage: page })
     try {
       const token = getAdminAccessToken()
       const response = await fetch(`/api/v1/admin/users?page=${page}&per_page=20`, {
@@ -53,7 +65,11 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       if (!response.ok) throw new Error('Failed to fetch users')
       
       const data = await response.json()
-      set({ users: data.data || [], loading: false })
+      set({
+        users: data.data || [],
+        pagination: data.pagination || { page, per_page: 20, total: 0, total_pages: 1 },
+        loading: false,
+      })
     } catch (error) {
       set({ 
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -75,7 +91,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       if (!response.ok) throw new Error('Failed to fetch stats')
       
       const data = await response.json()
-      set({ stats: data, loading: false })
+      set({ stats: normalizeStats(data), loading: false })
     } catch (error) {
       set({ 
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -98,11 +114,9 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       
       if (!response.ok) throw new Error('Failed to update roles')
       
-      // Обновляем список пользователей
-      get().fetchUsers(1)
+      await get().fetchUsers(get().currentPage)
     } catch (error) {
-      console.error('Failed to update roles:', error)
-      alert('Не удалось обновить роли')
+      set({ error: error instanceof Error ? error.message : 'Unknown error' })
     }
   },
 
@@ -120,10 +134,10 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       
       if (!response.ok) throw new Error('Failed to ban user')
       
-      get().fetchUsers(1)
+      await get().fetchUsers(get().currentPage)
+      await get().fetchStats()
     } catch (error) {
-      console.error('Failed to ban user:', error)
-      alert('Не удалось заблокировать пользователя')
+      set({ error: error instanceof Error ? error.message : 'Unknown error' })
     }
   },
 
@@ -139,10 +153,10 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       
       if (!response.ok) throw new Error('Failed to unban user')
       
-      get().fetchUsers(1)
+      await get().fetchUsers(get().currentPage)
+      await get().fetchStats()
     } catch (error) {
-      console.error('Failed to unban user:', error)
-      alert('Не удалось разблокировать пользователя')
+      set({ error: error instanceof Error ? error.message : 'Unknown error' })
     }
   },
 }))

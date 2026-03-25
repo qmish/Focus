@@ -116,6 +116,16 @@ func (r *MessageRepository) Count(ctx context.Context, roomID uuid.UUID) (int64,
 	return count, err
 }
 
+// CountSince returns non-deleted messages count since specified time.
+func (r *MessageRepository) CountSince(ctx context.Context, since time.Time) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&models.Message{}).
+		Where("is_deleted = ? AND created_at >= ?", false, since).
+		Count(&count).Error
+	return count, err
+}
+
 // GetLastMessage получает последнее сообщение в комнате
 func (r *MessageRepository) GetLastMessage(ctx context.Context, roomID uuid.UUID) (*models.Message, error) {
 	var message models.Message

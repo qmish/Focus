@@ -20,6 +20,7 @@ import (
 type AdminHandler struct {
 	userRepo    adminUserRepository
 	roomRepo    adminRoomRepository
+	messageRepo adminMessageRepository
 	webhookRepo adminWebhookRepository
 	botRepo     adminBotRepository
 }
@@ -34,9 +35,14 @@ type adminUserRepository interface {
 type adminRoomRepository interface {
 	List(ctx context.Context, limit, offset int) ([]*models.Room, error)
 	Count(ctx context.Context) (int64, error)
+	CountByType(ctx context.Context, roomType models.RoomType) (int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Room, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 	CountParticipants(ctx context.Context, roomID uuid.UUID) (int64, error)
+}
+
+type adminMessageRepository interface {
+	CountSince(ctx context.Context, since time.Time) (int64, error)
 }
 
 type adminWebhookRepository interface {
@@ -63,6 +69,11 @@ func (h *AdminHandler) SetWebhookRepository(webhookRepo adminWebhookRepository) 
 // SetBotRepository sets optional bot repository for admin bot error visibility.
 func (h *AdminHandler) SetBotRepository(botRepo adminBotRepository) {
 	h.botRepo = botRepo
+}
+
+// SetMessageRepository sets optional message repository for dashboard stats.
+func (h *AdminHandler) SetMessageRepository(messageRepo adminMessageRepository) {
+	h.messageRepo = messageRepo
 }
 
 // requireAdmin middleware для проверки роли администратора
@@ -449,12 +460,18 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Получаем статистику
-	var userCount, roomCount int64
+	var userCount, roomCount, activeConferences, messagesToday int64
 	if h.userRepo != nil {
 		userCount, _ = h.userRepo.Count(ctx)
 	}
 	if h.roomRepo != nil {
 		roomCount, _ = h.roomRepo.Count(ctx)
+		activeConferences, _ = h.roomRepo.CountByType(ctx, models.RoomTypeMeeting)
+	}
+	if h.messageRepo != nil {
+		now := time.Now()
+		startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		messagesToday, _ = h.messageRepo.CountSince(ctx, startOfDay)
 	}
 
 	response := map[string]interface{}{
@@ -465,7 +482,10 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 			"total": roomCount,
 		},
 		"conferences": map[string]interface{}{
-			"active": 0,
+			"active": activeConferences,
+		},
+		"messages": map[string]interface{}{
+			"today": messagesToday,
 		},
 	}
 

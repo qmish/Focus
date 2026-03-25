@@ -113,6 +113,16 @@ func (r *RoomRepository) Count(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+// CountByType returns number of rooms by room type.
+func (r *RoomRepository) CountByType(ctx context.Context, roomType models.RoomType) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&models.Room{}).
+		Where("deleted_at IS NULL AND type = ?", roomType).
+		Count(&count).Error
+	return count, err
+}
+
 // AddParticipant добавляет участника в комнату
 func (r *RoomRepository) AddParticipant(ctx context.Context, roomID, userID uuid.UUID, role models.ParticipantRole) error {
 	participant := models.NewRoomParticipant(roomID, userID, role)

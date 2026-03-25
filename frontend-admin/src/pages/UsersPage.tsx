@@ -1,19 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useAdminStore } from '../store/adminStore'
-
-interface User {
-  id: string
-  email: string
-  name: string
-  roles: string[]
-  is_active: boolean
-  created_at: string
-}
+import { useAdminStore, type User } from '../store/adminStore'
 
 export default function UsersPage() {
-  const { users, loading, fetchUsers, updateUserRoles, banUser, unbanUser } = useAdminStore()
+  const { users, pagination, error, loading, fetchUsers, updateUserRoles, banUser, unbanUser } = useAdminStore()
   const [page, setPage] = useState(1)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([])
   const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
@@ -21,18 +13,30 @@ export default function UsersPage() {
   }, [page])
 
   const handleRoleChange = (userId: string, roles: string[]) => {
-    updateUserRoles(userId, roles)
+    void updateUserRoles(userId, roles)
     setShowModal(false)
   }
 
   const handleBan = (userId: string) => {
     if (confirm('Заблокировать пользователя?')) {
-      banUser(userId, 'Нарушение правил')
+      void banUser(userId, 'Нарушение правил')
     }
   }
 
   const handleUnban = (userId: string) => {
-    unbanUser(userId)
+    void unbanUser(userId)
+  }
+
+  const openRolesModal = (user: User) => {
+    setSelectedUser(user)
+    setSelectedRoles(user.roles)
+    setShowModal(true)
+  }
+
+  const toggleRole = (role: string) => {
+    setSelectedRoles((prev) => (
+      prev.includes(role) ? prev.filter((item) => item !== role) : [...prev, role]
+    ))
   }
 
   if (loading) {
@@ -42,6 +46,7 @@ export default function UsersPage() {
   return (
     <div className="users-page">
       <h1>Пользователи</h1>
+      {error && <p className="error">{error}</p>}
 
       <div className="users-table">
         <table>
@@ -72,7 +77,7 @@ export default function UsersPage() {
                   </span>
                 </td>
                 <td>
-                  <button onClick={() => { setSelectedUser(user); setShowModal(true); }}>
+                  <button onClick={() => openRolesModal(user)}>
                     Роли
                   </button>
                   {user.is_active ? (
@@ -95,8 +100,13 @@ export default function UsersPage() {
         <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
           ← Назад
         </button>
-        <span>Страница {page}</span>
-        <button onClick={() => setPage(p => p + 1)}>Вперёд →</button>
+        <span>Страница {pagination.page} из {pagination.total_pages}</span>
+        <button
+          onClick={() => setPage(p => p + 1)}
+          disabled={pagination.page >= pagination.total_pages}
+        >
+          Вперёд →
+        </button>
       </div>
 
       {showModal && selectedUser && (
@@ -107,27 +117,34 @@ export default function UsersPage() {
             
             <div className="role-selection">
               <label>
-                <input type="checkbox" defaultChecked={selectedUser.roles.includes('user')} />
+                <input
+                  type="checkbox"
+                  checked={selectedRoles.includes('user')}
+                  onChange={() => toggleRole('user')}
+                />
                 Пользователь
               </label>
               <label>
-                <input type="checkbox" defaultChecked={selectedUser.roles.includes('moderator')} />
+                <input
+                  type="checkbox"
+                  checked={selectedRoles.includes('moderator')}
+                  onChange={() => toggleRole('moderator')}
+                />
                 Модератор
               </label>
               <label>
-                <input type="checkbox" defaultChecked={selectedUser.roles.includes('admin')} />
+                <input
+                  type="checkbox"
+                  checked={selectedRoles.includes('admin')}
+                  onChange={() => toggleRole('admin')}
+                />
                 Администратор
               </label>
             </div>
 
             <div className="modal-actions">
               <button onClick={() => setShowModal(false)}>Отмена</button>
-              <button onClick={() => {
-                const roles = Array.from(document.querySelectorAll('input[type=checkbox]:checked'))
-                  .map(el => (el.parentElement as HTMLElement).textContent?.trim() || '')
-                  .map(r => r === 'Пользователь' ? 'user' : r === 'Модератор' ? 'moderator' : 'admin')
-                handleRoleChange(selectedUser.id, roles)
-              }}>
+              <button onClick={() => handleRoleChange(selectedUser.id, selectedRoles)}>
                 Сохранить
               </button>
             </div>

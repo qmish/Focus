@@ -147,6 +147,7 @@ func main() {
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub, botEngine)
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
 	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
+	adminHandler.SetMessageRepository(messageRepo)
 	adminHandler.SetWebhookRepository(webhookRepo)
 	adminHandler.SetBotRepository(botRepo)
 	inboundWebhookHandler := handlers.NewInboundWebhookHandler(
