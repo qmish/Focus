@@ -12,6 +12,8 @@ export default function RoomPage() {
   const [jitsiJWT, setJitsiJWT] = useState<string>('')
   const [messages, setMessages] = useState<Message[]>([])
   const [messageInput, setMessageInput] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export default function RoomPage() {
 
   const loadRoom = async (id: string) => {
     try {
+      setError(null)
       const room = await apiClient.get<Room>(`/api/v1/rooms/${id}`)
       setCurrentRoom(room)
 
@@ -35,6 +38,7 @@ export default function RoomPage() {
       setJitsiJWT(data.jitsi_jwt || '')
     } catch (error) {
       console.error('Failed to load room:', error)
+      setError('Не удалось загрузить комнату')
     }
   }
 
@@ -44,6 +48,9 @@ export default function RoomPage() {
       setMessages(data.data || [])
     } catch (error) {
       console.error('Failed to load messages:', error)
+      setError('Не удалось загрузить сообщения')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -61,6 +68,7 @@ export default function RoomPage() {
       setMessageInput('')
     } catch (error) {
       console.error('Failed to send message:', error)
+      setError('Не удалось отправить сообщение')
     }
   }
 
@@ -76,8 +84,11 @@ export default function RoomPage() {
     setShowVideo(false)
   }
 
-  if (!currentRoom) {
+  if (isLoading) {
     return <div>Загрузка...</div>
+  }
+  if (!currentRoom) {
+    return <div>{error || 'Комната не найдена'}</div>
   }
 
   return (
@@ -98,6 +109,7 @@ export default function RoomPage() {
       </div>
 
       <div className="room-content">
+        {error && <p className="error">{error}</p>}
         {showVideo && jitsiJWT ? (
           <div className="video-container">
             <JitsiMeeting

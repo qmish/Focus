@@ -4,7 +4,7 @@ import { useRoomsStore, type Room } from '../store/roomsStore'
 
 export default function RoomsPage() {
   const navigate = useNavigate()
-  const { rooms, fetchRooms, createRoom, deleteRoom } = useRoomsStore()
+  const { rooms, isLoading, error, fetchRooms, createRoom, deleteRoom } = useRoomsStore()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newRoomName, setNewRoomName] = useState('')
   const [newRoomType, setNewRoomType] = useState<'public' | 'private' | 'meeting'>('public')
@@ -49,9 +49,12 @@ export default function RoomsPage() {
           + Создать комнату
         </button>
       </div>
+      {error && <p className="error">{error}</p>}
 
       <div className="rooms-list">
-        {rooms.length === 0 ? (
+        {isLoading ? (
+          <div className="loading">Загрузка комнат...</div>
+        ) : rooms.length === 0 ? (
           <div className="empty-state">
             <p>Нет комнат</p>
             <button onClick={() => setShowCreateModal(true)}>

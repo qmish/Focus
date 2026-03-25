@@ -447,7 +447,7 @@ Authorization: Bearer <session_token>
 
 ### 4.1. Получить историю сообщений
 
-**Endpoint:** `GET /api/v1/rooms/:id/messages`
+**Endpoint:** `GET /api/v1/messages`
 
 **Headers:**
 ```
@@ -457,9 +457,9 @@ Authorization: Bearer <session_token>
 **Параметры query:**
 | Параметр | Тип | Описание |
 |----------|-----|----------|
-| before | string | RFC3339 timestamp, сообщения до |
-| after | string | RFC3339 timestamp, сообщения после |
+| room_id | string (uuid) | Обязательный идентификатор комнаты |
 | limit | integer | Максимум сообщений (default: 50, max: 200) |
+| offset | integer | Смещение для пагинации (default: 0) |
 
 **Ответ:** `200 OK`
 
@@ -495,7 +495,7 @@ Authorization: Bearer <session_token>
 
 ### 4.2. Отправить сообщение
 
-**Endpoint:** `POST /api/v1/rooms/:id/messages`
+**Endpoint:** `POST /api/v1/messages`
 
 **Headers:**
 ```
@@ -506,20 +506,20 @@ Content-Type: application/json
 **Body:**
 ```json
 {
+  "room_id": "room-uuid",
   "content": "Привет!",
   "type": "text",
-  "metadata": {
-    "reply_to": "msg-uuid"
-  }
+  "reply_to_id": "msg-uuid"
 }
 ```
 
 **Валидация:**
 | Поле | Тип | Требования |
 |------|-----|------------|
+| room_id | string (uuid) | обязательное |
 | content | string | 1-10000 символов |
 | type | string | `text`, `image`, `file`, `system` |
-| metadata | object | опционально |
+| reply_to_id | string (uuid) | опционально |
 
 **Ответ:** `201 Created`
 
