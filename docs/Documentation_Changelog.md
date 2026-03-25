@@ -2,6 +2,10 @@
 
 ## 2026-03-25
 
+- Добавлен stage smoke gate:
+  - `tests/smoke/stage-smoke.sh`,
+  - `.github/workflows/stage-smoke.yml` (manual workflow_dispatch).
+- В `docs/Roadmap_v2.md` закрыт quick-track пункт `Стабилизировать stage + e2e smoke`.
 - Добавлены API happy-path e2e тесты (`tests/e2e/ci-api.spec.ts`) для:
   - `auth/me` (валидный user token),
   - `rooms` list (валидный user token),

@@ -224,5 +224,5 @@
 - [x] Закрыть auth-модель и WS auth.
 - [x] Закрыть TODO в webhooks/bots/admin/calendar.
 - [ ] Внедрить базовый брендинг Jitsi из `pics`.
-- [ ] Стабилизировать stage + e2e smoke.
+- [x] Стабилизировать stage + e2e smoke.
 

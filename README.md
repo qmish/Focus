@@ -51,6 +51,8 @@
 | [On-call Runbook](./docs/OnCall_Runbook.md) | Регламент реагирования на инциденты |
 | [Go-live Checklist](./docs/GoLive_Checklist.md) | Формальный checklist релиза в production |
 
+Stage smoke check script: `tests/smoke/stage-smoke.sh` (manual run via GitHub Action `Stage Smoke`).
+
 ## 🚀 Быстрый старт
 
 ### Требования
