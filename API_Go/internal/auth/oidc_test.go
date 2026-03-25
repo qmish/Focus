@@ -327,6 +327,43 @@ func TestRequireAccess(t *testing.T) {
 	})
 }
 
+func TestAuthMiddlewareWithAudience(t *testing.T) {
+	secret := []byte("test-secret-key-12345")
+	token, err := GenerateSessionJWT(&UserInfo{
+		Sub:   "user-123",
+		Email: "test@example.com",
+		Name:  "Test User",
+		Roles: []string{"user"},
+	}, "session-123", secret, time.Hour)
+	require.NoError(t, err)
+
+	t.Run("accepts matching audience", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := &testResponseWriter{}
+
+		mw := NewAuthMiddlewareWithAudience(secret, "focus-frontend")
+		handler := mw.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.statusCode)
+	})
+
+	t.Run("rejects mismatched audience", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := &testResponseWriter{}
+
+		mw := NewAuthMiddlewareWithAudience(secret, "focus-service")
+		handler := mw.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusUnauthorized, rr.statusCode)
+	})
+}
+
 // testResponseWriter тестовая реализация http.ResponseWriter
 type testResponseWriter struct {
 	statusCode int

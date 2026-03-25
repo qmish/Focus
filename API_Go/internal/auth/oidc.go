@@ -221,12 +221,21 @@ func ValidateSessionJWT(tokenString string, secret []byte) (*SessionClaims, erro
 
 // AuthMiddleware middleware для проверки аутентификации
 type AuthMiddleware struct {
-	secret []byte
+	secret           []byte
+	requiredAudience string
 }
 
 // NewAuthMiddleware создаёт новый auth middleware
 func NewAuthMiddleware(secret []byte) *AuthMiddleware {
-	return &AuthMiddleware{secret: secret}
+	return NewAuthMiddlewareWithAudience(secret, "")
+}
+
+// NewAuthMiddlewareWithAudience creates auth middleware with required audience check.
+func NewAuthMiddlewareWithAudience(secret []byte, requiredAudience string) *AuthMiddleware {
+	return &AuthMiddleware{
+		secret:           secret,
+		requiredAudience: strings.TrimSpace(requiredAudience),
+	}
 }
 
 // Middleware возвращает HTTP middleware для проверки JWT
@@ -247,6 +256,10 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 		claims, err := ValidateSessionJWT(parts[1], m.secret)
 		if err != nil {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+		if m.requiredAudience != "" && !slices.Contains(claims.Audience, m.requiredAudience) {
+			http.Error(w, "invalid audience", http.StatusUnauthorized)
 			return
 		}
 		if IsSessionRevoked(claims.SessionID) {

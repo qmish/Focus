@@ -161,7 +161,7 @@ func main() {
 	)
 
 	// Создание auth middleware
-	authMiddleware := auth.NewAuthMiddleware([]byte(cfg.Auth.SessionSecret))
+	authMiddleware := auth.NewAuthMiddlewareWithAudience([]byte(cfg.Auth.SessionSecret), cfg.Auth.RequiredAudience)
 
 	// Создание роутера
 	r := chi.NewRouter()

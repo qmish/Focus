@@ -22,7 +22,8 @@ type Config struct {
 
 // AuthConfig конфигурация сессионных токенов API/WS
 type AuthConfig struct {
-	SessionSecret string
+	SessionSecret    string
+	RequiredAudience string
 }
 
 // ServerConfig конфигурация HTTP сервера
@@ -116,7 +117,8 @@ func Load() *Config {
 			DB:       getIntEnv("REDIS_DB", 0),
 		},
 		Auth: AuthConfig{
-			SessionSecret: getEnv("SESSION_SECRET", "dev-session-secret-change-me"),
+			SessionSecret:    getEnv("SESSION_SECRET", "dev-session-secret-change-me"),
+			RequiredAudience: getEnv("AUTH_REQUIRED_AUDIENCE", "focus-frontend"),
 		},
 		Keycloak: KeycloakConfig{
 			ServerURL:    getEnv("KEYCLOAK_URL", "http://localhost:8180"),
@@ -166,10 +168,10 @@ func (c *Config) ValidateSecurity() error {
 
 	if c.Env != "development" {
 		weakValues := map[string]struct{}{
-			"secret":                        {},
-			"changeme":                      {},
-			"dev-session-secret-change-me":  {},
-			"change_me":                     {},
+			"secret":                       {},
+			"changeme":                     {},
+			"dev-session-secret-change-me": {},
+			"change_me":                    {},
 		}
 		if _, weak := weakValues[strings.ToLower(sessionSecret)]; weak {
 			return fmt.Errorf("SESSION_SECRET is too weak for %s environment", c.Env)

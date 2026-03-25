@@ -2,6 +2,12 @@
 
 ## 2026-03-25
 
+- В `API_Go/internal/auth/oidc.go` добавлена проверка `audience` в auth middleware:
+  - новый конструктор `NewAuthMiddlewareWithAudience`,
+  - проверка `AUTH_REQUIRED_AUDIENCE` на каждом защищенном API запросе.
+- В `API_Go/internal/auth/oidc_test.go` добавлены тесты на валидный/невалидный audience.
+- В `API_Go/internal/config/config.go`, `.env.example`, `docker-compose.yml` добавлена конфигурация `AUTH_REQUIRED_AUDIENCE`.
+- В `docs/Roadmap_v2.md` добавлен и закрыт пункт про audience validation в backend middleware.
 - Во `frontend` реализован базовый event-bridge Jitsi iframe:
   - `frontend/src/components/JitsiMeeting.tsx` поддерживает callbacks `onJoin/onLeave/onParticipantJoined/onParticipantLeft`,
   - `frontend/src/pages/RoomPage.tsx` связывает события call lifecycle с состоянием UI (join/leave/events counters).
