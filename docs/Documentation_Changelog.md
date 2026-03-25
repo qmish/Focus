@@ -2,6 +2,9 @@
 
 ## 2026-03-25
 
+- Добавлен `tests/e2e/.gitignore` для исключения локальных e2e-артефактов:
+  `node_modules`, `playwright-report`, `results`, `results.json`, `results.xml`.
+- В `docs/Roadmap_v2.md` добавлен и закрыт пункт `7.1` по hygiene e2e артефактов.
 - Обновлен `frontend/src/store/authStore.ts`:
   - добавлен fallback на `localStorage` (`focus_access_token`) при `check-sso`,
   - синхронизировано сохранение/очистка токена при init/refresh/logout.

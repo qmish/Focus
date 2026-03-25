@@ -1,0 +1,6 @@
+node_modules/
+playwright-report/
+results/
+results.json
+results.xml
+tests/
