@@ -88,7 +88,7 @@ sqlmap -u "http://localhost:8080/api/v1/rooms?id=*" --batch
 ### Authorization
 - [ ] Access admin endpoints as user
 - [ ] Access other user's resources
-- [ ] Role-based access control
+- [x] Role-based access control
 
 ### Input Validation
 - [ ] XSS in message content

@@ -47,6 +47,7 @@
 | [Rollout/Rollback Runbook](./docs/Runbook_RolloutRollback.md) | Порядок релиза и отката stage -> prod |
 | [K8s Manifests Guide](./k8s/README.md) | Применение stage/prod манифестов |
 | [Security Review](./docs/Security_Review_Auth_WS_Webhooks.md) | Security review auth/ws/webhook/token flows |
+| [RBAC/ABAC Review](./docs/RBAC_ABAC_Review.md) | Аудит ролевой и атрибутивной авторизации |
 
 ## 🚀 Быстрый старт
 

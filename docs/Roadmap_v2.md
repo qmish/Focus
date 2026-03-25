@@ -49,6 +49,7 @@
 - [ ] Реализовать policy mapping в Keycloak: группы AD -> роли/скоупы в Focus API.
 - [ ] Настроить audience/scope для сервисных клиентов.
 - [ ] Внедрить централизованную проверку ролей и скопов в backend middleware.
+- [ ] Внедрить ABAC policy engine (resource/action/context) поверх RBAC для критичных операций.
 
 ### 1.3 Интеграция с MS Exchange (через Microsoft Graph)
 - [ ] Зарегистрировать/проверить приложение в Azure AD с нужными permissions (`Calendars.ReadWrite` и смежные).
@@ -192,7 +193,7 @@
 
 ### 7.2 Security hardening
 - [x] Провести security-review auth/WS/webhook/token flows.
-- [ ] Проверить RBAC/ABAC политики по ролям AD.
+- [x] Проверить RBAC/ABAC политики по ролям AD.
 - [x] Провести сканы зависимостей и контейнеров.
 - [ ] Закрыть критические и высокие findings до go-live.
 

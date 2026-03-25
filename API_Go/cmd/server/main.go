@@ -256,6 +256,8 @@ func main() {
 
 			// Admin routes
 			r.Route("/admin", func(r chi.Router) {
+				r.Use(auth.RequireRole("admin"))
+
 				r.Get("/users", adminHandler.ListUsers)
 				r.Get("/users/:id", adminHandler.GetUser)
 				r.Put("/users/:id/roles", adminHandler.UpdateUserRoles)
