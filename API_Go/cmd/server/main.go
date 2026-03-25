@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/api/handlers"
 	"github.com/qmish/focus-api/internal/auth"
 	"github.com/qmish/focus-api/internal/config"
@@ -109,6 +110,17 @@ func main() {
 
 	// Инициализация WebSocket Hub
 	wsHub := websocket.NewHub(logger.WithContext(context.Background()))
+	wsHub.SetRoomAccessChecker(func(ctx context.Context, userID, roomID string) (bool, error) {
+		userUUID, err := uuid.Parse(userID)
+		if err != nil {
+			return false, nil
+		}
+		roomUUID, err := uuid.Parse(roomID)
+		if err != nil {
+			return false, nil
+		}
+		return roomRepo.IsParticipant(ctx, roomUUID, userUUID)
+	})
 	go wsHub.Run()
 
 	// Создание handlers
@@ -147,11 +159,12 @@ func main() {
 
 		// WebSocket endpoint
 		r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
-			if _, err := websocket.AuthenticateRequest(r, []byte(cfg.Jitsi.AppSecret)); err != nil {
+			claims, err := websocket.AuthenticateRequest(r, []byte(cfg.Jitsi.AppSecret))
+			if err != nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			wsHub.HandleWebSocket(w, r)
+			wsHub.HandleWebSocket(w, r, claims.UserID)
 		})
 
 		// Protected routes

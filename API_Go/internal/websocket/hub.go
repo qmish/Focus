@@ -70,6 +70,7 @@ type ErrorPayload struct {
 // Client представляет WebSocket клиента
 type Client struct {
 	ID       string
+	UserID   string
 	Conn     *websocket.Conn
 	Hub      *Hub
 	Rooms    map[string]bool // комнаты, на которые подписан
@@ -87,7 +88,11 @@ type Hub struct {
 	Broadcast  chan *BroadcastMessage
 	mu         sync.RWMutex
 	logger     *zap.Logger
+	roomAccess RoomAccessChecker
 }
+
+// RoomAccessChecker checks if user can access a room.
+type RoomAccessChecker func(ctx context.Context, userID, roomID string) (bool, error)
 
 // BroadcastMessage сообщение для рассылки
 type BroadcastMessage struct {
@@ -116,6 +121,13 @@ func NewHub(logger *zap.Logger) *Hub {
 		Broadcast:  make(chan *BroadcastMessage, 256),
 		logger:     logger,
 	}
+}
+
+// SetRoomAccessChecker sets room access policy for websocket subscriptions.
+func (h *Hub) SetRoomAccessChecker(checker RoomAccessChecker) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.roomAccess = checker
 }
 
 // Run запускает Hub
@@ -188,7 +200,9 @@ func (h *Hub) SubscribeToRoom(client *Client, roomID string) {
 	}
 
 	h.Rooms[roomID][client.ID] = client
+	client.mu.Lock()
 	client.Rooms[roomID] = true
+	client.mu.Unlock()
 
 	h.logger.Debug("client subscribed to room",
 		zap.String("client_id", client.ID),
@@ -206,7 +220,9 @@ func (h *Hub) UnsubscribeFromRoom(client *Client, roomID string) {
 func (h *Hub) unsubscribeFromRoom(client *Client, roomID string) {
 	if rooms, ok := h.Rooms[roomID]; ok {
 		delete(rooms, client.ID)
+		client.mu.Lock()
 		delete(client.Rooms, roomID)
+		client.mu.Unlock()
 
 		if len(rooms) == 0 {
 			delete(h.Rooms, roomID)
@@ -232,7 +248,7 @@ func (h *Hub) BroadcastToRoom(roomID string, msg WSMessage) {
 }
 
 // HandleWebSocket обрабатывает WebSocket подключение
-func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request, userID string) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.Error("websocket upgrade failed", zap.Error(err))
@@ -241,6 +257,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	client := &Client{
 		ID:       uuid.New().String(),
+		UserID:   userID,
 		Conn:     conn,
 		Hub:      h,
 		Rooms:    make(map[string]bool),
@@ -345,6 +362,14 @@ func (c *Client) handleSubscribe(payload json.RawMessage) {
 		c.sendError("invalid_payload", "failed to parse subscribe payload")
 		return
 	}
+	if sub.RoomID == "" {
+		c.sendError("invalid_payload", "room_id is required")
+		return
+	}
+	if !c.Hub.canAccessRoom(context.Background(), c.UserID, sub.RoomID) {
+		c.sendError("forbidden_room", "access denied to room")
+		return
+	}
 
 	c.Hub.SubscribeToRoom(c, sub.RoomID)
 
@@ -371,11 +396,26 @@ func (c *Client) handleMessagePayload(payload json.RawMessage) {
 		c.sendError("invalid_payload", "failed to parse message payload")
 		return
 	}
+	if msg.RoomID == "" {
+		c.sendError("invalid_payload", "room_id is required")
+		return
+	}
+	if !c.isSubscribed(msg.RoomID) {
+		c.sendError("not_subscribed", "subscribe to room before sending messages")
+		return
+	}
+	msg.UserID = c.UserID
+
+	sanitizedPayload, err := json.Marshal(msg)
+	if err != nil {
+		c.sendError("internal_error", "failed to process message payload")
+		return
+	}
 
 	// Рассылаем сообщение в комнату
 	c.Hub.BroadcastToRoom(msg.RoomID, WSMessage{
 		Type:    MessageTypeMessage,
-		Payload: payload,
+		Payload: sanitizedPayload,
 	})
 }
 
@@ -385,11 +425,26 @@ func (c *Client) handleTyping(payload json.RawMessage) {
 		c.sendError("invalid_payload", "failed to parse typing payload")
 		return
 	}
+	if typing.RoomID == "" {
+		c.sendError("invalid_payload", "room_id is required")
+		return
+	}
+	if !c.isSubscribed(typing.RoomID) {
+		c.sendError("not_subscribed", "subscribe to room before sending typing events")
+		return
+	}
+	typing.UserID = c.UserID
+
+	sanitizedPayload, err := json.Marshal(typing)
+	if err != nil {
+		c.sendError("internal_error", "failed to process typing payload")
+		return
+	}
 
 	// Рассылаем typing indicator в комнату
 	c.Hub.BroadcastToRoom(typing.RoomID, WSMessage{
 		Type:    MessageTypeTyping,
-		Payload: payload,
+		Payload: sanitizedPayload,
 	})
 }
 
@@ -411,6 +466,30 @@ func (c *Client) sendError(code, message string) {
 		Type: MessageTypeError,
 		Payload: json.RawMessage(`{"code":"` + code + `","message":"` + message + `"}`),
 	})
+}
+
+func (h *Hub) canAccessRoom(ctx context.Context, userID, roomID string) bool {
+	h.mu.RLock()
+	checker := h.roomAccess
+	h.mu.RUnlock()
+	if checker == nil {
+		return true
+	}
+	allowed, err := checker(ctx, userID, roomID)
+	if err != nil {
+		h.logger.Warn("room access check failed",
+			zap.String("user_id", userID),
+			zap.String("room_id", roomID),
+			zap.Error(err))
+		return false
+	}
+	return allowed
+}
+
+func (c *Client) isSubscribed(roomID string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Rooms[roomID]
 }
 
 // BroadcastUserJoined рассылает событие о присоединении пользователя

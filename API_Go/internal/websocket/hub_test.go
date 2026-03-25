@@ -1,8 +1,10 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -134,4 +136,119 @@ func TestMessageTypeConstants(t *testing.T) {
 	assert.Equal(t, MessageType("user_joined"), MessageTypeUserJoined)
 	assert.Equal(t, MessageType("user_left"), MessageTypeUserLeft)
 	assert.Equal(t, MessageType("error"), MessageTypeError)
+}
+
+func TestSubscribeAuthorization(t *testing.T) {
+	logger := zap.NewNop()
+
+	t.Run("denies room subscription without access", func(t *testing.T) {
+		hub := NewHub(logger)
+		hub.SetRoomAccessChecker(func(_ context.Context, userID, roomID string) (bool, error) {
+			return false, nil
+		})
+		client := &Client{
+			ID:     "client-1",
+			UserID: "user-1",
+			Hub:    hub,
+			Rooms:  map[string]bool{},
+			Send:   make(chan []byte, 1),
+		}
+
+		client.handleSubscribe(json.RawMessage(`{"room_id":"room-1"}`))
+
+		assert.Empty(t, client.Rooms)
+		msg := mustReadWSMessage(t, client.Send)
+		assert.Equal(t, MessageTypeError, msg.Type)
+
+		var payload ErrorPayload
+		err := json.Unmarshal(msg.Payload, &payload)
+		assert.NoError(t, err)
+		assert.Equal(t, "forbidden_room", payload.Code)
+	})
+
+	t.Run("allows room subscription for participant", func(t *testing.T) {
+		hub := NewHub(logger)
+		hub.SetRoomAccessChecker(func(_ context.Context, userID, roomID string) (bool, error) {
+			return userID == "user-1" && roomID == "room-1", nil
+		})
+		client := &Client{
+			ID:     "client-1",
+			UserID: "user-1",
+			Hub:    hub,
+			Rooms:  map[string]bool{},
+			Send:   make(chan []byte, 1),
+		}
+
+		client.handleSubscribe(json.RawMessage(`{"room_id":"room-1"}`))
+
+		assert.True(t, client.Rooms["room-1"])
+		assert.NotNil(t, hub.Rooms["room-1"]["client-1"])
+
+		msg := mustReadWSMessage(t, client.Send)
+		assert.Equal(t, MessageTypeSubscribe, msg.Type)
+	})
+}
+
+func TestMessageAndTypingRequireSubscription(t *testing.T) {
+	hub := NewHub(zap.NewNop())
+	client := &Client{
+		ID:     "client-1",
+		UserID: "user-1",
+		Hub:    hub,
+		Rooms:  map[string]bool{},
+		Send:   make(chan []byte, 2),
+	}
+
+	client.handleMessagePayload(json.RawMessage(`{"room_id":"room-1","user_id":"spoofed","content":"hello","type":"text"}`))
+	msgErr := mustReadWSMessage(t, client.Send)
+	assert.Equal(t, MessageTypeError, msgErr.Type)
+
+	client.handleTyping(json.RawMessage(`{"room_id":"room-1","user_id":"spoofed","user_name":"x","is_typing":true}`))
+	typingErr := mustReadWSMessage(t, client.Send)
+	assert.Equal(t, MessageTypeError, typingErr.Type)
+}
+
+func TestMessagePayloadOverridesUserID(t *testing.T) {
+	hub := NewHub(zap.NewNop())
+	client := &Client{
+		ID:     "client-1",
+		UserID: "user-1",
+		Hub:    hub,
+		Rooms:  map[string]bool{"room-1": true},
+		Send:   make(chan []byte, 1),
+	}
+
+	client.handleMessagePayload(json.RawMessage(`{"room_id":"room-1","user_id":"spoofed","content":"hello","type":"text"}`))
+
+	select {
+	case out := <-hub.Broadcast:
+		var ws WSMessage
+		err := json.Unmarshal(out.Message, &ws)
+		assert.NoError(t, err)
+		assert.Equal(t, MessageTypeMessage, ws.Type)
+
+		var payload MessagePayload
+		err = json.Unmarshal(ws.Payload, &payload)
+		assert.NoError(t, err)
+		assert.Equal(t, "user-1", payload.UserID)
+		assert.Equal(t, "room-1", payload.RoomID)
+	default:
+		t.Fatal("expected broadcast message")
+	}
+}
+
+func mustReadWSMessage(t *testing.T, ch <-chan []byte) WSMessage {
+	t.Helper()
+	select {
+	case raw := <-ch:
+		var msg WSMessage
+		err := json.Unmarshal(raw, &msg)
+		if err != nil {
+			t.Fatalf("failed to decode ws message: %v", err)
+		}
+		return msg
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected websocket message")
+	}
+	return WSMessage{}
 }

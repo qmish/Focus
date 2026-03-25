@@ -78,7 +78,7 @@
 
 ### 2.2 Защита WebSocket
 - [x] Добавить обязательную аутентификацию на `/api/v1/ws`.
-- [ ] Внедрить room-level authorization на websocket события.
+- [x] Внедрить room-level authorization на websocket события.
 - [ ] Добавить обработку reconnect с проверкой истекшего токена.
 
 ### 2.3 Завершение TODO-критики в backend
