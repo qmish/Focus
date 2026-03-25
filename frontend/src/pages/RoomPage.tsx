@@ -3,29 +3,109 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useRoomsStore, type Message, type Room } from '../store/roomsStore'
 import { JitsiMeeting } from '../components/JitsiMeeting'
 import { apiClient } from '../lib/apiClient'
+import { buildWebSocketURL, mergeMessageList } from '../lib/roomRealtime'
+import { useAuthStore } from '../store/authStore'
 
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
   const { currentRoom, setCurrentRoom } = useRoomsStore()
+  const token = useAuthStore((state) => state.token)
+  const refreshToken = useAuthStore((state) => state.refreshToken)
   const [showVideo, setShowVideo] = useState(false)
   const [jitsiJWT, setJitsiJWT] = useState<string>('')
   const [messages, setMessages] = useState<Message[]>([])
   const [messageInput, setMessageInput] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+  const reconnectAttemptsRef = useRef(0)
+  const reconnectTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (roomId) {
       loadRoom(roomId)
       loadMessages(roomId)
     }
+    return () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current)
+      }
+      wsRef.current?.close()
+      wsRef.current = null
+    }
   }, [roomId])
 
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  useEffect(() => {
+    if (!roomId || !token) {
+      return
+    }
+
+    const connect = () => {
+      try {
+        const ws = new WebSocket(buildWebSocketURL(window.location.href, token))
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          reconnectAttemptsRef.current = 0
+          setIsRealtimeConnected(true)
+          ws.send(JSON.stringify({
+            type: 'subscribe',
+            payload: { room_id: roomId },
+          }))
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const wsMessage = JSON.parse(event.data) as {
+              type?: string
+              payload?: Message & { code?: string; message?: string }
+            }
+            if (wsMessage.type === 'message' && wsMessage.payload?.room_id === roomId) {
+              setMessages((prev) => mergeMessageList(prev, wsMessage.payload as Message))
+              return
+            }
+            if (wsMessage.type === 'error' && wsMessage.payload?.message) {
+              setError(wsMessage.payload.message)
+            }
+          } catch {
+            setError('Ошибка realtime-события')
+          }
+        }
+
+        ws.onclose = async (event) => {
+          setIsRealtimeConnected(false)
+          if (!roomId) {
+            return
+          }
+          if (event.reason === 'token_expired') {
+            await refreshToken()
+          }
+          reconnectAttemptsRef.current += 1
+          const delayMs = Math.min(5000, 500 * reconnectAttemptsRef.current)
+          reconnectTimerRef.current = window.setTimeout(connect, delayMs)
+        }
+      } catch {
+        setError('Не удалось подключить realtime')
+      }
+    }
+
+    connect()
+
+    return () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current)
+      }
+      wsRef.current?.close()
+      wsRef.current = null
+    }
+  }, [roomId, token])
 
   const loadRoom = async (id: string) => {
     try {
@@ -101,6 +181,9 @@ export default function RoomPage() {
           <h2>{currentRoom.name}</h2>
           <span className={`room-type-badge room-type-${currentRoom.type}`}>
             {currentRoom.type}
+          </span>
+          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.8 }}>
+            {isRealtimeConnected ? 'WS: online' : 'WS: reconnecting...'}
           </span>
         </div>
         <button onClick={handleVideoToggle} className="video-btn">
