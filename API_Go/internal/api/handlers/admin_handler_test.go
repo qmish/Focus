@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/qmish/focus-api/internal/auth"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
+	"github.com/qmish/focus-api/internal/webhooks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -268,6 +270,11 @@ type fakeAdminRoomRepo struct {
 	participantByRoom map[uuid.UUID]int64
 }
 
+type fakeAdminWebhookRepo struct {
+	deliveries []*webhooks.WebhookDelivery
+	err        error
+}
+
 func (f *fakeAdminRoomRepo) List(ctx context.Context, limit, offset int) ([]*models.Room, error) {
 	rooms := make([]*models.Room, 0, len(f.rooms))
 	for _, room := range f.rooms {
@@ -308,6 +315,22 @@ func (f *fakeAdminRoomRepo) CountParticipants(ctx context.Context, roomID uuid.U
 		return 0, nil
 	}
 	return f.participantByRoom[roomID], nil
+}
+
+func (f *fakeAdminWebhookRepo) ListRecentDeliveries(ctx context.Context, limit int, onlyFailed bool) ([]*webhooks.WebhookDelivery, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if !onlyFailed {
+		return f.deliveries, nil
+	}
+	filtered := make([]*webhooks.WebhookDelivery, 0, len(f.deliveries))
+	for _, delivery := range f.deliveries {
+		if delivery != nil && !delivery.Success {
+			filtered = append(filtered, delivery)
+		}
+	}
+	return filtered, nil
 }
 
 func addURLParam(req *http.Request, key, value string) *http.Request {
@@ -352,4 +375,80 @@ func TestAdminHandlerListConferencesResponseSchema(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, payload["data"])
 	assert.Equal(t, "active", payload["data"][0]["status"])
+}
+
+func TestAdminHandlerListWebhookDeliveries(t *testing.T) {
+	repo := &fakeAdminWebhookRepo{
+		deliveries: []*webhooks.WebhookDelivery{
+			{
+				ID:           uuid.New(),
+				WebhookID:    uuid.New(),
+				ResponseCode: 200,
+				Success:      true,
+				RetryCount:   0,
+				CreatedAt:    time.Now(),
+			},
+		},
+	}
+	handler := NewAdminHandler(nil, nil)
+	handler.SetWebhookRepository(repo)
+
+	claims := &auth.SessionClaims{Roles: []string{"admin"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := httptest.NewRequest("GET", "/api/v1/admin/webhooks/deliveries?limit=10", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+
+	handler.ListWebhookDeliveries(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"success":true`)
+}
+
+func TestAdminHandlerListWebhookErrors(t *testing.T) {
+	repo := &fakeAdminWebhookRepo{
+		deliveries: []*webhooks.WebhookDelivery{
+			{
+				ID:           uuid.New(),
+				WebhookID:    uuid.New(),
+				ResponseCode: 500,
+				ResponseBody: "dead_letter: status=500",
+				Success:      false,
+				RetryCount:   2,
+				CreatedAt:    time.Now(),
+			},
+		},
+	}
+	handler := NewAdminHandler(nil, nil)
+	handler.SetWebhookRepository(repo)
+
+	claims := &auth.SessionClaims{Roles: []string{"admin"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := httptest.NewRequest("GET", "/api/v1/admin/webhooks/errors", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+
+	handler.ListWebhookErrors(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"total":1`)
+	assert.Contains(t, rr.Body.String(), `"success":false`)
+}
+
+func TestAdminHandlerListWebhookErrorsForbidden(t *testing.T) {
+	handler := NewAdminHandler(nil, nil)
+	claims := &auth.SessionClaims{Roles: []string{"user"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := httptest.NewRequest("GET", "/api/v1/admin/webhooks/errors", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	handler.ListWebhookErrors(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+}
+
+func TestAdminHandlerListWebhookDeliveriesInternalError(t *testing.T) {
+	repo := &fakeAdminWebhookRepo{err: errors.New("db down")}
+	handler := NewAdminHandler(nil, nil)
+	handler.SetWebhookRepository(repo)
+	claims := &auth.SessionClaims{Roles: []string{"admin"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := httptest.NewRequest("GET", "/api/v1/admin/webhooks/deliveries", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	handler.ListWebhookDeliveries(rr, req)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 }

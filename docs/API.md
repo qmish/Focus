@@ -1178,6 +1178,77 @@ Authorization: Bearer <admin_token>
 
 ---
 
+### 8.6. Логи доставок webhook
+
+**Endpoint:** `GET /api/v1/admin/webhooks/deliveries`
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Параметры query:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| limit | number | Количество записей (1..200, default: 50) |
+
+**Ответ:** `200 OK`
+
+```json
+{
+  "data": [
+    {
+      "id": "delivery-uuid",
+      "webhook_id": "webhook-uuid",
+      "response_code": 200,
+      "response_body": "ok",
+      "success": true,
+      "retry_count": 0,
+      "delivered_at": "2024-01-01T12:00:00Z",
+      "created_at": "2024-01-01T12:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 8.7. Ошибки доставок webhook
+
+**Endpoint:** `GET /api/v1/admin/webhooks/errors`
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Параметры query:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| limit | number | Количество записей (1..200, default: 50) |
+
+**Ответ:** `200 OK`
+
+```json
+{
+  "total": 1,
+  "data": [
+    {
+      "id": "delivery-uuid",
+      "webhook_id": "webhook-uuid",
+      "response_code": 500,
+      "response_body": "dead_letter: status=500 body=failure",
+      "success": false,
+      "retry_count": 2,
+      "delivered_at": "2024-01-01T12:05:00Z",
+      "created_at": "2024-01-01T12:05:00Z"
+    }
+  ]
+}
+```
+
+---
+
 ## 9. Health Check API
 
 ### 9.1. Health check

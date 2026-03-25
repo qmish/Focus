@@ -12,12 +12,14 @@ import (
 	"github.com/qmish/focus-api/internal/auth"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
+	"github.com/qmish/focus-api/internal/webhooks"
 )
 
 // AdminHandler обработчики для админ-панели
 type AdminHandler struct {
-	userRepo adminUserRepository
-	roomRepo adminRoomRepository
+	userRepo    adminUserRepository
+	roomRepo    adminRoomRepository
+	webhookRepo adminWebhookRepository
 }
 
 type adminUserRepository interface {
@@ -35,12 +37,21 @@ type adminRoomRepository interface {
 	CountParticipants(ctx context.Context, roomID uuid.UUID) (int64, error)
 }
 
+type adminWebhookRepository interface {
+	ListRecentDeliveries(ctx context.Context, limit int, onlyFailed bool) ([]*webhooks.WebhookDelivery, error)
+}
+
 // NewAdminHandler создаёт новый AdminHandler
 func NewAdminHandler(userRepo adminUserRepository, roomRepo adminRoomRepository) *AdminHandler {
 	return &AdminHandler{
 		userRepo: userRepo,
 		roomRepo: roomRepo,
 	}
+}
+
+// SetWebhookRepository sets optional webhook repository for admin visibility endpoints.
+func (h *AdminHandler) SetWebhookRepository(webhookRepo adminWebhookRepository) {
+	h.webhookRepo = webhookRepo
 }
 
 // requireAdmin middleware для проверки роли администратора
@@ -449,6 +460,70 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// ListWebhookDeliveries GET /api/v1/admin/webhooks/deliveries
+func (h *AdminHandler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 200 {
+		limit = 50
+	}
+
+	if h.webhookRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []interface{}{}})
+		return
+	}
+
+	deliveries, err := h.webhookRepo.ListRecentDeliveries(r.Context(), limit, false)
+	if err != nil {
+		http.Error(w, "failed to list webhook deliveries", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": deliveries})
+}
+
+// ListWebhookErrors GET /api/v1/admin/webhooks/errors
+func (h *AdminHandler) ListWebhookErrors(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 200 {
+		limit = 50
+	}
+
+	if h.webhookRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data":  []interface{}{},
+			"total": 0,
+		})
+		return
+	}
+
+	deliveries, err := h.webhookRepo.ListRecentDeliveries(r.Context(), limit, true)
+	if err != nil {
+		http.Error(w, "failed to list webhook errors", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":  deliveries,
+		"total": len(deliveries),
+	})
 }
 
 // hasRole проверяет наличие роли у пользователя

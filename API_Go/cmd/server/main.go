@@ -133,6 +133,7 @@ func main() {
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub)
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
 	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
+	adminHandler.SetWebhookRepository(webhookRepo)
 	inboundWebhookHandler := handlers.NewInboundWebhookHandler(
 		webhooks.NewWebhookHandlerWithConfig(cfg.Jitsi.AppSecret, webhookRepo),
 	)
@@ -242,6 +243,8 @@ func main() {
 				r.Get("/conferences", adminHandler.ListConferences)
 				r.Post("/conferences/:id/end", adminHandler.EndConference)
 				r.Get("/stats", adminHandler.GetStats)
+				r.Get("/webhooks/deliveries", adminHandler.ListWebhookDeliveries)
+				r.Get("/webhooks/errors", adminHandler.ListWebhookErrors)
 			})
 		})
 	})

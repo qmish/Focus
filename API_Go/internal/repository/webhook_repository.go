@@ -84,6 +84,20 @@ func (r *WebhookRepository) GetDeliveries(ctx context.Context, webhookID uuid.UU
 	return deliveries, err
 }
 
+// ListRecentDeliveries returns recent webhook deliveries across all webhooks.
+func (r *WebhookRepository) ListRecentDeliveries(ctx context.Context, limit int, onlyFailed bool) ([]*webhooks.WebhookDelivery, error) {
+	if limit < 1 {
+		limit = 50
+	}
+	var deliveries []*webhooks.WebhookDelivery
+	query := r.db.WithContext(ctx).Order("created_at DESC").Limit(limit)
+	if onlyFailed {
+		query = query.Where("success = ?", false)
+	}
+	err := query.Find(&deliveries).Error
+	return deliveries, err
+}
+
 // IsIncomingEventProcessed checks whether source/idempotency key pair already exists.
 func (r *WebhookRepository) IsIncomingEventProcessed(ctx context.Context, source, idempotencyKey string) (bool, error) {
 	var count int64
