@@ -2,6 +2,10 @@
 
 ## 2026-03-25
 
+- Добавлен документ `docs/Corp_Resources_SSO_Catalog.md` с перечнем корпоративных ресурсов,
+  моделью доступа (roles/scopes/audience) и границами ответственности по SSO.
+- Обновлены `README.md` (ссылка на SSO каталог) и `docs/Roadmap_v2.md`:
+  закрыт пункт `1.2` по определению перечня SSO-ресурсов.
 - Добавлен persist-аудит календарных операций Exchange (`create/update/delete`):
   - модель `API_Go/internal/models/calendar_audit_event.go`,
   - репозиторий `API_Go/internal/repository/calendar_audit_repository.go`,

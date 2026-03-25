@@ -55,6 +55,7 @@
 | [Load Testing Target Profiles](./docs/Load_Testing_Target_Profiles.md) | Целевые k6-профили для stage API+Jitsi/JVB |
 | [Jitsi Fork Contract](./jitsi-meet-master/README.md) | Стратегия сопровождения форка и границы кастомизаций |
 | [Jitsi Branding Regression](./docs/Jitsi_Branding_Regression.md) | Регрессия бренд-кастомизаций Jitsi в stage |
+| [SSO Resource Catalog](./docs/Corp_Resources_SSO_Catalog.md) | Каталог корпоративных ресурсов и модель доступа через Keycloak |
 
 Stage smoke check script: `tests/smoke/stage-smoke.sh` (manual run via GitHub Action `Stage Smoke`).
 
