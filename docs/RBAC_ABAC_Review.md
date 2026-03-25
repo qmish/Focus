@@ -9,9 +9,13 @@
 ## Текущее состояние
 
 - В session JWT используются роли пользователя (`roles` claims).
-- На уровне маршрутов `/api/v1/admin/*` добавлен централизованный `RequireRole("admin")`.
+- На уровне маршрутов `/api/v1/admin/*` используется централизованный `RequireAccess` (roles/scopes).
 - В admin handlers сохранены локальные role checks как дополнительная защита (defense-in-depth).
 - Для обычных user-сценариев применяется проверка аутентификации и контекстных claims.
+- Для критичных admin-операций включен ABAC слой:
+  - `user.ban`,
+  - `user.unban`,
+  - `conference.end`.
 
 ## Матрица (минимум)
 
@@ -24,11 +28,12 @@
 
 ## Вывод
 
-- RBAC-проверки в API присутствуют и применяются централизованно для admin маршрутов.
-- Полноценный ABAC (policy engine на основе атрибутов ресурса/контекста) еще не внедрен.
+- RBAC-проверки в API присутствуют и применяются централизованно.
+- Внедрен базовый ABAC policy engine (resource/action/context) для критичных операций.
+- ABAC внедрен итеративно и требует дальнейшего расширения матрицы действий/ресурсов.
 
 ## Следующие шаги
 
-1. Формализовать ABAC policy matrix (ресурс, действие, субъект, условия).
-2. Добавить policy-evaluation слой (middleware/service) и покрыть тестами.
-3. Синхронизировать AD group mapping -> roles/scopes -> ABAC attributes.
+1. Расширить ABAC policy matrix на webhook/bot/admin write-операции.
+2. Добавить атрибуты ресурсов (owner/tenant/sensitivity) в policy evaluation.
+3. Синхронизировать AD group mapping -> roles/scopes -> ABAC attributes в едином governance-процессе.

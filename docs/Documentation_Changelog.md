@@ -2,6 +2,11 @@
 
 ## 2026-03-25
 
+- Внедрен ABAC policy engine поверх RBAC для критичных admin-операций:
+  - `API_Go/internal/auth/abac.go` (`ABACRequest`, `DefaultABACEngine`, `RequireABAC`),
+  - применение в `API_Go/cmd/server/main.go` для `ban/unban/end conference`.
+- Добавлены тесты `API_Go/internal/auth/abac_test.go`.
+- В `docs/Roadmap_v2.md` закрыт пункт ABAC policy engine (`1.2`).
 - Добавлен stage regression harness для Jitsi branding:
   - `tests/smoke/jitsi-branding-regression.sh`,
   - `.github/workflows/stage-jitsi-branding-regression.yml`,

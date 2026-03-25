@@ -162,6 +162,7 @@ func main() {
 
 	// Создание auth middleware
 	authMiddleware := auth.NewAuthMiddlewareWithAudience([]byte(cfg.Auth.SessionSecret), cfg.Auth.RequiredAudience)
+	abacEngine := auth.NewDefaultABACEngine()
 
 	// Создание роутера
 	r := chi.NewRouter()
@@ -277,10 +278,10 @@ func main() {
 				r.Get("/users", adminHandler.ListUsers)
 				r.Get("/users/:id", adminHandler.GetUser)
 				r.Put("/users/:id/roles", adminHandler.UpdateUserRoles)
-				r.Post("/users/:id/ban", adminHandler.BanUser)
-				r.Post("/users/:id/unban", adminHandler.UnbanUser)
+				r.With(auth.RequireABAC(abacEngine, "user.ban", nil)).Post("/users/:id/ban", adminHandler.BanUser)
+				r.With(auth.RequireABAC(abacEngine, "user.unban", nil)).Post("/users/:id/unban", adminHandler.UnbanUser)
 				r.Get("/conferences", adminHandler.ListConferences)
-				r.Post("/conferences/:id/end", adminHandler.EndConference)
+				r.With(auth.RequireABAC(abacEngine, "conference.end", nil)).Post("/conferences/:id/end", adminHandler.EndConference)
 				r.Get("/stats", adminHandler.GetStats)
 				r.Get("/webhooks/deliveries", adminHandler.ListWebhookDeliveries)
 				r.Get("/webhooks/errors", adminHandler.ListWebhookErrors)

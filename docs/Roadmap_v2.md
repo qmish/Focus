@@ -50,7 +50,7 @@
 - [x] Внедрить audience validation для session JWT в backend middleware (конфигурируемый `AUTH_REQUIRED_AUDIENCE`).
 - [ ] Настроить audience/scope для сервисных клиентов.
 - [x] Внедрить централизованную проверку ролей и скопов в backend middleware.
-- [ ] Внедрить ABAC policy engine (resource/action/context) поверх RBAC для критичных операций.
+- [x] Внедрить ABAC policy engine (resource/action/context) поверх RBAC для критичных операций.
 
 ### 1.3 Интеграция с MS Exchange (через Microsoft Graph)
 - [ ] Зарегистрировать/проверить приложение в Azure AD с нужными permissions (`Calendars.ReadWrite` и смежные).
