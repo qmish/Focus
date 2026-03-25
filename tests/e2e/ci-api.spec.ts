@@ -3,6 +3,7 @@ import { createHmac, randomUUID } from 'crypto'
 
 const API_URL = process.env.API_URL || 'http://localhost:8080'
 const SESSION_SECRET = process.env.SESSION_SECRET || 'ci-session-secret'
+const JITSI_APP_SECRET = process.env.JITSI_APP_SECRET || 'ci-jitsi-secret'
 
 const toBase64Url = (value: string) => Buffer.from(value).toString('base64url')
 
@@ -41,6 +42,9 @@ const createSessionToken = (roles: string[], options: TokenOptions = {}) => {
 const authHeaders = (token: string) => ({
   Authorization: `Bearer ${token}`,
 })
+
+const createWebhookSignature = (payload: string) =>
+  createHmac('sha256', JITSI_APP_SECRET).update(payload).digest('hex')
 
 test.describe('API Smoke', () => {
   test('health endpoint', async ({ request }) => {
@@ -104,6 +108,41 @@ test.describe('API Flows', () => {
       },
     })
     expect(response.status()).toBe(401)
+  })
+
+  test('webhook endpoint accepts valid signature and detects duplicates', async ({ request }) => {
+    const payload = JSON.stringify({
+      event: 'conference.created',
+      conference: {
+        room_name: `api-e2e-${Date.now()}`,
+      },
+    })
+    const signature = `sha256=${createWebhookSignature(payload)}`
+    const idempotencyKey = `e2e-webhook-${Date.now()}`
+
+    const first = await request.post(`${API_URL}/api/v1/webhooks/jitsi`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Jitsi-Signature': signature,
+        'X-Idempotency-Key': idempotencyKey,
+      },
+      data: payload,
+    })
+    expect(first.status()).toBe(200)
+    const firstBody = await first.json()
+    expect(firstBody.status).toBe('accepted')
+
+    const second = await request.post(`${API_URL}/api/v1/webhooks/jitsi`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Jitsi-Signature': signature,
+        'X-Idempotency-Key': idempotencyKey,
+      },
+      data: payload,
+    })
+    expect(second.status()).toBe(200)
+    const secondBody = await second.json()
+    expect(secondBody.status).toBe('duplicate')
   })
 })
 
@@ -197,6 +236,16 @@ test.describe('API User Journey', () => {
     const createdMessage = await createMessageResponse.json()
     expect(createdMessage).toHaveProperty('id')
 
+    const botCommandResponse = await request.post(`${API_URL}/api/v1/messages`, {
+      headers: authHeaders(userToken),
+      data: {
+        room_id: roomId,
+        content: '/status',
+        type: 'text',
+      },
+    })
+    expect(botCommandResponse.status()).toBe(201)
+
     const listMessagesResponse = await request.get(`${API_URL}/api/v1/messages?room_id=${roomId}`, {
       headers: authHeaders(userToken),
     })
@@ -212,5 +261,12 @@ test.describe('API User Journey', () => {
     const conferences = await adminConferencesResponse.json()
     expect(conferences).toHaveProperty('data')
     expect(Array.isArray(conferences.data)).toBeTruthy()
+
+    const endConferenceResponse = await request.post(`${API_URL}/api/v1/admin/conferences/${roomId}/end`, {
+      headers: authHeaders(adminToken),
+    })
+    expect(endConferenceResponse.status()).toBe(200)
+    const endedPayload = await endConferenceResponse.json()
+    expect(endedPayload.ended).toBeTruthy()
   })
 })

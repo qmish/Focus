@@ -2,6 +2,11 @@
 
 ## 2026-03-25
 
+- Расширены e2e проверки webhook/bot/admin в `tests/e2e/ci-api.spec.ts`:
+  - позитивный webhook с валидной подписью + проверка duplicate по idempotency key,
+  - bot command (`/status`) в user journey,
+  - admin end conference в user journey.
+- В `docs/Roadmap_v2.md` закрыт пункт `Покрыть e2e: auth, room, chat, call, webhook, bot, admin flows`.
 - Усилен security pipeline:
   - Trivy SARIF отчеты (filesystem + container image) загружаются в GitHub Security tab.
 - Добавлен `docs/Security_Findings_Triage.md` (процесс triage high/critical findings и SLA).
