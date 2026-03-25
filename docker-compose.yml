@@ -92,6 +92,8 @@ services:
       JITSI_APP_SECRET: ${JITSI_APP_SECRET:-secret}
       SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
       AUTH_REQUIRED_AUDIENCE: ${AUTH_REQUIRED_AUDIENCE:-focus-frontend}
+      AUTH_SERVICE_AUDIENCES: ${AUTH_SERVICE_AUDIENCES:-focus-service}
+      AUTH_SERVICE_SCOPES: ${AUTH_SERVICE_SCOPES:-focus.service}
     ports:
       - "8080:8080"
     depends_on:

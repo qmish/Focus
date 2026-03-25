@@ -49,6 +49,7 @@ type UserInfo struct {
 	Groups        []string `json:"groups,omitempty"`
 	Scopes        []string `json:"scopes,omitempty"`
 	Scope         string   `json:"scope,omitempty"`
+	Audiences     []string `json:"audiences,omitempty"`
 }
 
 // SessionClaims claims для сессионного JWT
@@ -180,7 +181,7 @@ func GenerateSessionJWT(userInfo *UserInfo, sessionID string, secret []byte, lif
 		SessionID:  sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "focus-api",
-			Audience:  jwt.ClaimStrings{"focus-frontend"},
+			Audience:  resolveAudiences(userInfo),
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
@@ -194,6 +195,13 @@ func GenerateSessionJWT(userInfo *UserInfo, sessionID string, secret []byte, lif
 	}
 
 	return tokenString, nil
+}
+
+func resolveAudiences(userInfo *UserInfo) jwt.ClaimStrings {
+	if userInfo == nil || len(userInfo.Audiences) == 0 {
+		return jwt.ClaimStrings{"focus-frontend"}
+	}
+	return jwt.ClaimStrings(dedupeStrings(userInfo.Audiences))
 }
 
 // ValidateSessionJWT проверяет сессионный JWT
@@ -225,18 +233,27 @@ func ValidateSessionJWT(tokenString string, secret []byte) (*SessionClaims, erro
 type AuthMiddleware struct {
 	secret           []byte
 	requiredAudience string
+	serviceAudiences []string
+	serviceScopes    []string
 }
 
 // NewAuthMiddleware создаёт новый auth middleware
 func NewAuthMiddleware(secret []byte) *AuthMiddleware {
-	return NewAuthMiddlewareWithAudience(secret, "")
+	return NewAuthMiddlewareWithPolicies(secret, "", nil, nil)
 }
 
 // NewAuthMiddlewareWithAudience creates auth middleware with required audience check.
 func NewAuthMiddlewareWithAudience(secret []byte, requiredAudience string) *AuthMiddleware {
+	return NewAuthMiddlewareWithPolicies(secret, requiredAudience, nil, nil)
+}
+
+// NewAuthMiddlewareWithPolicies creates auth middleware with audience/scope policies.
+func NewAuthMiddlewareWithPolicies(secret []byte, requiredAudience string, serviceAudiences, serviceScopes []string) *AuthMiddleware {
 	return &AuthMiddleware{
 		secret:           secret,
 		requiredAudience: strings.TrimSpace(requiredAudience),
+		serviceAudiences: dedupeStrings(serviceAudiences),
+		serviceScopes:    dedupeStrings(serviceScopes),
 	}
 }
 
@@ -260,8 +277,12 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
-		if m.requiredAudience != "" && !slices.Contains(claims.Audience, m.requiredAudience) {
+		if !m.isAudienceAllowed(claims) {
 			http.Error(w, "invalid audience", http.StatusUnauthorized)
+			return
+		}
+		if !m.isServiceScopeValid(claims) {
+			http.Error(w, "insufficient_scope", http.StatusUnauthorized)
 			return
 		}
 		if IsSessionRevoked(claims.SessionID) {
@@ -273,6 +294,40 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), ContextKeyUserClaims, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (m *AuthMiddleware) isAudienceAllowed(claims *SessionClaims) bool {
+	if claims == nil {
+		return false
+	}
+	if m.requiredAudience == "" {
+		return true
+	}
+	if slices.Contains(claims.Audience, m.requiredAudience) {
+		return true
+	}
+	if !hasRole(claims.Roles, "service") {
+		return false
+	}
+	for _, audience := range m.serviceAudiences {
+		if slices.Contains(claims.Audience, audience) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *AuthMiddleware) isServiceScopeValid(claims *SessionClaims) bool {
+	if claims == nil || !hasRole(claims.Roles, "service") || len(m.serviceScopes) == 0 {
+		return true
+	}
+	scopes := claims.AllScopes()
+	for _, required := range m.serviceScopes {
+		if !slices.Contains(scopes, required) {
+			return false
+		}
+	}
+	return true
 }
 
 // context key для хранения claims

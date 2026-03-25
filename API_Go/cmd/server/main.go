@@ -161,7 +161,12 @@ func main() {
 	)
 
 	// Создание auth middleware
-	authMiddleware := auth.NewAuthMiddlewareWithAudience([]byte(cfg.Auth.SessionSecret), cfg.Auth.RequiredAudience)
+	authMiddleware := auth.NewAuthMiddlewareWithPolicies(
+		[]byte(cfg.Auth.SessionSecret),
+		cfg.Auth.RequiredAudience,
+		cfg.Auth.ServiceAudiences,
+		cfg.Auth.ServiceScopes,
+	)
 	abacEngine := auth.NewDefaultABACEngine()
 
 	// Создание роутера

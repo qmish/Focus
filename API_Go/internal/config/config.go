@@ -24,6 +24,8 @@ type Config struct {
 type AuthConfig struct {
 	SessionSecret    string
 	RequiredAudience string
+	ServiceAudiences []string
+	ServiceScopes    []string
 }
 
 // ServerConfig конфигурация HTTP сервера
@@ -120,6 +122,8 @@ func Load() *Config {
 		Auth: AuthConfig{
 			SessionSecret:    getEnv("SESSION_SECRET", "dev-session-secret-change-me"),
 			RequiredAudience: getEnv("AUTH_REQUIRED_AUDIENCE", "focus-frontend"),
+			ServiceAudiences: getListEnv("AUTH_SERVICE_AUDIENCES", []string{"focus-service"}),
+			ServiceScopes:    getListEnv("AUTH_SERVICE_SCOPES", []string{"focus.service"}),
 		},
 		Keycloak: KeycloakConfig{
 			ServerURL:          getEnv("KEYCLOAK_URL", "http://localhost:8180"),
@@ -207,4 +211,24 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 		}
 	}
 	return defaultValue
+}
+
+func getListEnv(key string, defaultValue []string) []string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return defaultValue
+	}
+	rawParts := strings.Split(value, ",")
+	result := make([]string, 0, len(rawParts))
+	for _, part := range rawParts {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+		result = append(result, item)
+	}
+	if len(result) == 0 {
+		return defaultValue
+	}
+	return result
 }

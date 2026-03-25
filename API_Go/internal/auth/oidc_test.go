@@ -362,6 +362,52 @@ func TestAuthMiddlewareWithAudience(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusUnauthorized, rr.statusCode)
 	})
+
+	t.Run("allows service audience with required service scope", func(t *testing.T) {
+		serviceToken, serviceErr := GenerateSessionJWT(&UserInfo{
+			Sub:       "service-1",
+			Email:     "svc@example.com",
+			Name:      "Service",
+			Roles:     []string{"service"},
+			Scopes:    []string{"focus.service", "focus.read"},
+			Audiences: []string{"focus-service"},
+		}, "service-session-1", secret, time.Hour)
+		require.NoError(t, serviceErr)
+
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+serviceToken)
+		rr := &testResponseWriter{}
+
+		mw := NewAuthMiddlewareWithPolicies(secret, "focus-frontend", []string{"focus-service"}, []string{"focus.service"})
+		handler := mw.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.statusCode)
+	})
+
+	t.Run("rejects service audience when required service scope missing", func(t *testing.T) {
+		serviceToken, serviceErr := GenerateSessionJWT(&UserInfo{
+			Sub:       "service-2",
+			Email:     "svc2@example.com",
+			Name:      "Service2",
+			Roles:     []string{"service"},
+			Scopes:    []string{"focus.read"},
+			Audiences: []string{"focus-service"},
+		}, "service-session-2", secret, time.Hour)
+		require.NoError(t, serviceErr)
+
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+serviceToken)
+		rr := &testResponseWriter{}
+
+		mw := NewAuthMiddlewareWithPolicies(secret, "focus-frontend", []string{"focus-service"}, []string{"focus.service"})
+		handler := mw.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusUnauthorized, rr.statusCode)
+	})
 }
 
 func TestGroupPolicyMapperApply(t *testing.T) {

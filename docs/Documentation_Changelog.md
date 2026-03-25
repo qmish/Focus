@@ -2,6 +2,12 @@
 
 ## 2026-03-25
 
+- В auth middleware добавлена политика для сервисных клиентов:
+  - `AUTH_SERVICE_AUDIENCES`, `AUTH_SERVICE_SCOPES` в конфиге (`config/.env.example/docker-compose`),
+  - проверка `audience/scope` для токенов с ролью `service` в `API_Go/internal/auth/oidc.go`.
+- В `API_Go/internal/auth/oidc.go` добавлена поддержка кастомного `aud` при генерации session JWT (`UserInfo.Audiences`).
+- Добавлены тесты сервисного `audience/scope` в `API_Go/internal/auth/oidc_test.go`.
+- В `docs/Roadmap_v2.md` закрыт пункт `Настроить audience/scope для сервисных клиентов`.
 - Внедрен ABAC policy engine поверх RBAC для критичных admin-операций:
   - `API_Go/internal/auth/abac.go` (`ABACRequest`, `DefaultABACEngine`, `RequireABAC`),
   - применение в `API_Go/cmd/server/main.go` для `ban/unban/end conference`.
