@@ -2,6 +2,10 @@
 
 ## 2026-03-25
 
+- Усилен security pipeline:
+  - Trivy SARIF отчеты (filesystem + container image) загружаются в GitHub Security tab.
+- Добавлен `docs/Security_Findings_Triage.md` (процесс triage high/critical findings и SLA).
+- В `docs/Roadmap_v2.md` добавлен и закрыт подпункт по SARIF/triage automation для `7.2`.
 - Добавлен API user journey e2e сценарий в `tests/e2e/ci-api.spec.ts`:
   - `create room -> join call -> send/list message -> admin conferences`.
 - CI e2e запуск расширен на группу `API User Journey`.

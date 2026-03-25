@@ -199,6 +199,7 @@
 - [x] Провести security-review auth/WS/webhook/token flows.
 - [x] Проверить RBAC/ABAC политики по ролям AD.
 - [x] Провести сканы зависимостей и контейнеров.
+- [x] Настроить SARIF-репортинг и triage-процесс для high/critical findings в CI.
 - [ ] Закрыть критические и высокие findings до go-live.
 
 ### 7.3 Приемка и go-live

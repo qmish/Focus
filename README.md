@@ -50,6 +50,7 @@
 | [RBAC/ABAC Review](./docs/RBAC_ABAC_Review.md) | Аудит ролевой и атрибутивной авторизации |
 | [On-call Runbook](./docs/OnCall_Runbook.md) | Регламент реагирования на инциденты |
 | [Go-live Checklist](./docs/GoLive_Checklist.md) | Формальный checklist релиза в production |
+| [Security Findings Triage](./docs/Security_Findings_Triage.md) | Процесс triage и закрытия high/critical findings |
 
 Stage smoke check script: `tests/smoke/stage-smoke.sh` (manual run via GitHub Action `Stage Smoke`).
 
