@@ -148,6 +148,7 @@
 - [x] Завершить интеграцию страниц комнат/сообщений с реальными API-ответами.
 - [x] Добавить единый API client, обработку ошибок, loading/retry states.
 - [x] Реализовать realtime UX на websocket (новые сообщения, системные события, reconnect).
+- [x] Стабилизировать auth-store fallback на локальный session token для UI e2e без mock-авторизации.
 
 ### 5.2 Admin frontend
 - [x] Довести users/stats/ban-unban до реального backend состояния.

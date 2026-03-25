@@ -5,6 +5,7 @@ import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const API_URL = process.env.API_URL || 'http://localhost:8080';
+const E2E_SESSION_TOKEN = process.env.E2E_SESSION_TOKEN || '';
 
 test.describe('Focus Messenger E2E', () => {
   test('should load login page', async ({ page }) => {
@@ -14,12 +15,14 @@ test.describe('Focus Messenger E2E', () => {
     await expect(page.locator('h1')).toContainText(/Focus|Login/i);
   });
 
-  test('should redirect to rooms after login', async ({ page }) => {
-    // Mock Keycloak login
-    await page.goto(BASE_URL);
-    
-    // После мока авторизации должен быть редирект на /rooms
-    // await expect(page).toHaveURL(/\/rooms/);
+  test('should open rooms via session token flow without Keycloak mock', async ({ page }) => {
+    test.skip(!E2E_SESSION_TOKEN, 'Set E2E_SESSION_TOKEN for non-mock auth flow')
+    await page.addInitScript((token) => {
+      window.localStorage.setItem('focus_access_token', token)
+    }, E2E_SESSION_TOKEN)
+    await page.goto(`${BASE_URL}/rooms`)
+    await expect(page).toHaveURL(/\/rooms/)
+    await expect(page.getByRole('heading', { name: 'Комнаты' })).toBeVisible()
   });
 
   test('should create room', async ({ page }) => {

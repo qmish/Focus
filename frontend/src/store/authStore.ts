@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import Keycloak from 'keycloak-js'
 
+const ACCESS_TOKEN_KEY = 'focus_access_token'
+
 // Инициализация Keycloak
 const keycloak = new Keycloak({
   url: import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8180',
@@ -40,7 +42,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         pkceMethod: 'S256',
       })
 
-      const token = keycloak.token || null
+      const token = keycloak.token || localStorage.getItem(ACCESS_TOKEN_KEY) || null
       const user = token ? {
         id: keycloak.subject || '',
         email: keycloak.idTokenParsed?.email || '',
@@ -48,9 +50,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         roles: keycloak.resourceAccess?.['messenger-api']?.roles || [],
       } : null
 
+      if (token) {
+        localStorage.setItem(ACCESS_TOKEN_KEY, token)
+      } else {
+        localStorage.removeItem(ACCESS_TOKEN_KEY)
+      }
+
       set({
         keycloak,
-        isAuthenticated: authenticated,
+        isAuthenticated: authenticated || Boolean(token),
         isLoading: false,
         user,
         token,
@@ -61,7 +69,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         setInterval(async () => {
           try {
             await keycloak.updateToken(30)
-            set({ token: keycloak.token })
+            const nextToken = keycloak.token || null
+            set({
+              token: nextToken,
+              isAuthenticated: Boolean(nextToken),
+            })
+            if (nextToken) {
+              localStorage.setItem(ACCESS_TOKEN_KEY, nextToken)
+            } else {
+              localStorage.removeItem(ACCESS_TOKEN_KEY)
+            }
           } catch {
             get().logout()
           }
@@ -84,12 +101,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: null,
       token: null,
     })
+    localStorage.removeItem(ACCESS_TOKEN_KEY)
   },
 
   refreshToken: async () => {
     try {
       await keycloak.updateToken(30)
-      set({ token: keycloak.token })
+      const nextToken = keycloak.token || null
+      set({
+        token: nextToken,
+        isAuthenticated: Boolean(nextToken),
+      })
+      if (nextToken) {
+        localStorage.setItem(ACCESS_TOKEN_KEY, nextToken)
+      } else {
+        localStorage.removeItem(ACCESS_TOKEN_KEY)
+      }
     } catch (error) {
       console.error('Failed to refresh token:', error)
       get().logout()

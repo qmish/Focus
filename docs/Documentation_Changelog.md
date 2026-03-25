@@ -2,6 +2,12 @@
 
 ## 2026-03-25
 
+- Обновлен `frontend/src/store/authStore.ts`:
+  - добавлен fallback на `localStorage` (`focus_access_token`) при `check-sso`,
+  - синхронизировано сохранение/очистка токена при init/refresh/logout.
+- Расширены тесты `frontend/src/store/authStore.test.ts` для fallback/очистки localStorage.
+- Обновлен `tests/e2e/app.spec.ts`: добавлен non-mock сценарий входа в `/rooms` через `E2E_SESSION_TOKEN`.
+- В `docs/Roadmap_v2.md` добавлен и закрыт пункт `5.1` по стабилизации token fallback для UI e2e.
 - Исправлена конфигурация `tests/e2e/playwright.config.ts`:
   - `testDir` переключен на фактический каталог со spec-файлами,
   - пути `results` в reporters/outputDir приведены к корректным локальным артефактам.

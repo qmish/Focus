@@ -26,6 +26,14 @@ vi.mock('keycloak-js', () => {
 describe('AuthStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+    useAuthStore.setState({
+      keycloak: null,
+      isAuthenticated: false,
+      isLoading: true,
+      user: null,
+      token: null,
+    })
   })
 
   it('should initialize with loading state', () => {
@@ -44,6 +52,7 @@ describe('AuthStore', () => {
     expect(state.user).toBeTruthy()
     expect(state.user?.email).toBe('test@example.com')
     expect(state.user?.name).toBe('Test User')
+    expect(localStorage.getItem('focus_access_token')).toBe('mock-token')
   })
 
   it('should call login', async () => {
@@ -55,11 +64,13 @@ describe('AuthStore', () => {
   })
 
   it('should call logout', async () => {
+    localStorage.setItem('focus_access_token', 'stale-token')
     const { logout } = useAuthStore.getState()
     await logout()
 
     const Keycloak = (await import('keycloak-js')).default
     expect(Keycloak().logout).toHaveBeenCalled()
+    expect(localStorage.getItem('focus_access_token')).toBeNull()
   })
 
   it('should refresh token', async () => {
@@ -68,5 +79,19 @@ describe('AuthStore', () => {
 
     const Keycloak = (await import('keycloak-js')).default
     expect(Keycloak().updateToken).toHaveBeenCalledWith(30)
+    expect(localStorage.getItem('focus_access_token')).toBe('mock-token')
+  })
+
+  it('should use localStorage token fallback when keycloak token is missing', async () => {
+    localStorage.setItem('focus_access_token', 'fallback-token')
+    const Keycloak = (await import('keycloak-js')).default
+    Keycloak().token = null
+
+    const { init } = useAuthStore.getState()
+    await init()
+
+    const state = useAuthStore.getState()
+    expect(state.isAuthenticated).toBe(true)
+    expect(state.token).toBe('fallback-token')
   })
 })
