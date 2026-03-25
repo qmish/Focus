@@ -192,7 +192,7 @@
 - [x] Добавить API-level happy-path e2e для авторизованных `auth/me`, `rooms`, `admin/stats` через валидный session JWT.
 - [x] Добавить API-level user journey e2e: `create room -> join call -> send/list message -> admin conferences`.
 - [x] Подготовить отдельный stage-harness для e2e с реальной OIDC аутентификацией (manual workflow + browser flow).
-- [ ] Добавить e2e сценарии с реальной аутентификацией и пользовательскими happy-path потоками (auth -> room -> chat -> call -> admin).
+- [x] Добавить e2e сценарии с реальной аутентификацией и пользовательскими happy-path потоками (auth -> room -> chat -> call -> admin).
 - [x] Покрыть e2e: auth, room, chat, call, webhook, bot, admin flows.
 - [x] Подготовить целевые load-профили и manual pipeline для stage (`API + Jitsi/JVB`) с фиксированными thresholds.
 - [x] Подготовить stage regression harness для бренд-кастомизаций Jitsi (`dynamicBrandingUrl`/assets/config).

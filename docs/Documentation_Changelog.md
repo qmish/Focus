@@ -2,6 +2,12 @@
 
 ## 2026-03-25
 
+- Расширен real OIDC e2e сценарий `tests/e2e/real-oidc.spec.ts`:
+  - auth -> rooms happy-path через реальный Keycloak login,
+  - создание комнаты из UI после аутентификации.
+- Обновлен workflow `.github/workflows/stage-oidc-e2e.yml`:
+  - добавлена передача `E2E_OIDC_USERNAME/E2E_OIDC_PASSWORD` через secrets.
+- В `docs/Roadmap_v2.md` закрыт пункт `7.1` про real-auth happy-path e2e сценарии.
 - Реализована персистентная ревокация API сессий:
   - модель `API_Go/internal/models/revoked_session.go`,
   - репозиторий `API_Go/internal/repository/session_revocation_repository.go`,

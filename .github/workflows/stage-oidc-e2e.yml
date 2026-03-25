@@ -29,4 +29,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run real OIDC test
         working-directory: tests/e2e
+        env:
+          E2E_OIDC_USERNAME: ${{ secrets.E2E_OIDC_USERNAME }}
+          E2E_OIDC_PASSWORD: ${{ secrets.E2E_OIDC_PASSWORD }}
         run: E2E_REAL_OIDC=1 BASE_URL="${{ github.event.inputs.base_url }}" KEYCLOAK_URL="${{ github.event.inputs.keycloak_url }}" npx playwright test real-oidc.spec.ts --project=chromium
