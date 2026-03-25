@@ -2,6 +2,13 @@
 
 ## 2026-03-25
 
+- Закрыты TODO по inbound webhook lifecycle (`conference.*`, `participant.*`):
+  - `API_Go/internal/webhooks/webhooks.go`: добавлен `RoomLifecycleRepository`,
+    реализованы обработчики `conference.created|ended` (touch room activity) и
+    `participant.joined|left` (sync room participants при наличии `user_id`).
+  - `API_Go/cmd/server/main.go`: подключен room lifecycle repository в webhook service.
+  - `API_Go/internal/webhooks/webhooks_test.go`: добавлены unit-тесты на conference/participant lifecycle.
+- Обновлен `docs/Roadmap_v2.md` (этап `3.1`) с фиксацией закрытия webhook lifecycle задач.
 - Закрыт TODO по временным банам в admin API:
   - `API_Go/internal/models/user.go`: добавлено поле `banned_until`.
   - `API_Go/internal/api/handlers/admin_handler.go`: поддержка `duration_hours`,

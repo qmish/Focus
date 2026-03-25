@@ -179,9 +179,9 @@ func main() {
 		}
 	}
 
-	inboundWebhookHandler := handlers.NewInboundWebhookHandler(
-		webhooks.NewWebhookHandlerWithConfig(cfg.Jitsi.AppSecret, webhookRepo),
-	)
+	inboundWebhookService := webhooks.NewWebhookHandlerWithConfig(cfg.Jitsi.AppSecret, webhookRepo)
+	inboundWebhookService.SetRoomLifecycleRepository(roomRepo)
+	inboundWebhookHandler := handlers.NewInboundWebhookHandler(inboundWebhookService)
 
 	// Создание auth middleware
 	authMiddleware := auth.NewAuthMiddlewareWithPolicies(

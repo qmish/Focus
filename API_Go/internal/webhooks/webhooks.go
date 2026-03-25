@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/qmish/focus-api/internal/models"
 )
 
 // WebhookType тип вебхука
@@ -84,8 +85,18 @@ type IncomingEventStore interface {
 
 // WebhookHandler обработчик вебхуков
 type WebhookHandler struct {
-	secret string
-	store  IncomingEventStore
+	secret        string
+	store         IncomingEventStore
+	roomLifecycle RoomLifecycleRepository
+}
+
+// RoomLifecycleRepository updates room/participants based on inbound conference events.
+type RoomLifecycleRepository interface {
+	GetByJitsiRoomName(ctx context.Context, jitsiRoomName string) (*models.Room, error)
+	Update(ctx context.Context, room *models.Room) error
+	GetParticipant(ctx context.Context, roomID, userID uuid.UUID) (*models.RoomParticipant, error)
+	AddParticipant(ctx context.Context, roomID, userID uuid.UUID, role models.ParticipantRole) error
+	RemoveParticipant(ctx context.Context, roomID, userID uuid.UUID) error
 }
 
 // NewWebhookHandler создаёт новый WebhookHandler
@@ -99,6 +110,11 @@ func NewWebhookHandlerWithConfig(secret string, store IncomingEventStore) *Webho
 		secret: strings.TrimSpace(secret),
 		store:  store,
 	}
+}
+
+// SetRoomLifecycleRepository wires room lifecycle updates for inbound conference webhooks.
+func (h *WebhookHandler) SetRoomLifecycleRepository(repo RoomLifecycleRepository) {
+	h.roomLifecycle = repo
 }
 
 // JitsiWebhookEvent событие от Jitsi
@@ -172,23 +188,137 @@ func (h *WebhookHandler) HandleJitsiWebhookWithIdempotency(ctx context.Context, 
 }
 
 func (h *WebhookHandler) handleConferenceCreated(ctx context.Context, event *JitsiWebhookEvent) error {
-	// TODO: Сохранить событие в БД, отправить уведомления
-	return nil
+	return h.touchRoomActivity(ctx, event)
 }
 
 func (h *WebhookHandler) handleConferenceEnded(ctx context.Context, event *JitsiWebhookEvent) error {
-	// TODO: Обновить статус комнаты
-	return nil
+	return h.touchRoomActivity(ctx, event)
 }
 
 func (h *WebhookHandler) handleParticipantJoined(ctx context.Context, event *JitsiWebhookEvent) error {
-	// TODO: Отправить уведомление в чат
-	return nil
+	if h.roomLifecycle == nil {
+		return nil
+	}
+	room, err := h.roomLifecycle.GetByJitsiRoomName(ctx, event.Room)
+	if err != nil {
+		if isRoomNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	userID, ok := participantUserID(event)
+	if !ok {
+		return nil
+	}
+	existing, err := h.roomLifecycle.GetParticipant(ctx, room.ID, userID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		if err := h.roomLifecycle.AddParticipant(ctx, room.ID, userID, models.ParticipantRoleMember); err != nil {
+			return err
+		}
+	}
+	room.UpdatedAt = eventTimestampOrNow(event)
+	return h.roomLifecycle.Update(ctx, room)
 }
 
 func (h *WebhookHandler) handleParticipantLeft(ctx context.Context, event *JitsiWebhookEvent) error {
-	// TODO: Отправить уведомление в чат
-	return nil
+	if h.roomLifecycle == nil {
+		return nil
+	}
+	room, err := h.roomLifecycle.GetByJitsiRoomName(ctx, event.Room)
+	if err != nil {
+		if isRoomNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	userID, ok := participantUserID(event)
+	if !ok {
+		return nil
+	}
+	existing, err := h.roomLifecycle.GetParticipant(ctx, room.ID, userID)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		if err := h.roomLifecycle.RemoveParticipant(ctx, room.ID, userID); err != nil {
+			return err
+		}
+	}
+	room.UpdatedAt = eventTimestampOrNow(event)
+	return h.roomLifecycle.Update(ctx, room)
+}
+
+func (h *WebhookHandler) touchRoomActivity(ctx context.Context, event *JitsiWebhookEvent) error {
+	if h.roomLifecycle == nil {
+		return nil
+	}
+	room, err := h.roomLifecycle.GetByJitsiRoomName(ctx, event.Room)
+	if err != nil {
+		if isRoomNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	room.UpdatedAt = eventTimestampOrNow(event)
+	return h.roomLifecycle.Update(ctx, room)
+}
+
+func eventTimestampOrNow(event *JitsiWebhookEvent) time.Time {
+	if event == nil {
+		return time.Now().UTC()
+	}
+	ts := strings.TrimSpace(event.Timestamp)
+	if ts == "" {
+		return time.Now().UTC()
+	}
+	parsed, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return time.Now().UTC()
+	}
+	return parsed.UTC()
+}
+
+func participantUserID(event *JitsiWebhookEvent) (uuid.UUID, bool) {
+	if event == nil || event.Data == nil {
+		return uuid.Nil, false
+	}
+	value := extractString(event.Data,
+		"user_id",
+		"participant_id",
+		"id",
+		"userId",
+		"participantId",
+	)
+	if value == "" {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+func extractString(data map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		value, ok := data[key]
+		if !ok {
+			continue
+		}
+		if asString, ok := value.(string); ok {
+			if trimmed := strings.TrimSpace(asString); trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
+}
+
+func isRoomNotFound(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "room not found")
 }
 
 // OutgoingWebhook исходящий вебхук

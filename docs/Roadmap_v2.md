@@ -103,6 +103,7 @@
 ### 3.1 Webhooks inbound/outbound
 - [x] Реализовать проверку подписи входящих webhook.
 - [x] Сохранять входящие события в БД с трассировкой и idempotency key.
+- [x] Реализовать обработку lifecycle событий `conference.*`/`participant.*` с синхронизацией room activity и room participants.
 - [x] Реализовать outbound dispatcher с retry/backoff и dead-letter логикой.
 - [x] Добавить админ-видимость доставок webhook и ошибок.
 

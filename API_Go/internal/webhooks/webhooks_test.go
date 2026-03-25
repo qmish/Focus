@@ -2,6 +2,7 @@ package webhooks
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/qmish/focus-api/internal/models"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -193,6 +195,87 @@ func TestHandleJitsiWebhookIdempotencyByPayloadHash(t *testing.T) {
 	assert.ErrorIs(t, err, ErrWebhookEventAlreadyProcessed)
 }
 
+func TestHandleJitsiWebhookConferenceLifecycleTouchesRoom(t *testing.T) {
+	room := models.NewRoom("Meeting", uuid.New(), models.RoomTypeMeeting)
+	room.JitsiRoomName = "room-123"
+	lifecycle := &fakeRoomLifecycleRepo{
+		roomsByJitsi: map[string]*models.Room{
+			"room-123": room,
+		},
+		participants: map[string]*models.RoomParticipant{},
+	}
+	handler := NewWebhookHandler()
+	handler.SetRoomLifecycleRepository(lifecycle)
+
+	ctx := context.Background()
+	createdPayload := []byte(`{
+		"event": "conference.created",
+		"room": "room-123",
+		"timestamp": "2026-03-25T10:00:00Z"
+	}`)
+	endedPayload := []byte(`{
+		"event": "conference.ended",
+		"room": "room-123",
+		"timestamp": "2026-03-25T11:00:00Z"
+	}`)
+	err := handler.HandleJitsiWebhook(ctx, createdPayload, "")
+	assert.NoError(t, err)
+	err = handler.HandleJitsiWebhook(ctx, endedPayload, "")
+	assert.NoError(t, err)
+	assert.Equal(t, 2, lifecycle.updateCalls)
+	assert.Equal(t, "2026-03-25T11:00:00Z", room.UpdatedAt.UTC().Format(time.RFC3339))
+}
+
+func TestHandleJitsiWebhookParticipantLifecycleSyncsParticipants(t *testing.T) {
+	room := models.NewRoom("Meeting", uuid.New(), models.RoomTypeMeeting)
+	room.JitsiRoomName = "room-123"
+	userID := uuid.New()
+	lifecycle := &fakeRoomLifecycleRepo{
+		roomsByJitsi: map[string]*models.Room{
+			"room-123": room,
+		},
+		participants: map[string]*models.RoomParticipant{},
+	}
+	handler := NewWebhookHandler()
+	handler.SetRoomLifecycleRepository(lifecycle)
+
+	ctx := context.Background()
+	joinPayload := []byte(`{
+		"event":"participant.joined",
+		"room":"room-123",
+		"timestamp":"2026-03-25T12:00:00Z",
+		"data":{"user_id":"` + userID.String() + `"}
+	}`)
+	leavePayload := []byte(`{
+		"event":"participant.left",
+		"room":"room-123",
+		"timestamp":"2026-03-25T13:00:00Z",
+		"data":{"user_id":"` + userID.String() + `"}
+	}`)
+	err := handler.HandleJitsiWebhook(ctx, joinPayload, "")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, lifecycle.addCalls)
+
+	err = handler.HandleJitsiWebhook(ctx, leavePayload, "")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, lifecycle.removeCalls)
+	assert.Equal(t, 2, lifecycle.updateCalls)
+}
+
+func TestHandleJitsiWebhookParticipantLifecycleIgnoresMissingRoom(t *testing.T) {
+	handler := NewWebhookHandler()
+	handler.SetRoomLifecycleRepository(&fakeRoomLifecycleRepo{
+		roomsByJitsi: map[string]*models.Room{},
+		participants: map[string]*models.RoomParticipant{},
+	})
+	err := handler.HandleJitsiWebhook(context.Background(), []byte(`{
+		"event":"participant.joined",
+		"room":"unknown-room",
+		"data":{"user_id":"`+uuid.New().String()+`"}
+	}`), "")
+	assert.NoError(t, err)
+}
+
 func TestWebhookDispatcher(t *testing.T) {
 	dispatcher := NewWebhookDispatcher()
 
@@ -331,6 +414,51 @@ func (f *fakeActiveWebhookProvider) GetActiveByEventType(ctx context.Context, ev
 type fakeDeliveryStore struct {
 	mu         sync.Mutex
 	deliveries []*WebhookDelivery
+}
+
+type fakeRoomLifecycleRepo struct {
+	roomsByJitsi map[string]*models.Room
+	participants map[string]*models.RoomParticipant
+	updateCalls  int
+	addCalls     int
+	removeCalls  int
+}
+
+func (f *fakeRoomLifecycleRepo) GetByJitsiRoomName(ctx context.Context, jitsiRoomName string) (*models.Room, error) {
+	room, ok := f.roomsByJitsi[jitsiRoomName]
+	if !ok {
+		return nil, errors.New("room not found")
+	}
+	return room, nil
+}
+
+func (f *fakeRoomLifecycleRepo) Update(ctx context.Context, room *models.Room) error {
+	f.updateCalls++
+	return nil
+}
+
+func (f *fakeRoomLifecycleRepo) GetParticipant(ctx context.Context, roomID, userID uuid.UUID) (*models.RoomParticipant, error) {
+	return f.participants[f.participantKey(roomID, userID)], nil
+}
+
+func (f *fakeRoomLifecycleRepo) AddParticipant(ctx context.Context, roomID, userID uuid.UUID, role models.ParticipantRole) error {
+	f.addCalls++
+	f.participants[f.participantKey(roomID, userID)] = &models.RoomParticipant{
+		RoomID: roomID,
+		UserID: userID,
+		Role:   role,
+	}
+	return nil
+}
+
+func (f *fakeRoomLifecycleRepo) RemoveParticipant(ctx context.Context, roomID, userID uuid.UUID) error {
+	f.removeCalls++
+	delete(f.participants, f.participantKey(roomID, userID))
+	return nil
+}
+
+func (f *fakeRoomLifecycleRepo) participantKey(roomID, userID uuid.UUID) string {
+	return roomID.String() + ":" + userID.String()
 }
 
 func (f *fakeDeliveryStore) CreateDelivery(ctx context.Context, delivery *WebhookDelivery) error {
