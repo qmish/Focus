@@ -6,14 +6,21 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'ci-session-secret'
 
 const toBase64Url = (value: string) => Buffer.from(value).toString('base64url')
 
-const createSessionToken = (roles: string[]) => {
+type TokenOptions = {
+  userId?: string
+  email?: string
+  name?: string
+}
+
+const createSessionToken = (roles: string[], options: TokenOptions = {}) => {
   const now = Math.floor(Date.now() / 1000)
+  const userId = options.userId || randomUUID()
   const payload = {
-    user_id: randomUUID(),
-    email: 'e2e@example.com',
-    name: 'E2E User',
+    user_id: userId,
+    email: options.email || 'e2e@example.com',
+    name: options.name || 'E2E User',
     roles,
-    keycloak_id: randomUUID(),
+    keycloak_id: userId,
     session_id: randomUUID(),
     iss: 'focus-api',
     aud: ['focus-frontend'],
@@ -30,6 +37,10 @@ const createSessionToken = (roles: string[]) => {
 
   return `${unsigned}.${signature}`
 }
+
+const authHeaders = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+})
 
 test.describe('API Smoke', () => {
   test('health endpoint', async ({ request }) => {
@@ -137,5 +148,69 @@ test.describe('API Happy Paths', () => {
     const body = await response.json()
     expect(body).toHaveProperty('users')
     expect(body).toHaveProperty('rooms')
+  })
+})
+
+test.describe('API User Journey', () => {
+  test('authenticated room -> call -> chat -> admin conference visibility', async ({ request }) => {
+    const sharedUserId = randomUUID()
+    const userToken = createSessionToken(['user'], {
+      userId: sharedUserId,
+      email: 'journey-user@example.com',
+      name: 'Journey User',
+    })
+    const adminToken = createSessionToken(['admin'], {
+      email: 'journey-admin@example.com',
+      name: 'Journey Admin',
+    })
+
+    const roomName = `E2E Meeting ${Date.now()}`
+    const createRoomResponse = await request.post(`${API_URL}/api/v1/rooms`, {
+      headers: authHeaders(userToken),
+      data: {
+        name: roomName,
+        type: 'meeting',
+      },
+    })
+    expect(createRoomResponse.status()).toBe(201)
+    const createdRoom = await createRoomResponse.json()
+    expect(createdRoom).toHaveProperty('id')
+    const roomId = createdRoom.id as string
+
+    const joinRoomResponse = await request.post(`${API_URL}/api/v1/rooms/${roomId}/join`, {
+      headers: authHeaders(userToken),
+    })
+    expect(joinRoomResponse.status()).toBe(200)
+    const joinPayload = await joinRoomResponse.json()
+    expect(joinPayload).toHaveProperty('jitsi_jwt')
+    expect(joinPayload).toHaveProperty('jitsi_url')
+
+    const createMessageResponse = await request.post(`${API_URL}/api/v1/messages`, {
+      headers: authHeaders(userToken),
+      data: {
+        room_id: roomId,
+        content: `Journey message ${Date.now()}`,
+        type: 'text',
+      },
+    })
+    expect(createMessageResponse.status()).toBe(201)
+    const createdMessage = await createMessageResponse.json()
+    expect(createdMessage).toHaveProperty('id')
+
+    const listMessagesResponse = await request.get(`${API_URL}/api/v1/messages?room_id=${roomId}`, {
+      headers: authHeaders(userToken),
+    })
+    expect(listMessagesResponse.status()).toBe(200)
+    const messageList = await listMessagesResponse.json()
+    expect(messageList).toHaveProperty('data')
+    expect(Array.isArray(messageList.data)).toBeTruthy()
+
+    const adminConferencesResponse = await request.get(`${API_URL}/api/v1/admin/conferences`, {
+      headers: authHeaders(adminToken),
+    })
+    expect(adminConferencesResponse.status()).toBe(200)
+    const conferences = await adminConferencesResponse.json()
+    expect(conferences).toHaveProperty('data')
+    expect(Array.isArray(conferences.data)).toBeTruthy()
   })
 })

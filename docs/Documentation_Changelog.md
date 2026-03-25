@@ -2,6 +2,10 @@
 
 ## 2026-03-25
 
+- Добавлен API user journey e2e сценарий в `tests/e2e/ci-api.spec.ts`:
+  - `create room -> join call -> send/list message -> admin conferences`.
+- CI e2e запуск расширен на группу `API User Journey`.
+- В `docs/Roadmap_v2.md` закрыт подпункт API-level user journey e2e.
 - Добавлен stage smoke gate:
   - `tests/smoke/stage-smoke.sh`,
   - `.github/workflows/stage-smoke.yml` (manual workflow_dispatch).
