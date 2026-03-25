@@ -11,7 +11,7 @@
   ],
   "notes": [
     "Текущие ассеты в pics хранятся в плоской структуре; категории задаются логически через manifest.",
-    "Файл hdphoto1.wdp не подходит для web-пайплайна без конвертации в png/webp."
+    "Файл hdphoto1.wdp конвертирован в web-совместимый png (pics/hdphoto1.png)."
   ],
   "assets": {
     "logo": [
@@ -69,13 +69,14 @@
         "size_px": "unknown"
       },
       {
-        "file": "pics/hdphoto1.wdp",
+        "file": "pics/hdphoto1.png",
         "target_usage": [
-          "design-source"
+          "frontend",
+          "jitsi-fork"
         ],
-        "role": "source-background-needs-conversion",
-        "format": "wdp",
-        "size_px": "unknown"
+        "role": "brand-background-converted-from-wdp",
+        "format": "png",
+        "size_px": "727x109"
       }
     ],
     "icons": [

@@ -26,7 +26,7 @@
 
 ## Ограничения и next steps
 
-- Обнаружен `pics/hdphoto1.wdp` (формат `wdp`) — требуется конвертация в `png`/`webp` перед интеграцией в web UI.
+- `pics/hdphoto1.wdp` (формат `wdp`) конвертирован в `pics/hdphoto1.png` для web UI.
 - Для production-пайплайна рекомендована физическая нормализация структуры:
   - `pics/logo/`
   - `pics/favicon/`
