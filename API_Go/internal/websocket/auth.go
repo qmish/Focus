@@ -13,6 +13,7 @@ var (
 	ErrMissingWebSocketToken = errors.New("missing websocket auth token")
 	ErrInvalidWebSocketToken = errors.New("invalid websocket auth token")
 	ErrExpiredWebSocketToken = errors.New("expired websocket auth token")
+	ErrRevokedWebSocketToken = errors.New("revoked websocket auth token")
 )
 
 // AuthenticateRequest validates auth for websocket upgrade requests.
@@ -31,6 +32,9 @@ func AuthenticateRequest(r *http.Request, secret []byte) (*auth.SessionClaims, e
 			return nil, ErrExpiredWebSocketToken
 		}
 		return nil, ErrInvalidWebSocketToken
+	}
+	if auth.IsSessionRevoked(claims.SessionID) {
+		return nil, ErrRevokedWebSocketToken
 	}
 
 	return claims, nil

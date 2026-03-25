@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
+import { getAdminAccessToken } from '../lib/authToken'
 
 interface Conference {
   id: string
   room_name: string
   participants_count: number
   started_at: string
-  duration_seconds: number
+  last_activity_at?: string
+  status?: string
 }
 
 export default function ConferencesPage() {
@@ -20,7 +22,7 @@ export default function ConferencesPage() {
     try {
       const response = await fetch('/api/v1/admin/conferences', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('admin_token')}`,
+          'Authorization': `Bearer ${getAdminAccessToken()}`,
         },
       })
       const data = await response.json()
@@ -39,7 +41,7 @@ export default function ConferencesPage() {
       await fetch(`/api/v1/admin/conferences/${id}/end`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('admin_token')}`,
+          'Authorization': `Bearer ${getAdminAccessToken()}`,
         },
       })
       fetchConferences()
@@ -78,7 +80,7 @@ export default function ConferencesPage() {
                   <td>{conf.room_name}</td>
                   <td>{conf.participants_count}</td>
                   <td>{new Date(conf.started_at).toLocaleString('ru-RU')}</td>
-                  <td>{Math.floor(conf.duration_seconds / 60)} мин</td>
+                  <td>{formatDurationMinutes(conf.started_at, conf.last_activity_at)} мин</td>
                   <td>
                     <button onClick={() => endConference(conf.id)} className="danger">
                       Завершить
@@ -92,4 +94,13 @@ export default function ConferencesPage() {
       )}
     </div>
   )
+}
+
+function formatDurationMinutes(startedAt: string, lastActivityAt?: string): number {
+  const start = new Date(startedAt).getTime()
+  const end = lastActivityAt ? new Date(lastActivityAt).getTime() : Date.now()
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return 0
+  }
+  return Math.floor((end - start) / 60000)
 }

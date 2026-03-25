@@ -72,9 +72,9 @@
 ## Этап 2. Выравнивание backend auth-потоков и API
 
 ### 2.1 Согласование модели токенов frontend/admin/backend
-- [ ] Утвердить единую модель: какие токены передаются в API и WS.
-- [ ] Привести `frontend` и `frontend-admin` к единому контракту авторизации.
-- [ ] Обновить `/auth/me`, refresh/logout semantics при необходимости.
+- [x] Утвердить единую модель: `session_token` передается в API (`Authorization: Bearer`) и в WS (`Authorization` или `token/access_token` query для reconnect).
+- [x] Привести `frontend` и `frontend-admin` к единому контракту авторизации (единый источник access token из auth-store c fallback на `localStorage`).
+- [x] Обновить `/auth/me`, refresh/logout semantics при необходимости.
 
 ### 2.2 Защита WebSocket
 - [x] Добавить обязательную аутентификацию на `/api/v1/ws`.
@@ -87,9 +87,9 @@
 - [x] Закрыть технические TODO по auth/logout flow.
 
 ### Критерии готовности этапа 2
-- [ ] API и WS используют согласованную auth-модель.
+- [x] API и WS используют согласованную auth-модель.
 - [x] Нет открытых критических TODO в auth/admin/calendar.
-- [ ] Пройдены smoke-тесты защищенных API и WS.
+- [x] Пройдены smoke-тесты защищенных API и WS.
 
 ---
 

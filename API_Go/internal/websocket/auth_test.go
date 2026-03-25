@@ -70,6 +70,18 @@ func TestAuthenticateRequest(t *testing.T) {
 		assert.Nil(t, claims)
 		assert.ErrorIs(t, err, ErrExpiredWebSocketToken)
 	})
+
+	t.Run("rejects revoked token", func(t *testing.T) {
+		auth.ResetRevokedSessions()
+		revokedToken := mustSessionTokenWithLifetime(t, secret, time.Hour)
+		auth.RevokeSession("session-123", time.Now().Add(time.Hour))
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/ws?token="+revokedToken, nil)
+
+		claims, err := AuthenticateRequest(req, secret)
+		require.Error(t, err)
+		assert.Nil(t, claims)
+		assert.ErrorIs(t, err, ErrRevokedWebSocketToken)
+	})
 }
 
 func mustSessionToken(t *testing.T, secret []byte) string {

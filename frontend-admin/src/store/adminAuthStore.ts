@@ -24,6 +24,7 @@ interface AdminAuthState {
   login: () => Promise<void>
   logout: () => Promise<void>
   checkAdmin: () => boolean
+  getAccessToken: () => string | null
 }
 
 export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
@@ -73,6 +74,11 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
         user,
         token,
       })
+      if (token) {
+        localStorage.setItem('admin_token', token)
+      } else {
+        localStorage.removeItem('admin_token')
+      }
 
       // Авто-обновление токена
       if (authenticated) {
@@ -80,6 +86,11 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
           try {
             await keycloak.updateToken(30)
             set({ token: keycloak.token })
+            if (keycloak.token) {
+              localStorage.setItem('admin_token', keycloak.token)
+            } else {
+              localStorage.removeItem('admin_token')
+            }
           } catch {
             get().logout()
           }
@@ -102,10 +113,19 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
       user: null,
       token: null,
     })
+    localStorage.removeItem('admin_token')
   },
 
   checkAdmin: () => {
     const { user } = get()
     return user?.roles?.includes('admin') || false
+  },
+
+  getAccessToken: () => {
+    const token = get().token
+    if (token) {
+      return token
+    }
+    return localStorage.getItem('admin_token')
   },
 }))

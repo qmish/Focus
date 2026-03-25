@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -180,24 +181,35 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 // Refresh POST /api/v1/auth/refresh
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+	refreshToken, err := extractBearerToken(r.Header.Get("Authorization"))
+	if err != nil {
+		http.Error(w, "invalid authorization format", http.StatusBadRequest)
 		return
 	}
+	if refreshToken == "" {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		refreshToken = req.RefreshToken
+	}
 
-	if req.RefreshToken == "" {
+	if refreshToken == "" {
 		http.Error(w, "refresh_token is required", http.StatusBadRequest)
+		return
+	}
+	if h.oidcProvider == nil {
+		http.Error(w, "auth provider unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
 	ctx := r.Context()
 
 	// Обновляем токен через OIDC провайдера
-	newToken, err := h.oidcProvider.RefreshToken(ctx, req.RefreshToken)
+	newToken, err := h.oidcProvider.RefreshToken(ctx, refreshToken)
 	if err != nil {
 		h.logger.Error("failed to refresh token", zap.Error(err))
 		http.Error(w, "failed to refresh token", http.StatusUnauthorized)
@@ -233,19 +245,17 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 // Logout POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
+	token, err := extractBearerToken(r.Header.Get("Authorization"))
+	if err != nil {
+		http.Error(w, "invalid authorization format", http.StatusBadRequest)
+		return
+	}
+	if token == "" {
 		http.Error(w, "missing authorization header", http.StatusBadRequest)
 		return
 	}
 
-	parts := strings.Split(authHeader, " ")
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		http.Error(w, "invalid authorization format", http.StatusBadRequest)
-		return
-	}
-
-	claims, err := auth.ValidateSessionJWT(parts[1], h.sessionSecret)
+	claims, err := auth.ValidateSessionJWT(token, h.sessionSecret)
 	if err != nil {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
@@ -299,4 +309,15 @@ func parseUUID(s string) (uuid.UUID, error) {
 
 	// Если не получилось, генерируем новый UUID на основе строки
 	return uuid.NewSHA1(uuid.NameSpaceDNS, []byte(s)), nil
+}
+
+func extractBearerToken(authHeader string) (string, error) {
+	if strings.TrimSpace(authHeader) == "" {
+		return "", nil
+	}
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", errors.New("invalid authorization format")
+	}
+	return strings.TrimSpace(parts[1]), nil
 }

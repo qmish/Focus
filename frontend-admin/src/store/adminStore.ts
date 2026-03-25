@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { getAdminAccessToken } from '../lib/authToken'
 
 interface User {
   id: string
@@ -42,7 +43,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
   fetchUsers: async (page) => {
     set({ loading: true, error: null })
     try {
-      const token = localStorage.getItem('admin_token')
+      const token = getAdminAccessToken()
       const response = await fetch(`/api/v1/admin/users?page=${page}&per_page=20`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -64,7 +65,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
   fetchStats: async () => {
     set({ loading: true, error: null })
     try {
-      const token = localStorage.getItem('admin_token')
+      const token = getAdminAccessToken()
       const response = await fetch('/api/v1/admin/stats', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -85,7 +86,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
 
   updateUserRoles: async (userId, roles) => {
     try {
-      const token = localStorage.getItem('admin_token')
+      const token = getAdminAccessToken()
       const response = await fetch(`/api/v1/admin/users/${userId}/roles`, {
         method: 'PUT',
         headers: {
@@ -107,7 +108,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
 
   banUser: async (userId, reason) => {
     try {
-      const token = localStorage.getItem('admin_token')
+      const token = getAdminAccessToken()
       const response = await fetch(`/api/v1/admin/users/${userId}/ban`, {
         method: 'POST',
         headers: {
@@ -128,7 +129,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
 
   unbanUser: async (userId) => {
     try {
-      const token = localStorage.getItem('admin_token')
+      const token = getAdminAccessToken()
       const response = await fetch(`/api/v1/admin/users/${userId}/unban`, {
         method: 'POST',
         headers: {

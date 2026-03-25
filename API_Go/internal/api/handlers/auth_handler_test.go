@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,6 +43,42 @@ func TestLogoutRejectsInvalidToken(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.Logout(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
+func TestRefreshSupportsAuthorizationHeader(t *testing.T) {
+	handler := newAuthHandlerForTest("test-secret")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewBufferString(`{}`))
+	req.Header.Set("Authorization", "Bearer refresh-token")
+	rr := httptest.NewRecorder()
+	handler.Refresh(rr, req)
+	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
+}
+
+func TestRefreshRequiresRefreshToken(t *testing.T) {
+	handler := newAuthHandlerForTest("test-secret")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewBufferString(`{"refresh_token":""}`))
+	rr := httptest.NewRecorder()
+	handler.Refresh(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestExtractBearerToken(t *testing.T) {
+	t.Run("empty header", func(t *testing.T) {
+		token, err := extractBearerToken("")
+		assert.NoError(t, err)
+		assert.Empty(t, token)
+	})
+
+	t.Run("invalid format", func(t *testing.T) {
+		_, err := extractBearerToken("token")
+		assert.Error(t, err)
+	})
+
+	t.Run("valid bearer", func(t *testing.T) {
+		token, err := extractBearerToken("Bearer abc123")
+		assert.NoError(t, err)
+		assert.Equal(t, "abc123", token)
+	})
 }
 
 func newAuthHandlerForTest(secret string) *AuthHandler {

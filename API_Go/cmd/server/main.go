@@ -166,6 +166,10 @@ func main() {
 					http.Error(w, "token_expired", http.StatusUnauthorized)
 					return
 				}
+				if errors.Is(err, websocket.ErrRevokedWebSocketToken) {
+					http.Error(w, "session_revoked", http.StatusUnauthorized)
+					return
+				}
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}

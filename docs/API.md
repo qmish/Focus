@@ -93,16 +93,26 @@ Location: https://chat.company.com?token=<session_jwt>
 Authorization: Bearer <refresh_token>
 ```
 
+**Body (fallback, если header не передан):**
+```json
+{
+  "refresh_token": "<refresh_token>"
+}
+```
+
 **Ответ:** `200 OK`
 
 ```json
 {
   "access_token": "<new_access_token>",
-  "refresh_token": "<new_refresh_token>",
-  "expires_in": 900,
+  "expires_in": 86400,
   "token_type": "Bearer"
 }
 ```
+
+**Ошибки:**
+- `400 Bad Request` — отсутствует refresh token или некорректный `Authorization`.
+- `503 Service Unavailable` — OIDC provider временно недоступен.
 
 ---
 
@@ -1230,6 +1240,7 @@ Authorization: Bearer <session_token>
 
 Важно:
 - при истекшем токене сервер возвращает `401 token_expired`;
+- при отозванной API-сессии сервер возвращает `401 session_revoked`;
 - при истечении токена во время активной сессии сервер закрывает WebSocket с reason `token_expired`;
 - для reconnect клиент должен получить новый токен и переподключиться.
 
