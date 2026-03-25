@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/auth"
+	"github.com/qmish/focus-api/internal/bots"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
 	"github.com/qmish/focus-api/internal/webhooks"
@@ -20,6 +21,7 @@ type AdminHandler struct {
 	userRepo    adminUserRepository
 	roomRepo    adminRoomRepository
 	webhookRepo adminWebhookRepository
+	botRepo     adminBotRepository
 }
 
 type adminUserRepository interface {
@@ -41,6 +43,10 @@ type adminWebhookRepository interface {
 	ListRecentDeliveries(ctx context.Context, limit int, onlyFailed bool) ([]*webhooks.WebhookDelivery, error)
 }
 
+type adminBotRepository interface {
+	ListCommandEvents(ctx context.Context, limit int, onlyFailed bool) ([]*bots.BotCommandEvent, error)
+}
+
 // NewAdminHandler создаёт новый AdminHandler
 func NewAdminHandler(userRepo adminUserRepository, roomRepo adminRoomRepository) *AdminHandler {
 	return &AdminHandler{
@@ -52,6 +58,11 @@ func NewAdminHandler(userRepo adminUserRepository, roomRepo adminRoomRepository)
 // SetWebhookRepository sets optional webhook repository for admin visibility endpoints.
 func (h *AdminHandler) SetWebhookRepository(webhookRepo adminWebhookRepository) {
 	h.webhookRepo = webhookRepo
+}
+
+// SetBotRepository sets optional bot repository for admin bot error visibility.
+func (h *AdminHandler) SetBotRepository(botRepo adminBotRepository) {
+	h.botRepo = botRepo
 }
 
 // requireAdmin middleware для проверки роли администратора
@@ -523,6 +534,41 @@ func (h *AdminHandler) ListWebhookErrors(w http.ResponseWriter, r *http.Request)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"data":  deliveries,
 		"total": len(deliveries),
+	})
+}
+
+// ListBotErrors GET /api/v1/admin/bots/errors
+func (h *AdminHandler) ListBotErrors(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 200 {
+		limit = 50
+	}
+
+	if h.botRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data":  []interface{}{},
+			"total": 0,
+		})
+		return
+	}
+
+	events, err := h.botRepo.ListCommandEvents(r.Context(), limit, true)
+	if err != nil {
+		http.Error(w, "failed to list bot errors", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":  events,
+		"total": len(events),
 	})
 }
 

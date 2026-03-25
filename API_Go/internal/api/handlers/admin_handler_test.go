@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/auth"
+	"github.com/qmish/focus-api/internal/bots"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
 	"github.com/qmish/focus-api/internal/webhooks"
@@ -275,6 +276,11 @@ type fakeAdminWebhookRepo struct {
 	err        error
 }
 
+type fakeAdminBotRepo struct {
+	events []*bots.BotCommandEvent
+	err    error
+}
+
 func (f *fakeAdminRoomRepo) List(ctx context.Context, limit, offset int) ([]*models.Room, error) {
 	rooms := make([]*models.Room, 0, len(f.rooms))
 	for _, room := range f.rooms {
@@ -328,6 +334,25 @@ func (f *fakeAdminWebhookRepo) ListRecentDeliveries(ctx context.Context, limit i
 	for _, delivery := range f.deliveries {
 		if delivery != nil && !delivery.Success {
 			filtered = append(filtered, delivery)
+		}
+	}
+	return filtered, nil
+}
+
+func (f *fakeAdminBotRepo) ListCommandEvents(ctx context.Context, limit int, onlyFailed bool) ([]*bots.BotCommandEvent, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if !onlyFailed {
+		return f.events, nil
+	}
+	filtered := make([]*bots.BotCommandEvent, 0, len(f.events))
+	for _, event := range f.events {
+		if event == nil {
+			continue
+		}
+		if event.Status == "failed" || event.Status == "permission_denied" || event.Status == "rate_limited" {
+			filtered = append(filtered, event)
 		}
 	}
 	return filtered, nil
@@ -451,4 +476,37 @@ func TestAdminHandlerListWebhookDeliveriesInternalError(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ListWebhookDeliveries(rr, req)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestAdminHandlerListBotErrors(t *testing.T) {
+	repo := &fakeAdminBotRepo{
+		events: []*bots.BotCommandEvent{
+			{
+				ID:      uuid.New(),
+				Command: "schedule",
+				Status:  "failed",
+				Error:   "calendar unavailable",
+			},
+		},
+	}
+	handler := NewAdminHandler(nil, nil)
+	handler.SetBotRepository(repo)
+	claims := &auth.SessionClaims{Roles: []string{"admin"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := httptest.NewRequest("GET", "/api/v1/admin/bots/errors", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	handler.ListBotErrors(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"total":1`)
+	assert.Contains(t, rr.Body.String(), `"status":"failed"`)
+}
+
+func TestAdminHandlerListBotErrorsForbidden(t *testing.T) {
+	handler := NewAdminHandler(nil, nil)
+	claims := &auth.SessionClaims{Roles: []string{"user"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := httptest.NewRequest("GET", "/api/v1/admin/bots/errors", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	handler.ListBotErrors(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code)
 }

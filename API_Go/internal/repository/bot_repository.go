@@ -64,3 +64,22 @@ func (r *BotRepository) Update(ctx context.Context, bot *bots.Bot) error {
 func (r *BotRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&bots.Bot{}, "id = ?", id).Error
 }
+
+// CreateCommandEvent stores bot command execution event.
+func (r *BotRepository) CreateCommandEvent(ctx context.Context, event *bots.BotCommandEvent) error {
+	return r.db.WithContext(ctx).Create(event).Error
+}
+
+// ListCommandEvents returns recent bot command events.
+func (r *BotRepository) ListCommandEvents(ctx context.Context, limit int, onlyFailed bool) ([]*bots.BotCommandEvent, error) {
+	if limit < 1 {
+		limit = 50
+	}
+	var events []*bots.BotCommandEvent
+	query := r.db.WithContext(ctx).Order("created_at DESC").Limit(limit)
+	if onlyFailed {
+		query = query.Where("status IN ?", []string{"failed", "permission_denied", "rate_limited"})
+	}
+	err := query.Find(&events).Error
+	return events, err
+}

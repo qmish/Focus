@@ -36,6 +36,23 @@ type Bot struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// BotCommandEvent stores command execution outcomes for observability.
+type BotCommandEvent struct {
+	ID        uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
+	RoomID    string    `gorm:"type:varchar(64);index" json:"room_id"`
+	UserID    string    `gorm:"type:varchar(64);index" json:"user_id"`
+	Command   string    `gorm:"type:varchar(64);index" json:"command"`
+	Args      string    `gorm:"type:text" json:"args"`
+	Status    string    `gorm:"type:varchar(32);index" json:"status"`
+	Error     string    `gorm:"type:text" json:"error,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// TableName returns table for bot command event logs.
+func (BotCommandEvent) TableName() string {
+	return "bot_command_events"
+}
+
 // BotConfig конфигурация бота
 type BotConfig struct {
 	Commands []BotCommand `json:"commands"`
@@ -57,6 +74,7 @@ type BotEngine struct {
 	roomRepo          BotRoomRepository
 	broadcaster       BotBroadcaster
 	calendarScheduler BotCalendarScheduler
+	eventStore        BotCommandEventStore
 	botUserID         uuid.UUID
 	jitsiBaseURL      string
 	rateLimitWindow   time.Duration
@@ -93,6 +111,11 @@ type BotRoomRepository interface {
 // BotCalendarScheduler schedules bot meetings in calendar provider.
 type BotCalendarScheduler interface {
 	ScheduleMeeting(ctx context.Context, userID uuid.UUID, title string, start, end time.Time, roomURL string) error
+}
+
+// BotCommandEventStore persists command execution events.
+type BotCommandEventStore interface {
+	CreateCommandEvent(ctx context.Context, event *BotCommandEvent) error
 }
 
 // NewBotEngine создаёт новый BotEngine
@@ -134,6 +157,11 @@ func (e *BotEngine) SetRoomRepository(roomRepo BotRoomRepository) {
 // SetCalendarScheduler injects calendar scheduler for /schedule integration.
 func (e *BotEngine) SetCalendarScheduler(scheduler BotCalendarScheduler) {
 	e.calendarScheduler = scheduler
+}
+
+// SetCommandEventStore injects store for bot command observability.
+func (e *BotEngine) SetCommandEventStore(store BotCommandEventStore) {
+	e.eventStore = store
 }
 
 // SetJitsiBaseURL sets base URL used in bot-created meeting links.
@@ -186,20 +214,44 @@ func (e *BotEngine) HandleMessage(ctx context.Context, roomID, userID, content s
 	// Проверяем встроенные команды
 	if handler, ok := e.handlers[command]; ok {
 		if !e.canHandleInRoom(ctx, roomID, userID) {
+			e.recordCommandEvent(ctx, roomID, userID, command, args, "permission_denied", "")
 			return nil
 		}
 		if e.isRateLimited(userID) {
+			e.recordCommandEvent(ctx, roomID, userID, command, args, "rate_limited", "")
 			return nil
 		}
 		response, err := handler(ctx, roomID, userID, command, args)
 		if err != nil {
+			e.recordCommandEvent(ctx, roomID, userID, command, args, "failed", err.Error())
 			return err
 		}
 		// Отправляем ответ
-		return e.sendResponse(ctx, roomID, response)
+		if err := e.sendResponse(ctx, roomID, response); err != nil {
+			e.recordCommandEvent(ctx, roomID, userID, command, args, "failed", err.Error())
+			return err
+		}
+		e.recordCommandEvent(ctx, roomID, userID, command, args, "sent", "")
+		return nil
 	}
 
 	return nil
+}
+
+func (e *BotEngine) recordCommandEvent(ctx context.Context, roomID, userID, command, args, status, errText string) {
+	if e.eventStore == nil {
+		return
+	}
+	_ = e.eventStore.CreateCommandEvent(ctx, &BotCommandEvent{
+		ID:        uuid.New(),
+		RoomID:    roomID,
+		UserID:    userID,
+		Command:   command,
+		Args:      args,
+		Status:    status,
+		Error:     errText,
+		CreatedAt: e.now().UTC(),
+	})
 }
 
 func (e *BotEngine) sendResponse(ctx context.Context, roomID, content string) error {

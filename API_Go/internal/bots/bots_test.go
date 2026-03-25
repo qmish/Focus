@@ -355,6 +355,40 @@ func TestHandleMessageRateLimited(t *testing.T) {
 	assert.Len(t, repo.messages, 1)
 }
 
+func TestHandleMessageRecordsFailedEvent(t *testing.T) {
+	repo := &fakeBotMessageRepo{}
+	roomChecker := &fakeBotRoomChecker{isParticipant: false}
+	broadcaster := &fakeBotBroadcaster{}
+	eventStore := &fakeBotEventStore{}
+	engine := NewBotEngineWithDelivery(repo, roomChecker, broadcaster, uuid.New())
+	engine.SetCommandEventStore(eventStore)
+
+	err := engine.HandleMessage(context.Background(), uuid.New().String(), uuid.New().String(), "/help")
+	require.NoError(t, err)
+	require.Len(t, eventStore.events, 1)
+	assert.Equal(t, "permission_denied", eventStore.events[0].Status)
+}
+
+func TestHandleMessageRecordsRateLimitedEvent(t *testing.T) {
+	repo := &fakeBotMessageRepo{}
+	roomChecker := &fakeBotRoomChecker{isParticipant: true}
+	broadcaster := &fakeBotBroadcaster{}
+	eventStore := &fakeBotEventStore{}
+	engine := NewBotEngineWithDelivery(repo, roomChecker, broadcaster, uuid.New())
+	engine.SetCommandEventStore(eventStore)
+	engine.SetRateLimitWindow(1 * time.Hour)
+
+	roomID := uuid.New().String()
+	userID := uuid.New().String()
+	err := engine.HandleMessage(context.Background(), roomID, userID, "/help")
+	require.NoError(t, err)
+	err = engine.HandleMessage(context.Background(), roomID, userID, "/status")
+	require.NoError(t, err)
+	require.Len(t, eventStore.events, 2)
+	assert.Equal(t, "sent", eventStore.events[0].Status)
+	assert.Equal(t, "rate_limited", eventStore.events[1].Status)
+}
+
 type fakeBotMessageRepo struct {
 	messages []*models.Message
 }
@@ -429,5 +463,14 @@ func (f *fakeBotScheduler) ScheduleMeeting(ctx context.Context, userID uuid.UUID
 		end:     end,
 		roomURL: roomURL,
 	})
+	return nil
+}
+
+type fakeBotEventStore struct {
+	events []*BotCommandEvent
+}
+
+func (f *fakeBotEventStore) CreateCommandEvent(ctx context.Context, event *BotCommandEvent) error {
+	f.events = append(f.events, event)
 	return nil
 }

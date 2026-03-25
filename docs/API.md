@@ -1273,6 +1273,56 @@ Authorization: Bearer <admin_token>
 
 ---
 
+### 8.8. Ошибки bot-команд
+
+**Endpoint:** `GET /api/v1/admin/bots/errors`
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Параметры query:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| limit | number | Количество записей (1..200, default: 50) |
+
+**Ответ:** `200 OK`
+
+```json
+{
+  "total": 2,
+  "data": [
+    {
+      "id": "event-uuid",
+      "room_id": "room-uuid",
+      "user_id": "user-uuid",
+      "command": "schedule",
+      "args": "meeting Demo at 2030-01-02 15:04",
+      "status": "failed",
+      "error": "calendar unavailable",
+      "created_at": "2024-01-01T12:10:00Z"
+    },
+    {
+      "id": "event-uuid-2",
+      "room_id": "room-uuid",
+      "user_id": "user-uuid",
+      "command": "help",
+      "args": "",
+      "status": "rate_limited",
+      "created_at": "2024-01-01T12:10:01Z"
+    }
+  ]
+}
+```
+
+В выборку ошибок включаются статусы:
+- `failed`
+- `permission_denied`
+- `rate_limited`
+
+---
+
 ## 9. Health Check API
 
 ### 9.1. Health check

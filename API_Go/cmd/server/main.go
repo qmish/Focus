@@ -62,6 +62,7 @@ func main() {
 		&models.RoomParticipant{},
 		&models.Message{},
 		&models.MessageReaction{},
+		&bots.BotCommandEvent{},
 		&webhooks.IncomingEvent{},
 	); err != nil {
 		logger.Error("Database migration failed", zap.Error(err))
@@ -74,6 +75,7 @@ func main() {
 	roomRepo := repository.NewRoomRepository(db.DB)
 	messageRepo := repository.NewMessageRepository(db.DB)
 	webhookRepo := repository.NewWebhookRepository(db.DB)
+	botRepo := repository.NewBotRepository(db.DB)
 
 	// Инициализация Graph API клиента (Exchange)
 	var graphClient *exchange.GraphClient
@@ -133,6 +135,7 @@ func main() {
 	botEngine.SetRoomRepository(roomRepo)
 	botEngine.SetJitsiBaseURL(cfg.Jitsi.BaseURL)
 	botEngine.SetRateLimitWindow(2 * time.Second)
+	botEngine.SetCommandEventStore(botRepo)
 	botEngine.SetCalendarScheduler(&botMeetingScheduler{
 		graphClient: graphClient,
 		userRepo:    userRepo,
@@ -145,6 +148,7 @@ func main() {
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
 	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
 	adminHandler.SetWebhookRepository(webhookRepo)
+	adminHandler.SetBotRepository(botRepo)
 	inboundWebhookHandler := handlers.NewInboundWebhookHandler(
 		webhooks.NewWebhookHandlerWithConfig(cfg.Jitsi.AppSecret, webhookRepo),
 	)
@@ -256,6 +260,7 @@ func main() {
 				r.Get("/stats", adminHandler.GetStats)
 				r.Get("/webhooks/deliveries", adminHandler.ListWebhookDeliveries)
 				r.Get("/webhooks/errors", adminHandler.ListWebhookErrors)
+				r.Get("/bots/errors", adminHandler.ListBotErrors)
 			})
 		})
 	})
