@@ -1361,7 +1361,44 @@ Authorization: Bearer <admin_token>
 
 ---
 
-### 8.10. Сводная статистика админ-панели
+### 8.10. Аудит календарных операций
+
+**Endpoint:** `GET /api/v1/admin/calendar/audit`
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Параметры query:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| limit | number | Количество записей (1..500, default: 100) |
+| failed | boolean | Если `true`, вернуть только неуспешные операции |
+
+**Ответ:** `200 OK`
+
+```json
+{
+  "total": 2,
+  "data": [
+    {
+      "id": "audit-uuid",
+      "operation": "delete",
+      "status": "failed",
+      "event_id": "event-123",
+      "user_id": "user-uuid",
+      "user_email": "user@example.com",
+      "details": "delete_event_failed",
+      "created_at": "2024-01-01T12:20:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 8.11. Сводная статистика админ-панели
 
 **Endpoint:** `GET /api/v1/admin/stats`
 

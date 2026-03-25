@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,10 +18,11 @@ import (
 
 // CalendarHandler обработчики для календаря
 type CalendarHandler struct {
-	calendarService calendarService
-	roomRepo    *repository.RoomRepository
-	jitsiGen    *jitsi.TokenGenerator
+	calendarService      calendarService
+	roomRepo             *repository.RoomRepository
+	jitsiGen             *jitsi.TokenGenerator
 	cancellationNotifier CancellationNotifier
+	calendarAuditRepo    calendarAuditRepository
 }
 
 type calendarService interface {
@@ -31,6 +33,10 @@ type calendarService interface {
 }
 
 type CancellationNotifier func(ctx context.Context, userEmail, eventID string) error
+
+type calendarAuditRepository interface {
+	CreateCalendarAuditEvent(ctx context.Context, event *models.CalendarAuditEvent) error
+}
 
 // NewCalendarHandler создаёт новый CalendarHandler
 func NewCalendarHandler(graphClient *exchange.GraphClient, roomRepo *repository.RoomRepository, jitsiGen *jitsi.TokenGenerator) *CalendarHandler {
@@ -50,6 +56,11 @@ func (h *CalendarHandler) SetCancellationNotifier(notifier CancellationNotifier)
 		return
 	}
 	h.cancellationNotifier = notifier
+}
+
+// SetCalendarAuditRepository sets optional calendar audit repository.
+func (h *CalendarHandler) SetCalendarAuditRepository(repo calendarAuditRepository) {
+	h.calendarAuditRepo = repo
 }
 
 // GetEvents GET /api/v1/calendar/events
@@ -202,9 +213,11 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	userEmail := claims.Email
 	createdEvent, err := h.calendarService.CreateEvent(r.Context(), userEmail, event)
 	if err != nil {
+		h.recordCalendarAudit(r, "create", "failed", "", "create_event_failed")
 		http.Error(w, "failed to create event", http.StatusInternalServerError)
 		return
 	}
+	h.recordCalendarAudit(r, "create", "success", createdEvent.ID, "")
 
 	// Формируем ответ
 	response := map[string]interface{}{
@@ -279,9 +292,11 @@ func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	userEmail := claims.Email
 	err := h.calendarService.UpdateEvent(r.Context(), userEmail, eventID, event)
 	if err != nil {
+		h.recordCalendarAudit(r, "update", "failed", eventID, "update_event_failed")
 		http.Error(w, "failed to update event", http.StatusInternalServerError)
 		return
 	}
+	h.recordCalendarAudit(r, "update", "success", eventID, "")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -314,12 +329,37 @@ func (h *CalendarHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 	userEmail := claims.Email
 	err := h.calendarService.DeleteEvent(r.Context(), userEmail, eventID)
 	if err != nil {
+		h.recordCalendarAudit(r, "delete", "failed", eventID, "delete_event_failed")
 		http.Error(w, "failed to delete event", http.StatusInternalServerError)
 		return
 	}
+	h.recordCalendarAudit(r, "delete", "success", eventID, "")
 	if sendCancellation && h.cancellationNotifier != nil {
 		_ = h.cancellationNotifier(r.Context(), userEmail, eventID)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *CalendarHandler) recordCalendarAudit(r *http.Request, operation, status, eventID, details string) {
+	if h.calendarAuditRepo == nil {
+		return
+	}
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	userID := ""
+	userEmail := ""
+	if claims != nil {
+		userID = strings.TrimSpace(claims.UserID)
+		userEmail = strings.TrimSpace(claims.Email)
+	}
+	_ = h.calendarAuditRepo.CreateCalendarAuditEvent(r.Context(), &models.CalendarAuditEvent{
+		ID:        uuid.New(),
+		Operation: strings.TrimSpace(operation),
+		Status:    strings.TrimSpace(status),
+		EventID:   strings.TrimSpace(eventID),
+		UserID:    userID,
+		UserEmail: userEmail,
+		Details:   strings.TrimSpace(details),
+		CreatedAt: time.Now().UTC(),
+	})
 }

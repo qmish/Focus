@@ -19,12 +19,13 @@ import (
 
 // AdminHandler обработчики для админ-панели
 type AdminHandler struct {
-	userRepo      adminUserRepository
-	roomRepo      adminRoomRepository
-	messageRepo   adminMessageRepository
-	webhookRepo   adminWebhookRepository
-	botRepo       adminBotRepository
-	authAuditRepo adminAuthAuditRepository
+	userRepo          adminUserRepository
+	roomRepo          adminRoomRepository
+	messageRepo       adminMessageRepository
+	webhookRepo       adminWebhookRepository
+	botRepo           adminBotRepository
+	authAuditRepo     adminAuthAuditRepository
+	calendarAuditRepo adminCalendarAuditRepository
 }
 
 type adminUserRepository interface {
@@ -59,6 +60,10 @@ type adminAuthAuditRepository interface {
 	ListAuthAuditEvents(ctx context.Context, limit int, onlyFailed bool) ([]*models.AuthAuditEvent, error)
 }
 
+type adminCalendarAuditRepository interface {
+	ListCalendarAuditEvents(ctx context.Context, limit int, onlyFailed bool) ([]*models.CalendarAuditEvent, error)
+}
+
 // NewAdminHandler создаёт новый AdminHandler
 func NewAdminHandler(userRepo adminUserRepository, roomRepo adminRoomRepository) *AdminHandler {
 	return &AdminHandler{
@@ -85,6 +90,11 @@ func (h *AdminHandler) SetMessageRepository(messageRepo adminMessageRepository) 
 // SetAuthAuditRepository sets optional auth audit repository.
 func (h *AdminHandler) SetAuthAuditRepository(authAuditRepo adminAuthAuditRepository) {
 	h.authAuditRepo = authAuditRepo
+}
+
+// SetCalendarAuditRepository sets optional calendar audit repository.
+func (h *AdminHandler) SetCalendarAuditRepository(calendarAuditRepo adminCalendarAuditRepository) {
+	h.calendarAuditRepo = calendarAuditRepo
 }
 
 // requireAdmin middleware для проверки роли администратора
@@ -629,6 +639,39 @@ func (h *AdminHandler) ListAuthAuditEvents(w http.ResponseWriter, r *http.Reques
 	events, err := h.authAuditRepo.ListAuthAuditEvents(r.Context(), limit, onlyFailed)
 	if err != nil {
 		http.Error(w, "failed to list auth audit events", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":  events,
+		"total": len(events),
+	})
+}
+
+// ListCalendarAuditEvents GET /api/v1/admin/calendar/audit
+func (h *AdminHandler) ListCalendarAuditEvents(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	onlyFailed := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("failed")), "true")
+	if h.calendarAuditRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data":  []interface{}{},
+			"total": 0,
+		})
+		return
+	}
+	events, err := h.calendarAuditRepo.ListCalendarAuditEvents(r.Context(), limit, onlyFailed)
+	if err != nil {
+		http.Error(w, "failed to list calendar audit events", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

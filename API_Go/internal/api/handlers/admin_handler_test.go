@@ -297,6 +297,11 @@ type fakeAdminAuthAuditRepo struct {
 	err    error
 }
 
+type fakeAdminCalendarAuditRepo struct {
+	events []*models.CalendarAuditEvent
+	err    error
+}
+
 func (f *fakeAdminRoomRepo) List(ctx context.Context, limit, offset int) ([]*models.Room, error) {
 	rooms := make([]*models.Room, 0, len(f.rooms))
 	for _, room := range f.rooms {
@@ -392,6 +397,22 @@ func (f *fakeAdminAuthAuditRepo) ListAuthAuditEvents(ctx context.Context, limit 
 		return f.events, nil
 	}
 	filtered := make([]*models.AuthAuditEvent, 0, len(f.events))
+	for _, event := range f.events {
+		if event != nil && event.Status != "success" {
+			filtered = append(filtered, event)
+		}
+	}
+	return filtered, nil
+}
+
+func (f *fakeAdminCalendarAuditRepo) ListCalendarAuditEvents(ctx context.Context, limit int, onlyFailed bool) ([]*models.CalendarAuditEvent, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if !onlyFailed {
+		return f.events, nil
+	}
+	filtered := make([]*models.CalendarAuditEvent, 0, len(f.events))
 	for _, event := range f.events {
 		if event != nil && event.Status != "success" {
 			filtered = append(filtered, event)
@@ -582,4 +603,35 @@ func TestAdminHandlerListAuthAuditEvents(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), `"status":"failed"`)
 	assert.NotContains(t, rr.Body.String(), `"status":"success"`)
+}
+
+func TestAdminHandlerListCalendarAuditEvents(t *testing.T) {
+	repo := &fakeAdminCalendarAuditRepo{
+		events: []*models.CalendarAuditEvent{
+			{
+				ID:        uuid.New(),
+				Operation: "delete",
+				Status:    "failed",
+				EventID:   "ev-1",
+				CreatedAt: time.Now(),
+			},
+			{
+				ID:        uuid.New(),
+				Operation: "create",
+				Status:    "success",
+				EventID:   "ev-2",
+				CreatedAt: time.Now(),
+			},
+		},
+	}
+	handler := NewAdminHandler(nil, nil)
+	handler.SetCalendarAuditRepository(repo)
+	claims := &auth.SessionClaims{Roles: []string{"admin"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := httptest.NewRequest("GET", "/api/v1/admin/calendar/audit?failed=true", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	handler.ListCalendarAuditEvents(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"operation":"delete"`)
+	assert.NotContains(t, rr.Body.String(), `"operation":"create"`)
 }

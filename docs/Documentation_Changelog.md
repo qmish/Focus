@@ -2,6 +2,13 @@
 
 ## 2026-03-25
 
+- Добавлен persist-аудит календарных операций Exchange (`create/update/delete`):
+  - модель `API_Go/internal/models/calendar_audit_event.go`,
+  - репозиторий `API_Go/internal/repository/calendar_audit_repository.go`,
+  - запись в `API_Go/internal/api/handlers/calendar_handler.go`.
+- В admin API добавлен endpoint `GET /api/v1/admin/calendar/audit` для наблюдаемости календарных операций.
+- Обновлены `API_Go/cmd/server/main.go`, `docs/API.md`, тесты `calendar_handler_test.go` и `admin_handler_test.go`.
+- В `docs/Roadmap_v2.md` закрыт пункт `1.3` по аудиту календарных операций.
 - Добавлена поддержка ротации session secrets и настройки времени жизни токена:
   - `AUTH_SESSION_TOKEN_LIFETIME`,
   - `AUTH_SESSION_VALIDATION_SECRETS` (валидация JWT на предыдущих секретах).

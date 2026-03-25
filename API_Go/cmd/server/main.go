@@ -68,6 +68,7 @@ func main() {
 		&models.Message{},
 		&models.MessageReaction{},
 		&models.AuthAuditEvent{},
+		&models.CalendarAuditEvent{},
 		&models.RevokedSession{},
 		&bots.BotCommandEvent{},
 		&webhooks.IncomingEvent{},
@@ -84,6 +85,7 @@ func main() {
 	webhookRepo := repository.NewWebhookRepository(db.DB)
 	botRepo := repository.NewBotRepository(db.DB)
 	authAuditRepo := repository.NewAuthAuditRepository(db.DB)
+	calendarAuditRepo := repository.NewCalendarAuditRepository(db.DB)
 	sessionRevocationRepo := repository.NewSessionRevocationRepository(db.DB)
 
 	// Инициализация Graph API клиента (Exchange)
@@ -157,11 +159,13 @@ func main() {
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub, botEngine)
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
+	calendarHandler.SetCalendarAuditRepository(calendarAuditRepo)
 	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
 	adminHandler.SetMessageRepository(messageRepo)
 	adminHandler.SetWebhookRepository(webhookRepo)
 	adminHandler.SetBotRepository(botRepo)
 	adminHandler.SetAuthAuditRepository(authAuditRepo)
+	adminHandler.SetCalendarAuditRepository(calendarAuditRepo)
 	brandingHandler := handlers.NewJitsiBrandingHandler()
 	// Warm in-memory revocation blacklist from persistent storage for API/WS checks.
 	if revokedSessions, err := sessionRevocationRepo.ListActiveRevokedSessions(context.Background(), time.Now(), 100000); err == nil {
@@ -310,6 +314,7 @@ func main() {
 				r.Get("/webhooks/errors", adminHandler.ListWebhookErrors)
 				r.Get("/bots/errors", adminHandler.ListBotErrors)
 				r.Get("/auth/audit", adminHandler.ListAuthAuditEvents)
+				r.Get("/calendar/audit", adminHandler.ListCalendarAuditEvents)
 			})
 		})
 	})
