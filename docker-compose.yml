@@ -115,6 +115,7 @@ services:
       VITE_KEYCLOAK_URL: ${FRONTEND_VITE_KEYCLOAK_URL:-http://localhost:8180}
       VITE_KEYCLOAK_REALM: ${KEYCLOAK_REALM:-company}
       VITE_KEYCLOAK_CLIENT_ID: ${FRONTEND_VITE_KEYCLOAK_CLIENT_ID:-messenger-frontend}
+      VITE_JITSI_DOMAIN: ${FRONTEND_VITE_JITSI_DOMAIN:-meet.company.com}
     ports:
       - "5173:5173"
     depends_on:

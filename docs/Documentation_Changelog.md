@@ -2,6 +2,11 @@
 
 ## 2026-03-25
 
+- Обновлена интеграция Jitsi в `frontend` с учетом рекомендаций Jitsi Handbook (`Configuration`):
+  - `frontend/src/components/JitsiMeeting.tsx` теперь использует `domain`, `dynamicBrandingUrl`, `customTheme`, `customIcons`, `defaultLanguage`, `toolbarButtons`.
+  - `frontend/src/pages/RoomPage.tsx` подгружает branding контракт из `GET /api/v1/branding/jitsi` и применяет его в Jitsi embed.
+- Добавлен тест `frontend/src/components/JitsiMeeting.test.tsx` на применение branding/domain overrides.
+- В `docs/Roadmap_v2.md` закрыты оставшиеся пункты `4.3` (точка встраивания форка + совместимость интерфейсных настроек/локализации).
 - В `API_Go/internal/auth/oidc.go` добавлена проверка `audience` в auth middleware:
   - новый конструктор `NewAuthMiddlewareWithAudience`,
   - проверка `AUTH_REQUIRED_AUDIENCE` на каждом защищенном API запросе.

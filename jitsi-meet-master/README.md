@@ -25,3 +25,4 @@
 - Источник ассетов: `pics/` + `docs/branding-manifest.json`.
 - Базовые overrides: `jitsi-meet-master/config/custom/branding-overrides.js`.
 - Dynamic branding endpoint: `GET /api/v1/branding/jitsi`.
+- Ориентиры по параметрам конфигурации: Jitsi Handbook (`Developer Guide` / `Configuration`).

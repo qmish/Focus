@@ -19,12 +19,14 @@ export default function RoomPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
+  const [jitsiBranding, setJitsiBranding] = useState<Record<string, unknown> | null>(null)
   const [callStatus, setCallStatus] = useState<'idle' | 'joined' | 'left'>('idle')
   const [participantEvents, setParticipantEvents] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimerRef = useRef<number | null>(null)
+  const jitsiDomain = import.meta.env.VITE_JITSI_DOMAIN || 'meet.company.com'
 
   useEffect(() => {
     if (roomId) {
@@ -118,6 +120,12 @@ export default function RoomPage() {
       // Получаем Jitsi JWT
       const data = await apiClient.post<{ jitsi_jwt?: string }>(`/api/v1/rooms/${id}/join`, {})
       setJitsiJWT(data.jitsi_jwt || '')
+      try {
+        const branding = await apiClient.get<Record<string, unknown>>('/api/v1/branding/jitsi')
+        setJitsiBranding(branding)
+      } catch (brandingError) {
+        console.warn('Failed to load jitsi branding, using local fallback', brandingError)
+      }
     } catch (error) {
       console.error('Failed to load room:', error)
       setError('Не удалось загрузить комнату')
@@ -213,6 +221,8 @@ export default function RoomPage() {
         {showVideo && jitsiJWT ? (
           <div className="video-container">
             <JitsiMeeting
+              domain={jitsiDomain}
+              branding={jitsiBranding ?? undefined}
               roomName={currentRoom.jitsi_room_name}
               jwt={jitsiJWT}
               onJoin={handleJitsiJoin}
