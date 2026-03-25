@@ -12,6 +12,7 @@ export default function Layout() {
     { path: '/dashboard', label: 'Дашборд', icon: '📊' },
     { path: '/users', label: 'Пользователи', icon: '👥' },
     { path: '/conferences', label: 'Конференции', icon: '🎥' },
+    { path: '/observability', label: 'Наблюдаемость', icon: '🩺' },
     { path: '/settings', label: 'Настройки', icon: '⚙️' },
   ]
 
