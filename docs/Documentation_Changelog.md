@@ -2,6 +2,12 @@
 
 ## 2026-03-25
 
+- Добавлены API happy-path e2e тесты (`tests/e2e/ci-api.spec.ts`) для:
+  - `auth/me` (валидный user token),
+  - `rooms` list (валидный user token),
+  - `admin/stats` (валидный admin token).
+- CI e2e запуск расширен на группу `API Happy Paths`.
+- В `docs/Roadmap_v2.md` закрыт подпункт API-level happy-path e2e (через session JWT).
 - В `docs/Roadmap_v2.md` синхронизирован раздел `Быстрый трек`:
   - закрыты пункты по auth-model/WS auth и TODO webhooks/bots/admin/calendar.
 - Добавлены operational документы:

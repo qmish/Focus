@@ -188,6 +188,7 @@
 
 ### 7.1 Тестирование
 - [x] Добавить API-level e2e smoke для auth/room/chat/webhook/bot/admin базовых негативных сценариев.
+- [x] Добавить API-level happy-path e2e для авторизованных `auth/me`, `rooms`, `admin/stats` через валидный session JWT.
 - [ ] Добавить e2e сценарии с реальной аутентификацией и пользовательскими happy-path потоками (auth -> room -> chat -> call -> admin).
 - [ ] Покрыть e2e: auth, room, chat, call, webhook, bot, admin flows.
 - [ ] Прогнать load-тесты API + Jitsi/JVB в целевых профилях нагрузки.
