@@ -2,6 +2,12 @@
 
 ## 2026-03-25
 
+- В auth flow добавлен group policy mapping (`AD/Keycloak groups -> Focus roles/scopes`):
+  - `API_Go/internal/auth/oidc.go`: `GroupPolicyMapper` и загрузка правил из `KEYCLOAK_GROUP_POLICY_MAPPING` (JSON),
+  - `API_Go/internal/api/handlers/auth_handler.go`: применение mapping в `callback/refresh` перед выпуском session JWT.
+- Добавлены тесты mapping в `API_Go/internal/auth/oidc_test.go`.
+- Обновлены `.env.example` и `docker-compose.yml` (новый параметр `KEYCLOAK_GROUP_POLICY_MAPPING`).
+- В `docs/Roadmap_v2.md` закрыт пункт policy mapping (`1.2`).
 - Обновлена интеграция Jitsi в `frontend` с учетом рекомендаций Jitsi Handbook (`Configuration`):
   - `frontend/src/components/JitsiMeeting.tsx` теперь использует `domain`, `dynamicBrandingUrl`, `customTheme`, `customIcons`, `defaultLanguage`, `toolbarButtons`.
   - `frontend/src/pages/RoomPage.tsx` подгружает branding контракт из `GET /api/v1/branding/jitsi` и применяет его в Jitsi embed.

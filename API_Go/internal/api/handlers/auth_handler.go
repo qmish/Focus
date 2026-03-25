@@ -19,12 +19,13 @@ import (
 
 // AuthHandler обработчики для аутентификации
 type AuthHandler struct {
-	oidcProvider  *auth.OIDCProvider
-	userRepo      *repository.UserRepository
-	jitsiGen      *jitsi.TokenGenerator
-	config        *config.Config
-	logger        *zap.Logger
-	sessionSecret []byte
+	oidcProvider      *auth.OIDCProvider
+	userRepo          *repository.UserRepository
+	jitsiGen          *jitsi.TokenGenerator
+	config            *config.Config
+	logger            *zap.Logger
+	sessionSecret     []byte
+	groupPolicyMapper *auth.GroupPolicyMapper
 }
 
 // NewAuthHandler создаёт новый AuthHandler
@@ -35,13 +36,24 @@ func NewAuthHandler(
 	cfg *config.Config,
 	logger *zap.Logger,
 ) *AuthHandler {
+	var groupPolicyMapper *auth.GroupPolicyMapper
+	if cfg != nil {
+		mapper, err := auth.NewGroupPolicyMapperFromJSON(cfg.Keycloak.GroupPolicyMapping)
+		if err != nil {
+			logger.Warn("invalid group policy mapping config", zap.Error(err))
+		} else {
+			groupPolicyMapper = mapper
+		}
+	}
+
 	return &AuthHandler{
-		oidcProvider:  oidcProvider,
-		userRepo:      userRepo,
-		jitsiGen:      jitsiGen,
-		config:        cfg,
-		logger:        logger,
-		sessionSecret: []byte(cfg.Auth.SessionSecret),
+		oidcProvider:      oidcProvider,
+		userRepo:          userRepo,
+		jitsiGen:          jitsiGen,
+		config:            cfg,
+		logger:            logger,
+		sessionSecret:     []byte(cfg.Auth.SessionSecret),
+		groupPolicyMapper: groupPolicyMapper,
 	}
 }
 
@@ -114,6 +126,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication failed", http.StatusInternalServerError)
 		return
 	}
+	h.groupPolicyMapper.Apply(userInfo)
 
 	h.logger.Info("user authenticated",
 		zap.String("user_id", userInfo.Sub),
@@ -223,6 +236,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to get user info", http.StatusInternalServerError)
 		return
 	}
+	h.groupPolicyMapper.Apply(userInfo)
 
 	// Генерируем новый session JWT
 	sessionID, _ := generateSessionID()

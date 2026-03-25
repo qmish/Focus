@@ -58,11 +58,12 @@ type RedisConfig struct {
 
 // KeycloakConfig конфигурация Keycloak OIDC
 type KeycloakConfig struct {
-	ServerURL    string
-	Realm        string
-	ClientID     string
-	ClientSecret string
-	RedirectURL  string
+	ServerURL          string
+	Realm              string
+	ClientID           string
+	ClientSecret       string
+	RedirectURL        string
+	GroupPolicyMapping string
 }
 
 // JitsiConfig конфигурация Jitsi Meet
@@ -121,11 +122,12 @@ func Load() *Config {
 			RequiredAudience: getEnv("AUTH_REQUIRED_AUDIENCE", "focus-frontend"),
 		},
 		Keycloak: KeycloakConfig{
-			ServerURL:    getEnv("KEYCLOAK_URL", "http://localhost:8180"),
-			Realm:        getEnv("KEYCLOAK_REALM", "company"),
-			ClientID:     getEnv("KEYCLOAK_CLIENT_ID", "messenger-api"),
-			ClientSecret: getEnv("KEYCLOAK_CLIENT_SECRET", ""),
-			RedirectURL:  getEnv("KEYCLOAK_REDIRECT_URL", "http://localhost:8080/api/v1/auth/callback"),
+			ServerURL:          getEnv("KEYCLOAK_URL", "http://localhost:8180"),
+			Realm:              getEnv("KEYCLOAK_REALM", "company"),
+			ClientID:           getEnv("KEYCLOAK_CLIENT_ID", "messenger-api"),
+			ClientSecret:       getEnv("KEYCLOAK_CLIENT_SECRET", ""),
+			RedirectURL:        getEnv("KEYCLOAK_REDIRECT_URL", "http://localhost:8080/api/v1/auth/callback"),
+			GroupPolicyMapping: getEnv("KEYCLOAK_GROUP_POLICY_MAPPING", ""),
 		},
 		Jitsi: JitsiConfig{
 			BaseURL:       getEnv("JITSI_BASE_URL", "https://meet.company.com"),

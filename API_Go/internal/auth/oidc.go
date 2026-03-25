@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -45,6 +46,7 @@ type UserInfo struct {
 	Name          string   `json:"name"`
 	EmailVerified bool     `json:"email_verified"`
 	Roles         []string `json:"roles"`
+	Groups        []string `json:"groups,omitempty"`
 	Scopes        []string `json:"scopes,omitempty"`
 	Scope         string   `json:"scope,omitempty"`
 }
@@ -411,4 +413,61 @@ func dedupeStrings(values []string) []string {
 		result = append(result, trimmed)
 	}
 	return result
+}
+
+// GroupPolicyRule maps Keycloak/AD group to API roles/scopes.
+type GroupPolicyRule struct {
+	Group  string   `json:"group"`
+	Roles  []string `json:"roles"`
+	Scopes []string `json:"scopes"`
+}
+
+// GroupPolicyMapper applies group-based role/scope mapping.
+type GroupPolicyMapper struct {
+	rulesByGroup map[string]GroupPolicyRule
+}
+
+// NewGroupPolicyMapperFromJSON builds mapper from JSON array of rules.
+func NewGroupPolicyMapperFromJSON(raw string) (*GroupPolicyMapper, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	var rules []GroupPolicyRule
+	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
+		return nil, fmt.Errorf("invalid KEYCLOAK_GROUP_POLICY_MAPPING: %w", err)
+	}
+	rulesByGroup := make(map[string]GroupPolicyRule, len(rules))
+	for _, rule := range rules {
+		group := strings.TrimSpace(rule.Group)
+		if group == "" {
+			continue
+		}
+		rule.Roles = dedupeStrings(rule.Roles)
+		rule.Scopes = dedupeStrings(rule.Scopes)
+		rulesByGroup[group] = rule
+	}
+	if len(rulesByGroup) == 0 {
+		return nil, nil
+	}
+	return &GroupPolicyMapper{rulesByGroup: rulesByGroup}, nil
+}
+
+// Apply extends user roles/scopes according to group policies.
+func (m *GroupPolicyMapper) Apply(userInfo *UserInfo) {
+	if m == nil || userInfo == nil || len(userInfo.Groups) == 0 {
+		return
+	}
+	roles := append([]string{}, userInfo.Roles...)
+	scopes := userInfo.AllScopes()
+	for _, group := range userInfo.Groups {
+		rule, ok := m.rulesByGroup[strings.TrimSpace(group)]
+		if !ok {
+			continue
+		}
+		roles = append(roles, rule.Roles...)
+		scopes = append(scopes, rule.Scopes...)
+	}
+	userInfo.Roles = dedupeStrings(roles)
+	userInfo.Scopes = dedupeStrings(scopes)
+	userInfo.Scope = ""
 }

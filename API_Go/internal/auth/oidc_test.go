@@ -364,6 +364,37 @@ func TestAuthMiddlewareWithAudience(t *testing.T) {
 	})
 }
 
+func TestGroupPolicyMapperApply(t *testing.T) {
+	raw := `[
+		{"group":"/focus/admins","roles":["admin"],"scopes":["focus.admin","focus.read"]},
+		{"group":"/focus/calendar","roles":["moderator"],"scopes":["focus.calendar"]}
+	]`
+	mapper, err := NewGroupPolicyMapperFromJSON(raw)
+	require.NoError(t, err)
+	require.NotNil(t, mapper)
+
+	user := &UserInfo{
+		Roles:  []string{"user"},
+		Scope:  "focus.read",
+		Groups: []string{"/focus/admins", "/focus/calendar"},
+	}
+	mapper.Apply(user)
+
+	assert.Contains(t, user.Roles, "user")
+	assert.Contains(t, user.Roles, "admin")
+	assert.Contains(t, user.Roles, "moderator")
+	allScopes := user.AllScopes()
+	assert.Contains(t, allScopes, "focus.read")
+	assert.Contains(t, allScopes, "focus.admin")
+	assert.Contains(t, allScopes, "focus.calendar")
+}
+
+func TestGroupPolicyMapperFromInvalidJSON(t *testing.T) {
+	mapper, err := NewGroupPolicyMapperFromJSON(`{`)
+	assert.Error(t, err)
+	assert.Nil(t, mapper)
+}
+
 // testResponseWriter тестовая реализация http.ResponseWriter
 type testResponseWriter struct {
 	statusCode int

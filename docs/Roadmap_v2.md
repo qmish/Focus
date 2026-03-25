@@ -46,7 +46,7 @@
 
 ### 1.2 Авторизация для корпоративных ресурсов
 - [ ] Определить перечень корп. ресурсов, требующих SSO (внутренние API, порталы, файловые ресурсы, сервисы).
-- [ ] Реализовать policy mapping в Keycloak: группы AD -> роли/скоупы в Focus API.
+- [x] Реализовать policy mapping в Keycloak: группы AD -> роли/скоупы в Focus API.
 - [x] Внедрить audience validation для session JWT в backend middleware (конфигурируемый `AUTH_REQUIRED_AUDIENCE`).
 - [ ] Настроить audience/scope для сервисных клиентов.
 - [x] Внедрить централизованную проверку ролей и скопов в backend middleware.
