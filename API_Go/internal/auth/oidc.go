@@ -243,6 +243,10 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
+		if IsSessionRevoked(claims.SessionID) {
+			http.Error(w, "session revoked", http.StatusUnauthorized)
+			return
+		}
 
 		// Добавляем claims в контекст
 		ctx := context.WithValue(r.Context(), ContextKeyUserClaims, claims)

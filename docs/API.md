@@ -117,6 +117,14 @@ Authorization: Bearer <session_token>
 
 **Ответ:** `204 No Content`
 
+**Поведение:**
+- Текущий `session_token` добавляется в revocation blacklist до его `exp`.
+- Повторное использование отозванного токена на защищенных endpoint возвращает `401 Unauthorized`.
+
+**Ошибки:**
+- `400 Bad Request` — отсутствует/некорректный `Authorization` header.
+- `401 Unauthorized` — токен невалиден или истек.
+
 ---
 
 ### 2.5. Получение текущего пользователя
@@ -756,7 +764,7 @@ Authorization: Bearer <session_token>
 **Параметры query:**
 | Параметр | Тип | Описание |
 |----------|-----|----------|
-| send_cancellation | boolean | Отправить уведомления (default: true) |
+| send_cancellation | boolean | Отправить cancellation notification (default: true). При `false` удаляется только событие. |
 
 **Ответ:** `204 No Content`
 
@@ -1079,19 +1087,14 @@ Authorization: Bearer <admin_token>
 {
   "data": [
     {
+      "id": "room-uuid",
       "room_id": "room-uuid",
       "room_name": "Общий чат",
       "jitsi_room": "room-uuid-jitsi",
       "participants_count": 5,
       "started_at": "2024-01-01T12:00:00Z",
-      "duration_seconds": 1800,
-      "participants": [
-        {
-          "user_id": "user-uuid",
-          "name": "User Name",
-          "joined_at": "2024-01-01T12:00:00Z"
-        }
-      ]
+      "last_activity_at": "2024-01-01T12:25:00Z",
+      "status": "active"
     }
   ]
 }
@@ -1112,11 +1115,16 @@ Authorization: Bearer <admin_token>
 
 ```json
 {
+  "id": "room-uuid",
   "room_id": "room-uuid",
   "ended": true,
   "ended_at": "2024-01-01T12:30:00Z"
 }
 ```
+
+**Ошибки:**
+- `400 Bad Request` — пустой/некорректный `id`, либо комната не является meeting-room.
+- `404 Not Found` — конференция не найдена.
 
 ---
 

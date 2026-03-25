@@ -82,13 +82,13 @@
 - [x] Добавить обработку reconnect с проверкой истекшего токена.
 
 ### 2.3 Завершение TODO-критики в backend
-- [ ] Реализовать TODO по `admin conferences` (получение активных конференций, завершение через интеграцию с Jitsi).
-- [ ] Реализовать TODO по `calendar cancellation notification`.
-- [ ] Закрыть технические TODO по auth/logout flow.
+- [x] Реализовать TODO по `admin conferences` (получение активных конференций и завершение через backend room lifecycle).
+- [x] Реализовать TODO по `calendar cancellation notification`.
+- [x] Закрыть технические TODO по auth/logout flow.
 
 ### Критерии готовности этапа 2
 - [ ] API и WS используют согласованную auth-модель.
-- [ ] Нет открытых критических TODO в auth/admin/calendar.
+- [x] Нет открытых критических TODO в auth/admin/calendar.
 - [ ] Пройдены smoke-тесты защищенных API и WS.
 
 ---

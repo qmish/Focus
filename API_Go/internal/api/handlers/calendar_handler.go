@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -16,22 +17,47 @@ import (
 
 // CalendarHandler обработчики для календаря
 type CalendarHandler struct {
-	graphClient *exchange.GraphClient
+	calendarService calendarService
 	roomRepo    *repository.RoomRepository
 	jitsiGen    *jitsi.TokenGenerator
+	cancellationNotifier CancellationNotifier
 }
+
+type calendarService interface {
+	GetEvents(ctx context.Context, userID string, start, end time.Time) ([]exchange.CalendarEvent, error)
+	CreateEvent(ctx context.Context, userID string, event exchange.CalendarEvent) (*exchange.CalendarEvent, error)
+	UpdateEvent(ctx context.Context, userID, eventID string, event exchange.CalendarEvent) error
+	DeleteEvent(ctx context.Context, userID, eventID string) error
+}
+
+type CancellationNotifier func(ctx context.Context, userEmail, eventID string) error
 
 // NewCalendarHandler создаёт новый CalendarHandler
 func NewCalendarHandler(graphClient *exchange.GraphClient, roomRepo *repository.RoomRepository, jitsiGen *jitsi.TokenGenerator) *CalendarHandler {
 	return &CalendarHandler{
-		graphClient: graphClient,
-		roomRepo:    roomRepo,
-		jitsiGen:    jitsiGen,
+		calendarService: graphClient,
+		roomRepo:        roomRepo,
+		jitsiGen:        jitsiGen,
+		cancellationNotifier: func(ctx context.Context, userEmail, eventID string) error {
+			return nil
+		},
 	}
+}
+
+// SetCancellationNotifier sets custom cancellation notification sender.
+func (h *CalendarHandler) SetCancellationNotifier(notifier CancellationNotifier) {
+	if notifier == nil {
+		return
+	}
+	h.cancellationNotifier = notifier
 }
 
 // GetEvents GET /api/v1/calendar/events
 func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
+	if h.calendarService == nil {
+		http.Error(w, "calendar service unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -68,7 +94,7 @@ func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	// Получаем события из Exchange
 	// В production использовать реальный email пользователя из claims
 	userEmail := claims.Email
-	events, err := h.graphClient.GetEvents(r.Context(), userEmail, start, end)
+	events, err := h.calendarService.GetEvents(r.Context(), userEmail, start, end)
 	if err != nil {
 		http.Error(w, "failed to get events", http.StatusInternalServerError)
 		return
@@ -85,6 +111,10 @@ func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 
 // CreateEvent POST /api/v1/calendar/events
 func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
+	if h.calendarService == nil {
+		http.Error(w, "calendar service unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -170,7 +200,7 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 
 	// В production использовать реальный email пользователя
 	userEmail := claims.Email
-	createdEvent, err := h.graphClient.CreateEvent(r.Context(), userEmail, event)
+	createdEvent, err := h.calendarService.CreateEvent(r.Context(), userEmail, event)
 	if err != nil {
 		http.Error(w, "failed to create event", http.StatusInternalServerError)
 		return
@@ -194,6 +224,10 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 
 // UpdateEvent PUT /api/v1/calendar/events/:id
 func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
+	if h.calendarService == nil {
+		http.Error(w, "calendar service unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -243,7 +277,7 @@ func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 
 	// В production использовать реальный email пользователя
 	userEmail := claims.Email
-	err := h.graphClient.UpdateEvent(r.Context(), userEmail, eventID, event)
+	err := h.calendarService.UpdateEvent(r.Context(), userEmail, eventID, event)
 	if err != nil {
 		http.Error(w, "failed to update event", http.StatusInternalServerError)
 		return
@@ -258,6 +292,10 @@ func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 
 // DeleteEvent DELETE /api/v1/calendar/events/:id
 func (h *CalendarHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
+	if h.calendarService == nil {
+		http.Error(w, "calendar service unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -271,14 +309,16 @@ func (h *CalendarHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendCancellation := r.URL.Query().Get("send_cancellation") != "false"
-	_ = sendCancellation // TODO: Реализовать отправку уведомлений об отмене
 
 	// В production использовать реальный email пользователя
 	userEmail := claims.Email
-	err := h.graphClient.DeleteEvent(r.Context(), userEmail, eventID)
+	err := h.calendarService.DeleteEvent(r.Context(), userEmail, eventID)
 	if err != nil {
 		http.Error(w, "failed to delete event", http.StatusInternalServerError)
 		return
+	}
+	if sendCancellation && h.cancellationNotifier != nil {
+		_ = h.cancellationNotifier(r.Context(), userEmail, eventID)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

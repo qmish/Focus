@@ -148,6 +148,15 @@ func (r *RoomRepository) IsParticipant(ctx context.Context, roomID, userID uuid.
 	return count > 0, nil
 }
 
+// CountParticipants returns number of participants in a room.
+func (r *RoomRepository) CountParticipants(ctx context.Context, roomID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&models.RoomParticipant{}).
+		Where("room_id = ?", roomID).
+		Count(&count).Error
+	return count, err
+}
+
 // Search ищет комнаты по названию
 func (r *RoomRepository) Search(ctx context.Context, query string, limit int) ([]*models.Room, error) {
 	var rooms []*models.Room

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -232,8 +233,29 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 // Logout POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	// В production нужно добавить token blacklist в Redis
-	// Пока просто возвращаем успех
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, "missing authorization header", http.StatusBadRequest)
+		return
+	}
+
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		http.Error(w, "invalid authorization format", http.StatusBadRequest)
+		return
+	}
+
+	claims, err := auth.ValidateSessionJWT(parts[1], h.sessionSecret)
+	if err != nil {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	expiresAt := time.Now().Add(24 * time.Hour)
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time
+	}
+	auth.RevokeSession(claims.SessionID, expiresAt)
 
 	w.WriteHeader(http.StatusNoContent)
 }
