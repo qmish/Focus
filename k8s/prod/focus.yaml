@@ -1,0 +1,397 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: messenger-prod
+  labels:
+    name: messenger-prod
+    environment: production
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: focus-secrets
+  namespace: messenger-prod
+  annotations:
+    focus.dev/rotation-window: "30d"
+type: Opaque
+stringData:
+  db-password: CHANGE_ME_PROD_DB_PASSWORD
+  redis-password: CHANGE_ME_PROD_REDIS_PASSWORD
+  keycloak-client-secret: CHANGE_ME_PROD_KEYCLOAK_CLIENT_SECRET
+  jwt-secret: CHANGE_ME_PROD_JWT_SECRET
+  jitsi-app-secret: CHANGE_ME_PROD_JITSI_SECRET
+  exchange-client-secret: CHANGE_ME_PROD_EXCHANGE_CLIENT_SECRET
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-go
+  namespace: messenger-prod
+  labels:
+    app: api-go
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: api-go
+  template:
+    metadata:
+      labels:
+        app: api-go
+    spec:
+      containers:
+      - name: api-go
+        image: ghcr.io/qmish/focus/api-go:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: ENV
+          value: production
+        - name: SERVER_PORT
+          value: "8080"
+        - name: DB_HOST
+          value: postgres.infra.svc.cluster.local
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: focus
+        - name: DB_USER
+          value: focus
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: focus-secrets
+              key: db-password
+        - name: REDIS_HOST
+          value: redis.infra.svc.cluster.local
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: focus-secrets
+              key: redis-password
+        - name: KEYCLOAK_URL
+          value: https://keycloak.company.com
+        - name: KEYCLOAK_CLIENT_ID
+          value: messenger-api
+        - name: KEYCLOAK_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: focus-secrets
+              key: keycloak-client-secret
+        - name: JITSI_BASE_URL
+          value: https://meet.company.com
+        - name: JITSI_APP_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: focus-secrets
+              key: jitsi-app-secret
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: focus-secrets
+              key: jwt-secret
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      dnsPolicy: ClusterFirst
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: messenger-prod
+  labels:
+    app: frontend
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: ghcr.io/qmish/focus/frontend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-admin
+  namespace: messenger-prod
+  labels:
+    app: frontend-admin
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: frontend-admin
+  template:
+    metadata:
+      labels:
+        app: frontend-admin
+    spec:
+      containers:
+      - name: frontend-admin
+        image: ghcr.io/qmish/focus/frontend-admin:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            cpu: 150m
+            memory: 192Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-go
+  namespace: messenger-prod
+spec:
+  selector:
+    app: api-go
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: messenger-prod
+spec:
+  selector:
+    app: frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-admin
+  namespace: messenger-prod
+spec:
+  selector:
+    app: frontend-admin
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-go-hpa
+  namespace: messenger-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-go
+  minReplicas: 3
+  maxReplicas: 12
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: jvb-hpa
+  namespace: jitsi
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: jvb
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: messenger-prod-ingress
+  namespace: messenger-prod
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: api.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-go
+            port:
+              number: 80
+  - host: chat.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+  - host: admin.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-admin
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - api.company.com
+    secretName: api-prod-tls
+  - hosts:
+    - chat.company.com
+    secretName: chat-prod-tls
+  - hosts:
+    - admin.company.com
+    secretName: admin-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: messenger-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-from-nginx
+  namespace: messenger-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-infra-jitsi-dns
+  namespace: messenger-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: infra
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: jitsi
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53

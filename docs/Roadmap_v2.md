@@ -167,9 +167,9 @@
 - [x] Обеспечить команду "one command up" для dev-окружения.
 
 ### 6.2 Kubernetes/stage/prod
-- [ ] Актуализировать манифесты для Focus API/frontends/Jitsi fork.
-- [ ] Проверить autoscaling-политики для API и JVB.
-- [ ] Настроить ingress/TLS, сетевые политики, секреты и ротацию.
+- [x] Актуализировать манифесты для Focus API/frontends/Jitsi fork.
+- [x] Проверить autoscaling-политики для API и JVB.
+- [x] Настроить ingress/TLS, сетевые политики, секреты и ротацию.
 
 ### 6.3 CI/CD
 - [x] Включить e2e/load/security проверки в pipeline gates.
@@ -177,7 +177,7 @@
 - [x] Реализовать стратегию rollout/rollback (stage -> prod).
 
 ### Критерии готовности этапа 6
-- [ ] Локальная и stage среды поднимаются и воспроизводимы.
+- [x] Локальная и stage среды поднимаются и воспроизводимы.
 - [x] Pipeline блокирует релизы при провале quality/security gates.
 - [x] Есть отработанный rollback на production.
 

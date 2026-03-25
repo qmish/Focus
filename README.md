@@ -45,6 +45,7 @@
 | [Database](./docs/Database.md) | Проектирование БД |
 | [Integration](./docs/Integration.md) | Интеграции с внешними системами |
 | [Rollout/Rollback Runbook](./docs/Runbook_RolloutRollback.md) | Порядок релиза и отката stage -> prod |
+| [K8s Manifests Guide](./k8s/README.md) | Применение stage/prod манифестов |
 
 ## 🚀 Быстрый старт
 
