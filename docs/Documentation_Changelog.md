@@ -2,6 +2,10 @@
 
 ## 2026-03-25
 
+- Добавлены operational документы:
+  - `docs/OnCall_Runbook.md`,
+  - `docs/GoLive_Checklist.md`.
+- В `docs/Roadmap_v2.md` закрыты 2 подпункта `7.3` (on-call runbook, release checklist/go-live criteria).
 - Расширено API e2e покрытие в `tests/e2e/ci-api.spec.ts`:
   - auth redirect flow,
   - unauth room/chat/bot/admin checks,

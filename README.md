@@ -48,6 +48,8 @@
 | [K8s Manifests Guide](./k8s/README.md) | Применение stage/prod манифестов |
 | [Security Review](./docs/Security_Review_Auth_WS_Webhooks.md) | Security review auth/ws/webhook/token flows |
 | [RBAC/ABAC Review](./docs/RBAC_ABAC_Review.md) | Аудит ролевой и атрибутивной авторизации |
+| [On-call Runbook](./docs/OnCall_Runbook.md) | Регламент реагирования на инциденты |
+| [Go-live Checklist](./docs/GoLive_Checklist.md) | Формальный checklist релиза в production |
 
 ## 🚀 Быстрый старт
 
