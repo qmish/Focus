@@ -198,6 +198,7 @@
 - [x] Добавить API-level user journey e2e: `create room -> join call -> send/list message -> admin conferences`.
 - [x] Добавить API-level e2e проверки для admin audit endpoint'ов (`/admin/auth/audit`, `/admin/calendar/audit`) с позитивными и ролевыми негативными кейсами.
 - [x] Подготовить отдельный stage-harness для e2e с реальной OIDC аутентификацией (manual workflow + browser flow).
+- [x] Автоматизировать регулярный запуск stage real OIDC e2e (nightly schedule + repo vars для URL).
 - [x] Стабилизировать Playwright e2e harness (корректный test discovery/output path в `tests/e2e/playwright.config.ts`).
 - [x] Зафиксировать `.gitignore` для e2e-артефактов (`node_modules`/`playwright-report`/`results`) в `tests/e2e`.
 - [x] Добавить e2e сценарии с реальной аутентификацией и пользовательскими happy-path потоками (auth -> room -> chat -> call -> admin).

@@ -2,6 +2,13 @@
 
 ## 2026-03-25
 
+- Усилено покрытие WebSocket flow в CI через backend unit/integration tests:
+  - `API_Go/internal/websocket/hub_test.go`: добавлены тесты на отказ upgrade при запрещенном `Origin`
+    и e2e-поток подписки с room-level access control (`allowed` + `forbidden_room`).
+- Усилен stage OIDC e2e gate:
+  - `.github/workflows/stage-oidc-e2e.yml`: добавлен nightly `schedule`,
+    fallback на repository vars (`STAGE_BASE_URL`, `STAGE_KEYCLOAK_URL`) и явная валидация URL.
+- Обновлен `docs/Roadmap_v2.md` (этап `7.1`) с фиксацией автоматизации stage real OIDC e2e запуска.
 - Закрыты TODO по inbound webhook lifecycle (`conference.*`, `participant.*`):
   - `API_Go/internal/webhooks/webhooks.go`: добавлен `RoomLifecycleRepository`,
     реализованы обработчики `conference.created|ended` (touch room activity) и

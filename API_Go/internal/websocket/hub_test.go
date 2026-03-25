@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	gws "github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -298,4 +300,72 @@ func TestClientTokenExpired(t *testing.T) {
 
 	client = &Client{}
 	assert.False(t, client.tokenExpired())
+}
+
+func TestWebSocketRejectsDisallowedOriginOnUpgrade(t *testing.T) {
+	hub := NewHub(zap.NewNop())
+	hub.SetAllowedOrigins([]string{"https://chat.company.com"})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hub.HandleWebSocket(w, r, "user-1", time.Now().Add(time.Minute))
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + server.URL[len("http"):] + "/"
+	dialer := gws.Dialer{}
+	headers := http.Header{}
+	headers.Set("Origin", "https://evil.example.com")
+	conn, _, err := dialer.Dial(wsURL, headers)
+	if conn != nil {
+		conn.Close()
+	}
+	assert.Error(t, err)
+}
+
+func TestWebSocketSubscribeFlowWithAccessControl(t *testing.T) {
+	hub := NewHub(zap.NewNop())
+	hub.SetAllowedOrigins([]string{"https://chat.company.com"})
+	hub.SetStrictRoomAccess(true)
+	hub.SetRoomAccessChecker(func(_ context.Context, userID, roomID string) (bool, error) {
+		return userID == "user-1" && roomID == "room-allowed", nil
+	})
+	go hub.Run()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hub.HandleWebSocket(w, r, "user-1", time.Now().Add(time.Minute))
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + server.URL[len("http"):] + "/"
+	dialer := gws.Dialer{}
+	headers := http.Header{}
+	headers.Set("Origin", "https://chat.company.com")
+	conn, _, err := dialer.Dial(wsURL, headers)
+	assert.NoError(t, err)
+	defer conn.Close()
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+
+	allowedPayload := json.RawMessage(`{"room_id":"room-allowed"}`)
+	allowedReq := WSMessage{Type: MessageTypeSubscribe, Payload: allowedPayload}
+	err = conn.WriteJSON(allowedReq)
+	assert.NoError(t, err)
+
+	var subscribeAck WSMessage
+	err = conn.ReadJSON(&subscribeAck)
+	assert.NoError(t, err)
+	assert.Equal(t, MessageTypeSubscribe, subscribeAck.Type)
+
+	deniedPayload := json.RawMessage(`{"room_id":"room-denied"}`)
+	deniedReq := WSMessage{Type: MessageTypeSubscribe, Payload: deniedPayload}
+	err = conn.WriteJSON(deniedReq)
+	assert.NoError(t, err)
+
+	var deniedResp WSMessage
+	err = conn.ReadJSON(&deniedResp)
+	assert.NoError(t, err)
+	assert.Equal(t, MessageTypeError, deniedResp.Type)
+
+	var payload ErrorPayload
+	err = json.Unmarshal(deniedResp.Payload, &payload)
+	assert.NoError(t, err)
+	assert.Equal(t, "forbidden_room", payload.Code)
 }

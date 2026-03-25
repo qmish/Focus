@@ -1,6 +1,8 @@
 name: Stage OIDC E2E
 
 on:
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       base_url:
@@ -16,6 +18,9 @@ jobs:
   real-oidc-e2e:
     name: Run real OIDC browser flow
     runs-on: ubuntu-latest
+    env:
+      STAGE_BASE_URL: ${{ vars.STAGE_BASE_URL }}
+      STAGE_KEYCLOAK_URL: ${{ vars.STAGE_KEYCLOAK_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,4 +37,13 @@ jobs:
         env:
           E2E_OIDC_USERNAME: ${{ secrets.E2E_OIDC_USERNAME }}
           E2E_OIDC_PASSWORD: ${{ secrets.E2E_OIDC_PASSWORD }}
-        run: E2E_REAL_OIDC=1 BASE_URL="${{ github.event.inputs.base_url }}" KEYCLOAK_URL="${{ github.event.inputs.keycloak_url }}" npx playwright test real-oidc.spec.ts --project=chromium
+        run: |
+          BASE="${{ github.event.inputs.base_url }}"
+          KEYCLOAK="${{ github.event.inputs.keycloak_url }}"
+          if [ -z "$BASE" ]; then BASE="$STAGE_BASE_URL"; fi
+          if [ -z "$KEYCLOAK" ]; then KEYCLOAK="$STAGE_KEYCLOAK_URL"; fi
+          if [ -z "$BASE" ] || [ -z "$KEYCLOAK" ]; then
+            echo "Missing stage URLs. Set workflow_dispatch inputs or repository vars STAGE_BASE_URL/STAGE_KEYCLOAK_URL."
+            exit 1
+          fi
+          E2E_REAL_OIDC=1 BASE_URL="$BASE" KEYCLOAK_URL="$KEYCLOAK" npx playwright test real-oidc.spec.ts --project=chromium
