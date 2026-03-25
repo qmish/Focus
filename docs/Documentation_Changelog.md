@@ -2,6 +2,11 @@
 
 ## 2026-03-25
 
+- Расширен `frontend-admin` раздел наблюдаемости:
+  - `frontend-admin/src/pages/ObservabilityPage.tsx` теперь показывает ошибки `auth audit` и `calendar audit`,
+  - добавлены мапперы статусов/операций в `frontend-admin/src/lib/observability.ts`,
+  - добавлены тесты в `frontend-admin/src/lib/observability.test.ts`.
+- В `docs/Roadmap_v2.md` добавлен и закрыт пункт `5.2` про расширение observability для `auth/calendar` audit.
 - В `docs/Roadmap_v2.md` закрыт пункт `1.4` по разделению секретов session JWT и Jitsi JWT.
   Подтверждение в коде: отдельные конфиги/секреты `SESSION_SECRET` и `JITSI_APP_SECRET`
   + security-валидация запрета одинаковых значений (`API_Go/internal/config/config.go`).

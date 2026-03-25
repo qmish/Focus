@@ -16,3 +16,20 @@ export function botStatusLabel(status: string): string {
       return status
   }
 }
+
+export function authAuditStatusLabel(status: string): string {
+  return status === 'success' ? 'Успешно' : 'Ошибка'
+}
+
+export function calendarOperationLabel(operation: string): string {
+  switch (operation) {
+    case 'create':
+      return 'Создание'
+    case 'update':
+      return 'Обновление'
+    case 'delete':
+      return 'Удаление'
+    default:
+      return operation
+  }
+}
