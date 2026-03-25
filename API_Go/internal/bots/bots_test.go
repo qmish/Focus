@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/models"
@@ -277,6 +278,83 @@ func TestHandleMessageSkipsBotResponseWhenUserNotParticipant(t *testing.T) {
 	assert.Empty(t, broadcaster.published)
 }
 
+func TestHandleMeetingCreateCreatesRoomAndReturnsJitsiURL(t *testing.T) {
+	repo := &fakeBotMessageRepo{}
+	roomChecker := &fakeBotRoomChecker{isParticipant: true}
+	broadcaster := &fakeBotBroadcaster{}
+	roomRepo := &fakeBotRoomRepo{}
+	userID := uuid.New()
+	engine := NewBotEngineWithDelivery(repo, roomChecker, broadcaster, uuid.New())
+	engine.SetRoomRepository(roomRepo)
+	engine.SetJitsiBaseURL("https://meet.example.com")
+
+	err := engine.HandleMessage(context.Background(), uuid.New().String(), userID.String(), "/create meeting Планерка")
+	require.NoError(t, err)
+	require.Len(t, roomRepo.created, 1)
+	assert.Equal(t, models.RoomTypeMeeting, roomRepo.created[0].Type)
+	assert.Contains(t, repo.messages[0].Content, "https://meet.example.com/")
+}
+
+func TestHandleMeetingScheduleSchedulesCalendar(t *testing.T) {
+	repo := &fakeBotMessageRepo{}
+	roomChecker := &fakeBotRoomChecker{isParticipant: true}
+	broadcaster := &fakeBotBroadcaster{}
+	roomRepo := &fakeBotRoomRepo{}
+	scheduler := &fakeBotScheduler{}
+	userID := uuid.New()
+	engine := NewBotEngineWithDelivery(repo, roomChecker, broadcaster, uuid.New())
+	engine.SetRoomRepository(roomRepo)
+	engine.SetCalendarScheduler(scheduler)
+	engine.SetJitsiBaseURL("https://meet.example.com")
+
+	err := engine.HandleMessage(
+		context.Background(),
+		uuid.New().String(),
+		userID.String(),
+		"/schedule meeting Обзор at 2030-01-02 15:04",
+	)
+	require.NoError(t, err)
+	require.Len(t, scheduler.calls, 1)
+	assert.Equal(t, "Обзор", scheduler.calls[0].title)
+	assert.Contains(t, scheduler.calls[0].roomURL, "https://meet.example.com/")
+}
+
+func TestHandleStatusUsesRoomRepository(t *testing.T) {
+	repo := &fakeBotMessageRepo{}
+	roomChecker := &fakeBotRoomChecker{isParticipant: true}
+	broadcaster := &fakeBotBroadcaster{}
+	roomRepo := &fakeBotRoomRepo{
+		listRooms: []*models.Room{
+			{ID: uuid.New(), Type: models.RoomTypeMeeting},
+			{ID: uuid.New(), Type: models.RoomTypePublic},
+		},
+	}
+	engine := NewBotEngineWithDelivery(repo, roomChecker, broadcaster, uuid.New())
+	engine.SetRoomRepository(roomRepo)
+
+	err := engine.HandleMessage(context.Background(), uuid.New().String(), uuid.New().String(), "/status")
+	require.NoError(t, err)
+	require.Len(t, repo.messages, 1)
+	assert.Contains(t, repo.messages[0].Content, "Всего комнат: 2")
+	assert.Contains(t, repo.messages[0].Content, "Активных встреч: 1")
+}
+
+func TestHandleMessageRateLimited(t *testing.T) {
+	repo := &fakeBotMessageRepo{}
+	roomChecker := &fakeBotRoomChecker{isParticipant: true}
+	broadcaster := &fakeBotBroadcaster{}
+	engine := NewBotEngineWithDelivery(repo, roomChecker, broadcaster, uuid.New())
+	engine.SetRateLimitWindow(1 * time.Hour)
+
+	roomID := uuid.New().String()
+	userID := uuid.New().String()
+	err := engine.HandleMessage(context.Background(), roomID, userID, "/help")
+	require.NoError(t, err)
+	err = engine.HandleMessage(context.Background(), roomID, userID, "/status")
+	require.NoError(t, err)
+	assert.Len(t, repo.messages, 1)
+}
+
 type fakeBotMessageRepo struct {
 	messages []*models.Message
 }
@@ -308,4 +386,48 @@ func (f *fakeBotBroadcaster) BroadcastToRoom(roomID string, message websocket.WS
 		roomID:  roomID,
 		message: message,
 	})
+}
+
+type fakeBotRoomRepo struct {
+	created   []*models.Room
+	listRooms []*models.Room
+}
+
+func (f *fakeBotRoomRepo) Create(ctx context.Context, room *models.Room) error {
+	f.created = append(f.created, room)
+	return nil
+}
+
+func (f *fakeBotRoomRepo) AddParticipant(ctx context.Context, roomID, userID uuid.UUID, role models.ParticipantRole) error {
+	return nil
+}
+
+func (f *fakeBotRoomRepo) List(ctx context.Context, limit, offset int) ([]*models.Room, error) {
+	if f.listRooms == nil {
+		return f.created, nil
+	}
+	return f.listRooms, nil
+}
+
+type fakeBotScheduleCall struct {
+	userID  uuid.UUID
+	title   string
+	start   time.Time
+	end     time.Time
+	roomURL string
+}
+
+type fakeBotScheduler struct {
+	calls []fakeBotScheduleCall
+}
+
+func (f *fakeBotScheduler) ScheduleMeeting(ctx context.Context, userID uuid.UUID, title string, start, end time.Time, roomURL string) error {
+	f.calls = append(f.calls, fakeBotScheduleCall{
+		userID:  userID,
+		title:   title,
+		start:   start,
+		end:     end,
+		roomURL: roomURL,
+	})
+	return nil
 }

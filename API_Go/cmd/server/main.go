@@ -130,6 +130,13 @@ func main() {
 
 	botUserID := uuid.NewSHA1(uuid.NameSpaceDNS, []byte("focus-system-bot"))
 	botEngine := bots.NewBotEngineWithDelivery(messageRepo, roomRepo, wsHub, botUserID)
+	botEngine.SetRoomRepository(roomRepo)
+	botEngine.SetJitsiBaseURL(cfg.Jitsi.BaseURL)
+	botEngine.SetRateLimitWindow(2 * time.Second)
+	botEngine.SetCalendarScheduler(&botMeetingScheduler{
+		graphClient: graphClient,
+		userRepo:    userRepo,
+	})
 
 	// Создание handlers
 	authHandler := handlers.NewAuthHandler(oidcProvider, userRepo, jitsiGen, cfg, logger.WithContext(context.Background()))
@@ -311,4 +318,38 @@ func readinessCheck(db *database.Database) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ready"}`))
 	}
+}
+
+type botMeetingScheduler struct {
+	graphClient *exchange.GraphClient
+	userRepo    *repository.UserRepository
+}
+
+func (s *botMeetingScheduler) ScheduleMeeting(
+	ctx context.Context,
+	userID uuid.UUID,
+	title string,
+	start, end time.Time,
+	roomURL string,
+) error {
+	if s.graphClient == nil || s.userRepo == nil {
+		return nil
+	}
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	_, err = s.graphClient.CreateEvent(ctx, user.Email, exchange.CalendarEvent{
+		Subject:     title,
+		Description: "Создано через BotEngine /schedule",
+		StartTime:   start,
+		EndTime:     end,
+		Location:    "Jitsi Meeting",
+		JitsiURL:    roomURL,
+		Organizer: exchange.EventAttendee{
+			Email: user.Email,
+			Name:  user.Name,
+		},
+	})
+	return err
 }

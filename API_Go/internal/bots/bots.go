@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -50,11 +51,18 @@ type BotCommand struct {
 
 // BotEngine движок ботов
 type BotEngine struct {
-	handlers    map[string]BotHandler
-	messageRepo BotMessageRepository
-	roomChecker BotRoomAccessChecker
-	broadcaster BotBroadcaster
-	botUserID   uuid.UUID
+	handlers          map[string]BotHandler
+	messageRepo       BotMessageRepository
+	roomChecker       BotRoomAccessChecker
+	roomRepo          BotRoomRepository
+	broadcaster       BotBroadcaster
+	calendarScheduler BotCalendarScheduler
+	botUserID         uuid.UUID
+	jitsiBaseURL      string
+	rateLimitWindow   time.Duration
+	lastCommandAt     map[string]time.Time
+	mu                sync.Mutex
+	now               func() time.Time
 }
 
 // BotHandler обработчик команд бота
@@ -75,10 +83,26 @@ type BotBroadcaster interface {
 	BroadcastToRoom(roomID string, message websocket.WSMessage)
 }
 
+// BotRoomRepository performs room operations for bot commands.
+type BotRoomRepository interface {
+	Create(ctx context.Context, room *models.Room) error
+	AddParticipant(ctx context.Context, roomID, userID uuid.UUID, role models.ParticipantRole) error
+	List(ctx context.Context, limit, offset int) ([]*models.Room, error)
+}
+
+// BotCalendarScheduler schedules bot meetings in calendar provider.
+type BotCalendarScheduler interface {
+	ScheduleMeeting(ctx context.Context, userID uuid.UUID, title string, start, end time.Time, roomURL string) error
+}
+
 // NewBotEngine создаёт новый BotEngine
 func NewBotEngine() *BotEngine {
 	engine := &BotEngine{
-		handlers: make(map[string]BotHandler),
+		handlers:        make(map[string]BotHandler),
+		jitsiBaseURL:    "https://meet.company.com",
+		rateLimitWindow: 2 * time.Second,
+		lastCommandAt:   make(map[string]time.Time),
+		now:             time.Now,
 	}
 
 	// Регистрируем встроенных ботов
@@ -102,10 +126,36 @@ func NewBotEngineWithDelivery(
 	return engine
 }
 
+// SetRoomRepository injects room repo for create/schedule/status commands.
+func (e *BotEngine) SetRoomRepository(roomRepo BotRoomRepository) {
+	e.roomRepo = roomRepo
+}
+
+// SetCalendarScheduler injects calendar scheduler for /schedule integration.
+func (e *BotEngine) SetCalendarScheduler(scheduler BotCalendarScheduler) {
+	e.calendarScheduler = scheduler
+}
+
+// SetJitsiBaseURL sets base URL used in bot-created meeting links.
+func (e *BotEngine) SetJitsiBaseURL(baseURL string) {
+	if strings.TrimSpace(baseURL) == "" {
+		return
+	}
+	e.jitsiBaseURL = strings.TrimRight(baseURL, "/")
+}
+
+// SetRateLimitWindow sets minimal interval between commands per user.
+func (e *BotEngine) SetRateLimitWindow(window time.Duration) {
+	if window <= 0 {
+		return
+	}
+	e.rateLimitWindow = window
+}
+
 func (e *BotEngine) registerBuiltinBots() {
 	// Meeting Bot
-	e.handlers["meeting_create"] = e.handleMeetingCreate
-	e.handlers["meeting_schedule"] = e.handleMeetingSchedule
+	e.handlers["create"] = e.handleMeetingCreate
+	e.handlers["schedule"] = e.handleMeetingSchedule
 
 	// Help Bot
 	e.handlers["help"] = e.handleHelp
@@ -136,6 +186,9 @@ func (e *BotEngine) HandleMessage(ctx context.Context, roomID, userID, content s
 	// Проверяем встроенные команды
 	if handler, ok := e.handlers[command]; ok {
 		if !e.canHandleInRoom(ctx, roomID, userID) {
+			return nil
+		}
+		if e.isRateLimited(userID) {
 			return nil
 		}
 		response, err := handler(ctx, roomID, userID, command, args)
@@ -201,24 +254,58 @@ func (e *BotEngine) canHandleInRoom(ctx context.Context, roomID, userID string) 
 
 // handleMeetingCreate обработчик команды /create
 func (e *BotEngine) handleMeetingCreate(ctx context.Context, roomID, userID, command, args string) (string, error) {
-	// Парсим аргументы: /create meeting [название]
-	if args == "" {
-		return "Использование: `/create meeting [название]`", nil
+	title := normalizeMeetingTitle(args)
+	if title == "" {
+		return "Использование: `/create meeting <название>`", nil
+	}
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Sprintf("Встреча \"%s\" создана!", title), nil
 	}
 
-	// TODO: Создать встречу
-	return fmt.Sprintf("Встреча \"%s\" создана!", args), nil
+	if e.roomRepo == nil {
+		return fmt.Sprintf("Встреча \"%s\" создана!", title), nil
+	}
+	room := models.NewRoom(title, userUUID, models.RoomTypeMeeting)
+	if err := e.roomRepo.Create(ctx, room); err != nil {
+		return "", err
+	}
+	_ = e.roomRepo.AddParticipant(ctx, room.ID, userUUID, models.ParticipantRoleModerator)
+	return fmt.Sprintf("Встреча \"%s\" создана: %s/%s", title, e.jitsiBaseURL, room.JitsiRoomName), nil
 }
 
 // handleMeetingSchedule обработчик команды /schedule
 func (e *BotEngine) handleMeetingSchedule(ctx context.Context, roomID, userID, command, args string) (string, error) {
-	// Парсим аргументы: /schedule meeting "название" tomorrow 15:00
-	if args == "" {
-		return "Использование: `/schedule meeting \"название\" <дата> <время>`", nil
+	title, startAt, ok := parseScheduleArgs(args, e.now())
+	if !ok {
+		legacyTitle := normalizeMeetingTitle(args)
+		if legacyTitle != "" {
+			return fmt.Sprintf("Встреча \"%s\" запланирована!", legacyTitle), nil
+		}
+		return "Использование: `/schedule meeting <название> at <YYYY-MM-DD HH:MM|RFC3339>`", nil
 	}
 
-	// TODO: Запланировать встречу
-	return fmt.Sprintf("Встреча \"%s\" запланирована!", args), nil
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Sprintf("Встреча \"%s\" запланирована на %s", title, startAt.Format("02.01.2006 15:04")), nil
+	}
+
+	if e.roomRepo == nil {
+		return fmt.Sprintf("Встреча \"%s\" запланирована на %s", title, startAt.Format("02.01.2006 15:04")), nil
+	}
+
+	room := models.NewRoom(title, userUUID, models.RoomTypeMeeting)
+	room.Description = "scheduled_at=" + startAt.UTC().Format(time.RFC3339)
+	if err := e.roomRepo.Create(ctx, room); err != nil {
+		return "", err
+	}
+	_ = e.roomRepo.AddParticipant(ctx, room.ID, userUUID, models.ParticipantRoleModerator)
+
+	roomURL := fmt.Sprintf("%s/%s", e.jitsiBaseURL, room.JitsiRoomName)
+	if e.calendarScheduler != nil {
+		_ = e.calendarScheduler.ScheduleMeeting(ctx, userUUID, title, startAt, startAt.Add(time.Hour), roomURL)
+	}
+	return fmt.Sprintf("Встреча \"%s\" запланирована на %s: %s", title, startAt.Format("02.01.2006 15:04"), roomURL), nil
 }
 
 // handleHelp обработчик команды /help
@@ -242,8 +329,25 @@ func (e *BotEngine) handleHelp(ctx context.Context, roomID, userID, command, arg
 
 // handleStatus обработчик команды /status
 func (e *BotEngine) handleStatus(ctx context.Context, roomID, userID, command, args string) (string, error) {
-	// TODO: Получить статус активных комнат
-	return "📊 Статус комнат:\n\nАктивных встреч: 0", nil
+	if e.roomRepo == nil {
+		return "📊 Статус комнат:\n\nАктивных встреч: 0", nil
+	}
+	rooms, err := e.roomRepo.List(ctx, 500, 0)
+	if err != nil {
+		return "", err
+	}
+	totalRooms := 0
+	activeMeetings := 0
+	for _, room := range rooms {
+		if room == nil {
+			continue
+		}
+		totalRooms++
+		if room.Type == models.RoomTypeMeeting {
+			activeMeetings++
+		}
+	}
+	return fmt.Sprintf("📊 Статус комнат:\n\nВсего комнат: %d\nАктивных встреч: %d", totalRooms, activeMeetings), nil
 }
 
 // CreateBot создаёт нового бота
@@ -259,4 +363,54 @@ func CreateBot(name, description string, ownerID uuid.UUID, commands []BotComman
 			Commands: commands,
 		},
 	}
+}
+
+func (e *BotEngine) isRateLimited(userID string) bool {
+	if e.rateLimitWindow <= 0 {
+		return false
+	}
+	now := e.now()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	lastAt, ok := e.lastCommandAt[userID]
+	if ok && now.Sub(lastAt) < e.rateLimitWindow {
+		return true
+	}
+	e.lastCommandAt[userID] = now
+	return false
+}
+
+func normalizeMeetingTitle(args string) string {
+	title := strings.TrimSpace(args)
+	title = strings.TrimPrefix(title, "meeting")
+	title = strings.TrimSpace(title)
+	return title
+}
+
+func parseScheduleArgs(args string, now time.Time) (string, time.Time, bool) {
+	trimmed := strings.TrimSpace(args)
+	if trimmed == "" {
+		return "", time.Time{}, false
+	}
+	trimmed = strings.TrimPrefix(trimmed, "meeting")
+	trimmed = strings.TrimSpace(trimmed)
+	parts := strings.Split(trimmed, " at ")
+	if len(parts) != 2 {
+		return "", time.Time{}, false
+	}
+	title := strings.TrimSpace(parts[0])
+	if title == "" {
+		return "", time.Time{}, false
+	}
+	candidates := []string{
+		time.RFC3339,
+		"2006-01-02 15:04",
+		"02.01.2006 15:04",
+	}
+	for _, layout := range candidates {
+		if t, err := time.ParseInLocation(layout, strings.TrimSpace(parts[1]), now.Location()); err == nil {
+			return title, t, true
+		}
+	}
+	return "", time.Time{}, false
 }
