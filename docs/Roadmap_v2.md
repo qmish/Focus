@@ -220,8 +220,8 @@
 
 ## Быстрый трек (критический минимум на ближайшие 2 спринта)
 
-- [ ] Закрыть auth-модель и WS auth.
-- [ ] Закрыть TODO в webhooks/bots/admin/calendar.
+- [x] Закрыть auth-модель и WS auth.
+- [x] Закрыть TODO в webhooks/bots/admin/calendar.
 - [ ] Внедрить базовый брендинг Jitsi из `pics`.
 - [ ] Стабилизировать stage + e2e smoke.
 

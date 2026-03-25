@@ -2,6 +2,8 @@
 
 ## 2026-03-25
 
+- В `docs/Roadmap_v2.md` синхронизирован раздел `Быстрый трек`:
+  - закрыты пункты по auth-model/WS auth и TODO webhooks/bots/admin/calendar.
 - Добавлены operational документы:
   - `docs/OnCall_Runbook.md`,
   - `docs/GoLive_Checklist.md`.
