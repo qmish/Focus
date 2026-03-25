@@ -2,6 +2,16 @@
 
 ## 2026-03-25
 
+- Добавлен persist-аудит auth событий:
+  - модель `API_Go/internal/models/auth_audit_event.go`,
+  - репозиторий `API_Go/internal/repository/auth_audit_repository.go`,
+  - запись событий в `API_Go/internal/api/handlers/auth_handler.go` (`login/callback/refresh/logout`, success/failed).
+- В админ API добавлен endpoint просмотра аудита: `GET /api/v1/admin/auth/audit`.
+- В `API_Go/cmd/server/main.go` включена миграция `AuthAuditEvent` и wiring репозитория в `AuthHandler`/`AdminHandler`.
+- Добавлены тесты:
+  - `API_Go/internal/api/handlers/auth_handler_test.go` (audit при logout),
+  - `API_Go/internal/api/handlers/admin_handler_test.go` (list auth audit events).
+- В `docs/Roadmap_v2.md` закрыт пункт `1.4`: аудит авторизаций/ошибок авторизации.
 - В `API_Go/internal/auth/oidc.go` добавлен парсинг стандартных Keycloak claims:
   - `realm_access.roles`,
   - `resource_access.<client_id>.roles`,

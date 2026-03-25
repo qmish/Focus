@@ -146,8 +146,8 @@ func TestAdminHandlerListConferences(t *testing.T) {
 	room1.UpdatedAt = time.Now()
 	room2 := models.NewRoom("General", uuid.New(), models.RoomTypePublic)
 	handler := NewAdminHandler(nil, &fakeAdminRoomRepo{
-		rooms:              map[uuid.UUID]*models.Room{room1.ID: room1, room2.ID: room2},
-		participantByRoom:  map[uuid.UUID]int64{room1.ID: 5},
+		rooms:             map[uuid.UUID]*models.Room{room1.ID: room1, room2.ID: room2},
+		participantByRoom: map[uuid.UUID]int64{room1.ID: 5},
 	})
 
 	claims := &auth.SessionClaims{
@@ -292,6 +292,11 @@ type fakeAdminBotRepo struct {
 	err    error
 }
 
+type fakeAdminAuthAuditRepo struct {
+	events []*models.AuthAuditEvent
+	err    error
+}
+
 func (f *fakeAdminRoomRepo) List(ctx context.Context, limit, offset int) ([]*models.Room, error) {
 	rooms := make([]*models.Room, 0, len(f.rooms))
 	for _, room := range f.rooms {
@@ -379,6 +384,22 @@ func (f *fakeAdminBotRepo) ListCommandEvents(ctx context.Context, limit int, onl
 	return filtered, nil
 }
 
+func (f *fakeAdminAuthAuditRepo) ListAuthAuditEvents(ctx context.Context, limit int, onlyFailed bool) ([]*models.AuthAuditEvent, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if !onlyFailed {
+		return f.events, nil
+	}
+	filtered := make([]*models.AuthAuditEvent, 0, len(f.events))
+	for _, event := range f.events {
+		if event != nil && event.Status != "success" {
+			filtered = append(filtered, event)
+		}
+	}
+	return filtered, nil
+}
+
 func addURLParam(req *http.Request, key, value string) *http.Request {
 	routeCtx := chi.NewRouteContext()
 	routeCtx.URLParams.Add(key, value)
@@ -406,7 +427,7 @@ func TestAdminHandlerEndConferenceInvalidID(t *testing.T) {
 func TestAdminHandlerListConferencesResponseSchema(t *testing.T) {
 	room := models.NewRoom("Meeting A", uuid.New(), models.RoomTypeMeeting)
 	handler := NewAdminHandler(nil, &fakeAdminRoomRepo{
-		rooms:            map[uuid.UUID]*models.Room{room.ID: room},
+		rooms:             map[uuid.UUID]*models.Room{room.ID: room},
 		participantByRoom: map[uuid.UUID]int64{room.ID: 2},
 	})
 	claims := &auth.SessionClaims{Roles: []string{"admin"}}
@@ -530,4 +551,35 @@ func TestAdminHandlerListBotErrorsForbidden(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ListBotErrors(rr, req)
 	assert.Equal(t, http.StatusForbidden, rr.Code)
+}
+
+func TestAdminHandlerListAuthAuditEvents(t *testing.T) {
+	repo := &fakeAdminAuthAuditRepo{
+		events: []*models.AuthAuditEvent{
+			{
+				ID:        uuid.New(),
+				Action:    "logout",
+				Status:    "failed",
+				UserID:    "u1",
+				CreatedAt: time.Now(),
+			},
+			{
+				ID:        uuid.New(),
+				Action:    "login",
+				Status:    "success",
+				UserID:    "u2",
+				CreatedAt: time.Now(),
+			},
+		},
+	}
+	handler := NewAdminHandler(nil, nil)
+	handler.SetAuthAuditRepository(repo)
+	claims := &auth.SessionClaims{Roles: []string{"admin"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := httptest.NewRequest("GET", "/api/v1/admin/auth/audit?failed=true", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	handler.ListAuthAuditEvents(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"status":"failed"`)
+	assert.NotContains(t, rr.Body.String(), `"status":"success"`)
 }

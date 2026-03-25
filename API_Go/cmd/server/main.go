@@ -67,6 +67,7 @@ func main() {
 		&models.RoomParticipant{},
 		&models.Message{},
 		&models.MessageReaction{},
+		&models.AuthAuditEvent{},
 		&bots.BotCommandEvent{},
 		&webhooks.IncomingEvent{},
 	); err != nil {
@@ -81,6 +82,7 @@ func main() {
 	messageRepo := repository.NewMessageRepository(db.DB)
 	webhookRepo := repository.NewWebhookRepository(db.DB)
 	botRepo := repository.NewBotRepository(db.DB)
+	authAuditRepo := repository.NewAuthAuditRepository(db.DB)
 
 	// Инициализация Graph API клиента (Exchange)
 	var graphClient *exchange.GraphClient
@@ -148,6 +150,7 @@ func main() {
 
 	// Создание handlers
 	authHandler := handlers.NewAuthHandler(oidcProvider, userRepo, jitsiGen, cfg, logger.WithContext(context.Background()))
+	authHandler.SetAuthAuditRepository(authAuditRepo)
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub, botEngine)
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
@@ -155,6 +158,7 @@ func main() {
 	adminHandler.SetMessageRepository(messageRepo)
 	adminHandler.SetWebhookRepository(webhookRepo)
 	adminHandler.SetBotRepository(botRepo)
+	adminHandler.SetAuthAuditRepository(authAuditRepo)
 	brandingHandler := handlers.NewJitsiBrandingHandler()
 	inboundWebhookHandler := handlers.NewInboundWebhookHandler(
 		webhooks.NewWebhookHandlerWithConfig(cfg.Jitsi.AppSecret, webhookRepo),
@@ -291,6 +295,7 @@ func main() {
 				r.Get("/webhooks/deliveries", adminHandler.ListWebhookDeliveries)
 				r.Get("/webhooks/errors", adminHandler.ListWebhookErrors)
 				r.Get("/bots/errors", adminHandler.ListBotErrors)
+				r.Get("/auth/audit", adminHandler.ListAuthAuditEvents)
 			})
 		})
 	})

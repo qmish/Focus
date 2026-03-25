@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,11 +19,12 @@ import (
 
 // AdminHandler обработчики для админ-панели
 type AdminHandler struct {
-	userRepo    adminUserRepository
-	roomRepo    adminRoomRepository
-	messageRepo adminMessageRepository
-	webhookRepo adminWebhookRepository
-	botRepo     adminBotRepository
+	userRepo      adminUserRepository
+	roomRepo      adminRoomRepository
+	messageRepo   adminMessageRepository
+	webhookRepo   adminWebhookRepository
+	botRepo       adminBotRepository
+	authAuditRepo adminAuthAuditRepository
 }
 
 type adminUserRepository interface {
@@ -53,6 +55,10 @@ type adminBotRepository interface {
 	ListCommandEvents(ctx context.Context, limit int, onlyFailed bool) ([]*bots.BotCommandEvent, error)
 }
 
+type adminAuthAuditRepository interface {
+	ListAuthAuditEvents(ctx context.Context, limit int, onlyFailed bool) ([]*models.AuthAuditEvent, error)
+}
+
 // NewAdminHandler создаёт новый AdminHandler
 func NewAdminHandler(userRepo adminUserRepository, roomRepo adminRoomRepository) *AdminHandler {
 	return &AdminHandler{
@@ -74,6 +80,11 @@ func (h *AdminHandler) SetBotRepository(botRepo adminBotRepository) {
 // SetMessageRepository sets optional message repository for dashboard stats.
 func (h *AdminHandler) SetMessageRepository(messageRepo adminMessageRepository) {
 	h.messageRepo = messageRepo
+}
+
+// SetAuthAuditRepository sets optional auth audit repository.
+func (h *AdminHandler) SetAuthAuditRepository(authAuditRepo adminAuthAuditRepository) {
+	h.authAuditRepo = authAuditRepo
 }
 
 // requireAdmin middleware для проверки роли администратора
@@ -585,6 +596,41 @@ func (h *AdminHandler) ListBotErrors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":  events,
+		"total": len(events),
+	})
+}
+
+// ListAuthAuditEvents GET /api/v1/admin/auth/audit
+func (h *AdminHandler) ListAuthAuditEvents(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	onlyFailed := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("failed")), "true")
+
+	if h.authAuditRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data":  []interface{}{},
+			"total": 0,
+		})
+		return
+	}
+
+	events, err := h.authAuditRepo.ListAuthAuditEvents(r.Context(), limit, onlyFailed)
+	if err != nil {
+		http.Error(w, "failed to list auth audit events", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"data":  events,

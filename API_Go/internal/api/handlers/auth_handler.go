@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"github.com/qmish/focus-api/internal/auth"
 	"github.com/qmish/focus-api/internal/config"
 	"github.com/qmish/focus-api/internal/jitsi"
+	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
 	"go.uber.org/zap"
 )
@@ -26,6 +28,11 @@ type AuthHandler struct {
 	logger            *zap.Logger
 	sessionSecret     []byte
 	groupPolicyMapper *auth.GroupPolicyMapper
+	authAuditRepo     authAuditRepository
+}
+
+type authAuditRepository interface {
+	CreateAuthAuditEvent(ctx context.Context, event *models.AuthAuditEvent) error
 }
 
 // NewAuthHandler создаёт новый AuthHandler
@@ -57,12 +64,18 @@ func NewAuthHandler(
 	}
 }
 
+// SetAuthAuditRepository sets optional audit repository for auth events.
+func (h *AuthHandler) SetAuthAuditRepository(repo authAuditRepository) {
+	h.authAuditRepo = repo
+}
+
 // Login GET /api/v1/auth/login
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// Генерируем state для защиты от CSRF
 	state, err := auth.GenerateState()
 	if err != nil {
 		h.logger.Error("failed to generate state", zap.Error(err))
+		h.recordAudit(r, "login", "failed", "", "", "state_generation_failed")
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -80,6 +93,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Редирект на Keycloak
 	authURL := h.oidcProvider.AuthURL(state)
+	h.recordAudit(r, "login", "success", "", "", "")
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
@@ -92,6 +106,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 
 	if code == "" {
+		h.recordAudit(r, "callback", "failed", "", "", "missing_code")
 		http.Error(w, "missing code parameter", http.StatusBadRequest)
 		return
 	}
@@ -99,6 +114,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// Проверяем state
 	cookie, err := r.Cookie("oauth_state")
 	if err != nil || auth.ValidateState(cookie.Value, state) != nil {
+		h.recordAudit(r, "callback", "failed", "", "", "invalid_state")
 		http.Error(w, "invalid state parameter", http.StatusBadRequest)
 		return
 	}
@@ -115,6 +131,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	token, err := h.oidcProvider.Exchange(ctx, code)
 	if err != nil {
 		h.logger.Error("token exchange failed", zap.Error(err))
+		h.recordAudit(r, "callback", "failed", "", "", "token_exchange_failed")
 		http.Error(w, "authentication failed", http.StatusInternalServerError)
 		return
 	}
@@ -123,6 +140,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := h.oidcProvider.GetUserInfo(ctx, token)
 	if err != nil {
 		h.logger.Error("failed to get user info", zap.Error(err))
+		h.recordAudit(r, "callback", "failed", "", "", "userinfo_failed")
 		http.Error(w, "authentication failed", http.StatusInternalServerError)
 		return
 	}
@@ -137,6 +155,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	keycloakID, err := parseUUID(userInfo.Sub)
 	if err != nil {
 		h.logger.Error("invalid keycloak id", zap.Error(err))
+		h.recordAudit(r, "callback", "failed", userInfo.Sub, userInfo.Email, "invalid_keycloak_id")
 		http.Error(w, "invalid user id", http.StatusInternalServerError)
 		return
 	}
@@ -144,6 +163,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	user, err := h.userRepo.GetOrCreate(ctx, keycloakID, userInfo.Email, userInfo.Name)
 	if err != nil {
 		h.logger.Error("failed to get or create user", zap.Error(err))
+		h.recordAudit(r, "callback", "failed", userInfo.Sub, userInfo.Email, "user_create_failed")
 		http.Error(w, "failed to create user", http.StatusInternalServerError)
 		return
 	}
@@ -158,6 +178,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	sessionJWT, err := auth.GenerateSessionJWT(userInfo, sessionID, h.sessionSecret, 24*time.Hour)
 	if err != nil {
 		h.logger.Error("failed to generate session jwt", zap.Error(err))
+		h.recordAudit(r, "callback", "failed", user.ID.String(), user.Email, "session_jwt_failed")
 		http.Error(w, "failed to generate token", http.StatusInternalServerError)
 		return
 	}
@@ -173,6 +194,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to generate jitsi jwt", zap.Error(err))
 	}
+	h.recordAudit(r, "callback", "success", user.ID.String(), user.Email, "")
 
 	// Возвращаем токены
 	response := map[string]interface{}{
@@ -196,6 +218,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	refreshToken, err := extractBearerToken(r.Header.Get("Authorization"))
 	if err != nil {
+		h.recordAudit(r, "refresh", "failed", "", "", "invalid_authorization_format")
 		http.Error(w, "invalid authorization format", http.StatusBadRequest)
 		return
 	}
@@ -211,10 +234,12 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if refreshToken == "" {
+		h.recordAudit(r, "refresh", "failed", "", "", "missing_refresh_token")
 		http.Error(w, "refresh_token is required", http.StatusBadRequest)
 		return
 	}
 	if h.oidcProvider == nil {
+		h.recordAudit(r, "refresh", "failed", "", "", "provider_unavailable")
 		http.Error(w, "auth provider unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -225,6 +250,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	newToken, err := h.oidcProvider.RefreshToken(ctx, refreshToken)
 	if err != nil {
 		h.logger.Error("failed to refresh token", zap.Error(err))
+		h.recordAudit(r, "refresh", "failed", "", "", "refresh_failed")
 		http.Error(w, "failed to refresh token", http.StatusUnauthorized)
 		return
 	}
@@ -233,6 +259,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := h.oidcProvider.GetUserInfo(ctx, newToken)
 	if err != nil {
 		h.logger.Error("failed to get user info", zap.Error(err))
+		h.recordAudit(r, "refresh", "failed", "", "", "userinfo_failed")
 		http.Error(w, "failed to get user info", http.StatusInternalServerError)
 		return
 	}
@@ -243,9 +270,11 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	sessionJWT, err := auth.GenerateSessionJWT(userInfo, sessionID, h.sessionSecret, 24*time.Hour)
 	if err != nil {
 		h.logger.Error("failed to generate session jwt", zap.Error(err))
+		h.recordAudit(r, "refresh", "failed", userInfo.Sub, userInfo.Email, "session_jwt_failed")
 		http.Error(w, "failed to generate token", http.StatusInternalServerError)
 		return
 	}
+	h.recordAudit(r, "refresh", "success", userInfo.Sub, userInfo.Email, "")
 
 	response := map[string]interface{}{
 		"access_token": sessionJWT,
@@ -261,16 +290,19 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	token, err := extractBearerToken(r.Header.Get("Authorization"))
 	if err != nil {
+		h.recordAudit(r, "logout", "failed", "", "", "invalid_authorization_format")
 		http.Error(w, "invalid authorization format", http.StatusBadRequest)
 		return
 	}
 	if token == "" {
+		h.recordAudit(r, "logout", "failed", "", "", "missing_authorization_header")
 		http.Error(w, "missing authorization header", http.StatusBadRequest)
 		return
 	}
 
 	claims, err := auth.ValidateSessionJWT(token, h.sessionSecret)
 	if err != nil {
+		h.recordAudit(r, "logout", "failed", "", "", "invalid_token")
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
 	}
@@ -280,6 +312,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		expiresAt = claims.ExpiresAt.Time
 	}
 	auth.RevokeSession(claims.SessionID, expiresAt)
+	h.recordAudit(r, "logout", "success", claims.UserID, claims.Email, "")
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -334,4 +367,30 @@ func extractBearerToken(authHeader string) (string, error) {
 		return "", errors.New("invalid authorization format")
 	}
 	return strings.TrimSpace(parts[1]), nil
+}
+
+func (h *AuthHandler) recordAudit(r *http.Request, action, status, userID, userEmail, reason string) {
+	if h.authAuditRepo == nil || r == nil {
+		return
+	}
+	_ = h.authAuditRepo.CreateAuthAuditEvent(r.Context(), &models.AuthAuditEvent{
+		ID:        uuid.New(),
+		Action:    action,
+		Status:    status,
+		UserID:    userID,
+		UserEmail: userEmail,
+		ClientIP:  firstNonEmpty(strings.TrimSpace(r.Header.Get("X-Forwarded-For")), strings.TrimSpace(r.RemoteAddr)),
+		UserAgent: strings.TrimSpace(r.UserAgent()),
+		Error:     reason,
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

@@ -1323,7 +1323,45 @@ Authorization: Bearer <admin_token>
 
 ---
 
-### 8.9. Сводная статистика админ-панели
+### 8.9. Аудит авторизаций
+
+**Endpoint:** `GET /api/v1/admin/auth/audit`
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Параметры query:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| limit | number | Количество записей (1..500, default: 100) |
+| failed | boolean | Если `true`, вернуть только неуспешные события |
+
+**Ответ:** `200 OK`
+
+```json
+{
+  "total": 2,
+  "data": [
+    {
+      "id": "event-uuid",
+      "action": "logout",
+      "status": "failed",
+      "user_id": "user-uuid",
+      "user_email": "user@example.com",
+      "client_ip": "10.0.0.10",
+      "user_agent": "Mozilla/5.0 ...",
+      "error": "invalid_token",
+      "created_at": "2024-01-01T12:10:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 8.10. Сводная статистика админ-панели
 
 **Endpoint:** `GET /api/v1/admin/stats`
 

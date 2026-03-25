@@ -2,13 +2,16 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/auth"
 	"github.com/qmish/focus-api/internal/config"
+	"github.com/qmish/focus-api/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -17,6 +20,8 @@ import (
 func TestLogoutRevokesSession(t *testing.T) {
 	auth.ResetRevokedSessions()
 	handler := newAuthHandlerForTest("test-secret")
+	auditRepo := &fakeAuthAuditRepo{}
+	handler.SetAuthAuditRepository(auditRepo)
 
 	token := mustSessionTokenForLogout(t, []byte("test-secret"), "session-logout-1")
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
@@ -26,6 +31,9 @@ func TestLogoutRevokesSession(t *testing.T) {
 	handler.Logout(rr, req)
 	assert.Equal(t, http.StatusNoContent, rr.Code)
 	assert.True(t, auth.IsSessionRevoked("session-logout-1"))
+	require.NotEmpty(t, auditRepo.events)
+	assert.Equal(t, "logout", auditRepo.events[0].Action)
+	assert.Equal(t, "success", auditRepo.events[0].Status)
 }
 
 func TestLogoutRequiresAuthorizationHeader(t *testing.T) {
@@ -38,11 +46,15 @@ func TestLogoutRequiresAuthorizationHeader(t *testing.T) {
 
 func TestLogoutRejectsInvalidToken(t *testing.T) {
 	handler := newAuthHandlerForTest("test-secret")
+	auditRepo := &fakeAuthAuditRepo{}
+	handler.SetAuthAuditRepository(auditRepo)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	req.Header.Set("Authorization", "Bearer not-a-jwt")
 	rr := httptest.NewRecorder()
 	handler.Logout(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	require.NotEmpty(t, auditRepo.events)
+	assert.Equal(t, "failed", auditRepo.events[0].Status)
 }
 
 func TestRefreshSupportsAuthorizationHeader(t *testing.T) {
@@ -104,4 +116,19 @@ func mustSessionTokenForLogout(t *testing.T, secret []byte, sessionID string) st
 	}, sessionID, secret, time.Hour)
 	require.NoError(t, err)
 	return token
+}
+
+type fakeAuthAuditRepo struct {
+	events []*models.AuthAuditEvent
+}
+
+func (f *fakeAuthAuditRepo) CreateAuthAuditEvent(ctx context.Context, event *models.AuthAuditEvent) error {
+	if event.ID == uuid.Nil {
+		event.ID = uuid.New()
+	}
+	if event.CreatedAt.IsZero() {
+		event.CreatedAt = time.Now()
+	}
+	f.events = append(f.events, event)
+	return nil
 }
