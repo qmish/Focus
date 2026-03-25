@@ -210,6 +210,32 @@ func resolveAudiences(userInfo *UserInfo) jwt.ClaimStrings {
 
 // ValidateSessionJWT проверяет сессионный JWT
 func ValidateSessionJWT(tokenString string, secret []byte) (*SessionClaims, error) {
+	return ValidateSessionJWTWithSecrets(tokenString, [][]byte{secret})
+}
+
+// ValidateSessionJWTWithSecrets validates JWT against one or more signing secrets.
+func ValidateSessionJWTWithSecrets(tokenString string, secrets [][]byte) (*SessionClaims, error) {
+	if len(secrets) == 0 {
+		return nil, ErrInvalidToken
+	}
+	var lastErr error
+	for _, secret := range secrets {
+		if len(secret) == 0 {
+			continue
+		}
+		claims, err := validateSessionJWTWithSecret(tokenString, secret)
+		if err == nil {
+			return claims, nil
+		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, ErrInvalidToken
+}
+
+func validateSessionJWTWithSecret(tokenString string, secret []byte) (*SessionClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &SessionClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -235,10 +261,11 @@ func ValidateSessionJWT(tokenString string, secret []byte) (*SessionClaims, erro
 
 // AuthMiddleware middleware для проверки аутентификации
 type AuthMiddleware struct {
-	secret           []byte
-	requiredAudience string
-	serviceAudiences []string
-	serviceScopes    []string
+	secret            []byte
+	validationSecrets [][]byte
+	requiredAudience  string
+	serviceAudiences  []string
+	serviceScopes     []string
 }
 
 // NewAuthMiddleware создаёт новый auth middleware
@@ -254,10 +281,23 @@ func NewAuthMiddlewareWithAudience(secret []byte, requiredAudience string) *Auth
 // NewAuthMiddlewareWithPolicies creates auth middleware with audience/scope policies.
 func NewAuthMiddlewareWithPolicies(secret []byte, requiredAudience string, serviceAudiences, serviceScopes []string) *AuthMiddleware {
 	return &AuthMiddleware{
-		secret:           secret,
-		requiredAudience: strings.TrimSpace(requiredAudience),
-		serviceAudiences: dedupeStrings(serviceAudiences),
-		serviceScopes:    dedupeStrings(serviceScopes),
+		secret:            secret,
+		validationSecrets: nil,
+		requiredAudience:  strings.TrimSpace(requiredAudience),
+		serviceAudiences:  dedupeStrings(serviceAudiences),
+		serviceScopes:     dedupeStrings(serviceScopes),
+	}
+}
+
+// SetValidationSecrets adds previous secrets for session JWT validation (rotation support).
+func (m *AuthMiddleware) SetValidationSecrets(secrets []string) {
+	m.validationSecrets = make([][]byte, 0, len(secrets))
+	for _, secret := range secrets {
+		trimmed := strings.TrimSpace(secret)
+		if trimmed == "" {
+			continue
+		}
+		m.validationSecrets = append(m.validationSecrets, []byte(trimmed))
 	}
 }
 
@@ -276,7 +316,7 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		claims, err := ValidateSessionJWT(parts[1], m.secret)
+		claims, err := ValidateSessionJWTWithSecrets(parts[1], m.sessionValidationSecrets())
 		if err != nil {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
@@ -298,6 +338,15 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), ContextKeyUserClaims, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (m *AuthMiddleware) sessionValidationSecrets() [][]byte {
+	secrets := make([][]byte, 0, 1+len(m.validationSecrets))
+	if len(m.secret) > 0 {
+		secrets = append(secrets, m.secret)
+	}
+	secrets = append(secrets, m.validationSecrets...)
+	return secrets
 }
 
 func (m *AuthMiddleware) isAudienceAllowed(claims *SessionClaims) bool {

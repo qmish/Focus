@@ -410,6 +410,47 @@ func TestAuthMiddlewareWithAudience(t *testing.T) {
 	})
 }
 
+func TestValidateSessionJWTWithSecretsSupportsRotation(t *testing.T) {
+	oldSecret := []byte("old-secret-123")
+	newSecret := []byte("new-secret-456")
+	token, err := GenerateSessionJWT(&UserInfo{
+		Sub:   "user-rotate",
+		Email: "rotate@example.com",
+		Name:  "Rotate User",
+		Roles: []string{"user"},
+	}, "session-rotate", oldSecret, time.Hour)
+	require.NoError(t, err)
+
+	claims, err := ValidateSessionJWTWithSecrets(token, [][]byte{newSecret, oldSecret})
+	require.NoError(t, err)
+	require.NotNil(t, claims)
+	assert.Equal(t, "user-rotate", claims.UserID)
+}
+
+func TestAuthMiddlewareAcceptsValidationSecrets(t *testing.T) {
+	oldSecret := []byte("old-secret-123")
+	newSecret := []byte("new-secret-456")
+	token, err := GenerateSessionJWT(&UserInfo{
+		Sub:   "user-rotate",
+		Email: "rotate@example.com",
+		Name:  "Rotate User",
+		Roles: []string{"user"},
+	}, "session-rotate", oldSecret, time.Hour)
+	require.NoError(t, err)
+
+	req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := &testResponseWriter{}
+
+	mw := NewAuthMiddlewareWithAudience(newSecret, "focus-frontend")
+	mw.SetValidationSecrets([]string{"old-secret-123"})
+	handler := mw.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.statusCode)
+}
+
 func TestGroupPolicyMapperApply(t *testing.T) {
 	raw := `[
 		{"group":"/focus/admins","roles":["admin"],"scopes":["focus.admin","focus.read"]},

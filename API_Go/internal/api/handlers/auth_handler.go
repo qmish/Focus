@@ -21,15 +21,17 @@ import (
 
 // AuthHandler обработчики для аутентификации
 type AuthHandler struct {
-	oidcProvider          *auth.OIDCProvider
-	userRepo              *repository.UserRepository
-	jitsiGen              *jitsi.TokenGenerator
-	config                *config.Config
-	logger                *zap.Logger
-	sessionSecret         []byte
-	groupPolicyMapper     *auth.GroupPolicyMapper
-	authAuditRepo         authAuditRepository
-	sessionRevocationRepo sessionRevocationRepository
+	oidcProvider             *auth.OIDCProvider
+	userRepo                 *repository.UserRepository
+	jitsiGen                 *jitsi.TokenGenerator
+	config                   *config.Config
+	logger                   *zap.Logger
+	sessionSecret            []byte
+	sessionTokenLifetime     time.Duration
+	sessionValidationSecrets [][]byte
+	groupPolicyMapper        *auth.GroupPolicyMapper
+	authAuditRepo            authAuditRepository
+	sessionRevocationRepo    sessionRevocationRepository
 }
 
 type authAuditRepository interface {
@@ -59,13 +61,15 @@ func NewAuthHandler(
 	}
 
 	return &AuthHandler{
-		oidcProvider:      oidcProvider,
-		userRepo:          userRepo,
-		jitsiGen:          jitsiGen,
-		config:            cfg,
-		logger:            logger,
-		sessionSecret:     []byte(cfg.Auth.SessionSecret),
-		groupPolicyMapper: groupPolicyMapper,
+		oidcProvider:             oidcProvider,
+		userRepo:                 userRepo,
+		jitsiGen:                 jitsiGen,
+		config:                   cfg,
+		logger:                   logger,
+		sessionSecret:            resolveSessionSecret(cfg),
+		sessionTokenLifetime:     resolveSessionLifetime(cfg),
+		sessionValidationSecrets: resolveValidationSecrets(cfg),
+		groupPolicyMapper:        groupPolicyMapper,
 	}
 }
 
@@ -185,7 +189,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	// Генерируем session JWT
 	sessionID, _ := generateSessionID()
-	sessionJWT, err := auth.GenerateSessionJWT(userInfo, sessionID, h.sessionSecret, 24*time.Hour)
+	sessionJWT, err := auth.GenerateSessionJWT(userInfo, sessionID, h.sessionSecret, h.sessionTokenLifetime)
 	if err != nil {
 		h.logger.Error("failed to generate session jwt", zap.Error(err))
 		h.recordAudit(r, "callback", "failed", user.ID.String(), user.Email, "session_jwt_failed")
@@ -277,7 +281,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	// Генерируем новый session JWT
 	sessionID, _ := generateSessionID()
-	sessionJWT, err := auth.GenerateSessionJWT(userInfo, sessionID, h.sessionSecret, 24*time.Hour)
+	sessionJWT, err := auth.GenerateSessionJWT(userInfo, sessionID, h.sessionSecret, h.sessionTokenLifetime)
 	if err != nil {
 		h.logger.Error("failed to generate session jwt", zap.Error(err))
 		h.recordAudit(r, "refresh", "failed", userInfo.Sub, userInfo.Email, "session_jwt_failed")
@@ -310,7 +314,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, err := auth.ValidateSessionJWT(token, h.sessionSecret)
+	claims, err := auth.ValidateSessionJWTWithSecrets(token, h.logoutValidationSecrets())
 	if err != nil {
 		h.recordAudit(r, "logout", "failed", "", "", "invalid_token")
 		http.Error(w, "invalid token", http.StatusUnauthorized)
@@ -406,4 +410,42 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func resolveSessionLifetime(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Auth.SessionTokenLifetime <= 0 {
+		return 24 * time.Hour
+	}
+	return cfg.Auth.SessionTokenLifetime
+}
+
+func resolveSessionSecret(cfg *config.Config) []byte {
+	if cfg == nil || strings.TrimSpace(cfg.Auth.SessionSecret) == "" {
+		return []byte("dev-session-secret-change-me")
+	}
+	return []byte(cfg.Auth.SessionSecret)
+}
+
+func resolveValidationSecrets(cfg *config.Config) [][]byte {
+	if cfg == nil || len(cfg.Auth.SessionValidationSecrets) == 0 {
+		return nil
+	}
+	result := make([][]byte, 0, len(cfg.Auth.SessionValidationSecrets))
+	for _, secret := range cfg.Auth.SessionValidationSecrets {
+		trimmed := strings.TrimSpace(secret)
+		if trimmed == "" {
+			continue
+		}
+		result = append(result, []byte(trimmed))
+	}
+	return result
+}
+
+func (h *AuthHandler) logoutValidationSecrets() [][]byte {
+	secrets := make([][]byte, 0, 1+len(h.sessionValidationSecrets))
+	if len(h.sessionSecret) > 0 {
+		secrets = append(secrets, h.sessionSecret)
+	}
+	secrets = append(secrets, h.sessionValidationSecrets...)
+	return secrets
 }

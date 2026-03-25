@@ -22,10 +22,12 @@ type Config struct {
 
 // AuthConfig конфигурация сессионных токенов API/WS
 type AuthConfig struct {
-	SessionSecret    string
-	RequiredAudience string
-	ServiceAudiences []string
-	ServiceScopes    []string
+	SessionSecret            string
+	SessionTokenLifetime     time.Duration
+	SessionValidationSecrets []string
+	RequiredAudience         string
+	ServiceAudiences         []string
+	ServiceScopes            []string
 }
 
 // ServerConfig конфигурация HTTP сервера
@@ -120,10 +122,12 @@ func Load() *Config {
 			DB:       getIntEnv("REDIS_DB", 0),
 		},
 		Auth: AuthConfig{
-			SessionSecret:    getEnv("SESSION_SECRET", "dev-session-secret-change-me"),
-			RequiredAudience: getEnv("AUTH_REQUIRED_AUDIENCE", "focus-frontend"),
-			ServiceAudiences: getListEnv("AUTH_SERVICE_AUDIENCES", []string{"focus-service"}),
-			ServiceScopes:    getListEnv("AUTH_SERVICE_SCOPES", []string{"focus.service"}),
+			SessionSecret:            getEnv("SESSION_SECRET", "dev-session-secret-change-me"),
+			SessionTokenLifetime:     getDurationEnv("AUTH_SESSION_TOKEN_LIFETIME", 24*time.Hour),
+			SessionValidationSecrets: getListEnv("AUTH_SESSION_VALIDATION_SECRETS", nil),
+			RequiredAudience:         getEnv("AUTH_REQUIRED_AUDIENCE", "focus-frontend"),
+			ServiceAudiences:         getListEnv("AUTH_SERVICE_AUDIENCES", []string{"focus-service"}),
+			ServiceScopes:            getListEnv("AUTH_SERVICE_SCOPES", []string{"focus.service"}),
 		},
 		Keycloak: KeycloakConfig{
 			ServerURL:          getEnv("KEYCLOAK_URL", "http://localhost:8180"),
@@ -182,6 +186,10 @@ func (c *Config) ValidateSecurity() error {
 		if _, weak := weakValues[strings.ToLower(sessionSecret)]; weak {
 			return fmt.Errorf("SESSION_SECRET is too weak for %s environment", c.Env)
 		}
+	}
+
+	if c.Auth.SessionTokenLifetime < 15*time.Minute {
+		return fmt.Errorf("AUTH_SESSION_TOKEN_LIFETIME must be at least 15m")
 	}
 
 	return nil

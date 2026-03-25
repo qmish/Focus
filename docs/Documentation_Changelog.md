@@ -2,6 +2,15 @@
 
 ## 2026-03-25
 
+- Добавлена поддержка ротации session secrets и настройки времени жизни токена:
+  - `AUTH_SESSION_TOKEN_LIFETIME`,
+  - `AUTH_SESSION_VALIDATION_SECRETS` (валидация JWT на предыдущих секретах).
+- Обновлены:
+  - `API_Go/internal/auth/oidc.go` (multi-secret validation + middleware support),
+  - `API_Go/internal/api/handlers/auth_handler.go` (TTL generation + logout validation на secret set),
+  - `API_Go/internal/config/config.go` и `API_Go/internal/config/config_test.go`.
+- Обновлены env-шаблоны `/.env.example` и `docker-compose.yml`.
+- В `docs/Roadmap_v2.md` закрыт пункт `1.4` по ротации секретов и срокам жизни токенов.
 - Расширен real OIDC e2e сценарий `tests/e2e/real-oidc.spec.ts`:
   - auth -> rooms happy-path через реальный Keycloak login,
   - создание комнаты из UI после аутентификации.

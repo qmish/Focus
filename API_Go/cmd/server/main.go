@@ -184,6 +184,7 @@ func main() {
 		cfg.Auth.ServiceAudiences,
 		cfg.Auth.ServiceScopes,
 	)
+	authMiddleware.SetValidationSecrets(cfg.Auth.SessionValidationSecrets)
 	abacEngine := auth.NewDefaultABACEngine()
 
 	// Создание роутера

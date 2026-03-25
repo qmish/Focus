@@ -1,11 +1,17 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestValidateSecurityRejectsSameSecrets(t *testing.T) {
 	cfg := &Config{
-		Env:  "production",
-		Auth: AuthConfig{SessionSecret: "same-secret"},
+		Env: "production",
+		Auth: AuthConfig{
+			SessionSecret:        "same-secret",
+			SessionTokenLifetime: 24 * time.Hour,
+		},
 		Jitsi: JitsiConfig{
 			AppSecret: "same-secret",
 		},
@@ -18,8 +24,11 @@ func TestValidateSecurityRejectsSameSecrets(t *testing.T) {
 
 func TestValidateSecurityAllowsDifferentSecrets(t *testing.T) {
 	cfg := &Config{
-		Env:  "production",
-		Auth: AuthConfig{SessionSecret: "prod-session-secret-value"},
+		Env: "production",
+		Auth: AuthConfig{
+			SessionSecret:        "prod-session-secret-value",
+			SessionTokenLifetime: 24 * time.Hour,
+		},
 		Jitsi: JitsiConfig{
 			AppSecret: "prod-jitsi-secret-value",
 		},
@@ -32,8 +41,11 @@ func TestValidateSecurityAllowsDifferentSecrets(t *testing.T) {
 
 func TestValidateSecurityAllowsDevelopmentDefaultSessionSecret(t *testing.T) {
 	cfg := &Config{
-		Env:  "development",
-		Auth: AuthConfig{SessionSecret: "dev-session-secret-change-me"},
+		Env: "development",
+		Auth: AuthConfig{
+			SessionSecret:        "dev-session-secret-change-me",
+			SessionTokenLifetime: 24 * time.Hour,
+		},
 		Jitsi: JitsiConfig{
 			AppSecret: "jitsi-dev-secret",
 		},
@@ -41,5 +53,21 @@ func TestValidateSecurityAllowsDevelopmentDefaultSessionSecret(t *testing.T) {
 
 	if err := cfg.ValidateSecurity(); err != nil {
 		t.Fatalf("expected development config to allow default session secret, got error: %v", err)
+	}
+}
+
+func TestValidateSecurityRejectsTooShortSessionLifetime(t *testing.T) {
+	cfg := &Config{
+		Env: "production",
+		Auth: AuthConfig{
+			SessionSecret:        "prod-session-secret-value",
+			SessionTokenLifetime: 5 * time.Minute,
+		},
+		Jitsi: JitsiConfig{
+			AppSecret: "prod-jitsi-secret-value",
+		},
+	}
+	if err := cfg.ValidateSecurity(); err == nil {
+		t.Fatalf("expected error for too short session token lifetime")
 	}
 }
