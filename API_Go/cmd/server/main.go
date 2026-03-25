@@ -68,6 +68,7 @@ func main() {
 		&models.Message{},
 		&models.MessageReaction{},
 		&models.AuthAuditEvent{},
+		&models.RevokedSession{},
 		&bots.BotCommandEvent{},
 		&webhooks.IncomingEvent{},
 	); err != nil {
@@ -83,6 +84,7 @@ func main() {
 	webhookRepo := repository.NewWebhookRepository(db.DB)
 	botRepo := repository.NewBotRepository(db.DB)
 	authAuditRepo := repository.NewAuthAuditRepository(db.DB)
+	sessionRevocationRepo := repository.NewSessionRevocationRepository(db.DB)
 
 	// Инициализация Graph API клиента (Exchange)
 	var graphClient *exchange.GraphClient
@@ -151,6 +153,7 @@ func main() {
 	// Создание handlers
 	authHandler := handlers.NewAuthHandler(oidcProvider, userRepo, jitsiGen, cfg, logger.WithContext(context.Background()))
 	authHandler.SetAuthAuditRepository(authAuditRepo)
+	authHandler.SetSessionRevocationRepository(sessionRevocationRepo)
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub, botEngine)
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
@@ -160,6 +163,16 @@ func main() {
 	adminHandler.SetBotRepository(botRepo)
 	adminHandler.SetAuthAuditRepository(authAuditRepo)
 	brandingHandler := handlers.NewJitsiBrandingHandler()
+	// Warm in-memory revocation blacklist from persistent storage for API/WS checks.
+	if revokedSessions, err := sessionRevocationRepo.ListActiveRevokedSessions(context.Background(), time.Now(), 100000); err == nil {
+		for _, item := range revokedSessions {
+			if item == nil {
+				continue
+			}
+			auth.RevokeSession(item.SessionID, item.ExpiresAt)
+		}
+	}
+
 	inboundWebhookHandler := handlers.NewInboundWebhookHandler(
 		webhooks.NewWebhookHandlerWithConfig(cfg.Jitsi.AppSecret, webhookRepo),
 	)

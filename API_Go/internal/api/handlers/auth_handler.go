@@ -21,18 +21,23 @@ import (
 
 // AuthHandler обработчики для аутентификации
 type AuthHandler struct {
-	oidcProvider      *auth.OIDCProvider
-	userRepo          *repository.UserRepository
-	jitsiGen          *jitsi.TokenGenerator
-	config            *config.Config
-	logger            *zap.Logger
-	sessionSecret     []byte
-	groupPolicyMapper *auth.GroupPolicyMapper
-	authAuditRepo     authAuditRepository
+	oidcProvider          *auth.OIDCProvider
+	userRepo              *repository.UserRepository
+	jitsiGen              *jitsi.TokenGenerator
+	config                *config.Config
+	logger                *zap.Logger
+	sessionSecret         []byte
+	groupPolicyMapper     *auth.GroupPolicyMapper
+	authAuditRepo         authAuditRepository
+	sessionRevocationRepo sessionRevocationRepository
 }
 
 type authAuditRepository interface {
 	CreateAuthAuditEvent(ctx context.Context, event *models.AuthAuditEvent) error
+}
+
+type sessionRevocationRepository interface {
+	UpsertRevokedSession(ctx context.Context, sessionID string, expiresAt time.Time) error
 }
 
 // NewAuthHandler создаёт новый AuthHandler
@@ -67,6 +72,11 @@ func NewAuthHandler(
 // SetAuthAuditRepository sets optional audit repository for auth events.
 func (h *AuthHandler) SetAuthAuditRepository(repo authAuditRepository) {
 	h.authAuditRepo = repo
+}
+
+// SetSessionRevocationRepository sets optional persistent session revocation repository.
+func (h *AuthHandler) SetSessionRevocationRepository(repo sessionRevocationRepository) {
+	h.sessionRevocationRepo = repo
 }
 
 // Login GET /api/v1/auth/login
@@ -312,6 +322,9 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		expiresAt = claims.ExpiresAt.Time
 	}
 	auth.RevokeSession(claims.SessionID, expiresAt)
+	if h.sessionRevocationRepo != nil {
+		_ = h.sessionRevocationRepo.UpsertRevokedSession(r.Context(), claims.SessionID, expiresAt)
+	}
 	h.recordAudit(r, "logout", "success", claims.UserID, claims.Email, "")
 
 	w.WriteHeader(http.StatusNoContent)

@@ -21,7 +21,9 @@ func TestLogoutRevokesSession(t *testing.T) {
 	auth.ResetRevokedSessions()
 	handler := newAuthHandlerForTest("test-secret")
 	auditRepo := &fakeAuthAuditRepo{}
+	revocationRepo := &fakeSessionRevocationRepo{}
 	handler.SetAuthAuditRepository(auditRepo)
+	handler.SetSessionRevocationRepository(revocationRepo)
 
 	token := mustSessionTokenForLogout(t, []byte("test-secret"), "session-logout-1")
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
@@ -31,6 +33,8 @@ func TestLogoutRevokesSession(t *testing.T) {
 	handler.Logout(rr, req)
 	assert.Equal(t, http.StatusNoContent, rr.Code)
 	assert.True(t, auth.IsSessionRevoked("session-logout-1"))
+	require.NotEmpty(t, revocationRepo.entries)
+	assert.Equal(t, "session-logout-1", revocationRepo.entries[0].sessionID)
 	require.NotEmpty(t, auditRepo.events)
 	assert.Equal(t, "logout", auditRepo.events[0].Action)
 	assert.Equal(t, "success", auditRepo.events[0].Status)
@@ -122,6 +126,15 @@ type fakeAuthAuditRepo struct {
 	events []*models.AuthAuditEvent
 }
 
+type fakeSessionRevocationRepo struct {
+	entries []fakeSessionRevocationEntry
+}
+
+type fakeSessionRevocationEntry struct {
+	sessionID string
+	expiresAt time.Time
+}
+
 func (f *fakeAuthAuditRepo) CreateAuthAuditEvent(ctx context.Context, event *models.AuthAuditEvent) error {
 	if event.ID == uuid.Nil {
 		event.ID = uuid.New()
@@ -130,5 +143,13 @@ func (f *fakeAuthAuditRepo) CreateAuthAuditEvent(ctx context.Context, event *mod
 		event.CreatedAt = time.Now()
 	}
 	f.events = append(f.events, event)
+	return nil
+}
+
+func (f *fakeSessionRevocationRepo) UpsertRevokedSession(ctx context.Context, sessionID string, expiresAt time.Time) error {
+	f.entries = append(f.entries, fakeSessionRevocationEntry{
+		sessionID: sessionID,
+		expiresAt: expiresAt,
+	})
 	return nil
 }

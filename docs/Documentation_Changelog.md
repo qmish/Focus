@@ -2,6 +2,13 @@
 
 ## 2026-03-25
 
+- Реализована персистентная ревокация API сессий:
+  - модель `API_Go/internal/models/revoked_session.go`,
+  - репозиторий `API_Go/internal/repository/session_revocation_repository.go`,
+  - `logout` пишет ревокацию в БД и in-memory blacklist,
+  - при старте сервера активные ревокации прогружаются в память для API/WS проверок.
+- Добавлены тесты `API_Go/internal/api/handlers/auth_handler_test.go` на запись ревокации.
+- В `docs/Roadmap_v2.md` закрыт пункт `logout/invalidate flow` (`1.4`).
 - Добавлен persist-аудит auth событий:
   - модель `API_Go/internal/models/auth_audit_event.go`,
   - репозиторий `API_Go/internal/repository/auth_audit_repository.go`,
