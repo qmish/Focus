@@ -190,6 +190,7 @@
 - [x] Добавить API-level e2e smoke для auth/room/chat/webhook/bot/admin базовых негативных сценариев.
 - [x] Добавить API-level happy-path e2e для авторизованных `auth/me`, `rooms`, `admin/stats` через валидный session JWT.
 - [x] Добавить API-level user journey e2e: `create room -> join call -> send/list message -> admin conferences`.
+- [x] Подготовить отдельный stage-harness для e2e с реальной OIDC аутентификацией (manual workflow + browser flow).
 - [ ] Добавить e2e сценарии с реальной аутентификацией и пользовательскими happy-path потоками (auth -> room -> chat -> call -> admin).
 - [x] Покрыть e2e: auth, room, chat, call, webhook, bot, admin flows.
 - [ ] Прогнать load-тесты API + Jitsi/JVB в целевых профилях нагрузки.
@@ -204,6 +205,7 @@
 
 ### 7.3 Приемка и go-live
 - [ ] Провести UAT с пилотной группой.
+- [x] Подготовить UAT protocol/checklist и шаблон фиксации результатов для пилотной группы.
 - [x] Подготовить runbook on-call и инцидентные инструкции.
 - [x] Зафиксировать release checklist и критерии go-live.
 

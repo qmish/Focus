@@ -2,6 +2,10 @@
 
 ## 2026-03-25
 
+- Добавлен manual workflow `.github/workflows/stage-oidc-e2e.yml` для запуска реального OIDC e2e в stage.
+- Добавлен `tests/e2e/real-oidc.spec.ts` (browser redirect flow к Keycloak, включается через `E2E_REAL_OIDC=1`).
+- Добавлен `docs/UAT_Pilot_Protocol.md` с чек-листом приемки, критериями успешности и шаблоном результатов.
+- Обновлены `README.md` и `docs/Roadmap_v2.md` для фиксации stage OIDC harness и UAT protocol.
 - Расширены e2e проверки webhook/bot/admin в `tests/e2e/ci-api.spec.ts`:
   - позитивный webhook с валидной подписью + проверка duplicate по idempotency key,
   - bot command (`/status`) в user journey,

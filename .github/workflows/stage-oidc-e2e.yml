@@ -1,0 +1,32 @@
+name: Stage OIDC E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Stage chat URL"
+        required: true
+        default: "https://chat-stage.company.com"
+      keycloak_url:
+        description: "Stage Keycloak URL"
+        required: true
+        default: "https://keycloak-stage.company.com"
+
+jobs:
+  real-oidc-e2e:
+    name: Run real OIDC browser flow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install e2e dependencies
+        working-directory: tests/e2e
+        run: npm install
+      - name: Install Playwright browsers
+        working-directory: tests/e2e
+        run: npx playwright install --with-deps chromium
+      - name: Run real OIDC test
+        working-directory: tests/e2e
+        run: E2E_REAL_OIDC=1 BASE_URL="${{ github.event.inputs.base_url }}" KEYCLOAK_URL="${{ github.event.inputs.keycloak_url }}" npx playwright test real-oidc.spec.ts --project=chromium
