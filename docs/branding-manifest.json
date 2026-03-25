@@ -1,0 +1,180 @@
+{
+  "manifest_version": "1.0.0",
+  "updated_at": "2026-03-25",
+  "source_directory": "pics/",
+  "asset_structure": [
+    "logo",
+    "favicon",
+    "backgrounds",
+    "icons",
+    "avatars"
+  ],
+  "notes": [
+    "Текущие ассеты в pics хранятся в плоской структуре; категории задаются логически через manifest.",
+    "Файл hdphoto1.wdp не подходит для web-пайплайна без конвертации в png/webp."
+  ],
+  "assets": {
+    "logo": [
+      {
+        "file": "pics/image34.png",
+        "target_usage": [
+          "frontend",
+          "frontend-admin",
+          "jitsi-fork"
+        ],
+        "role": "primary-logo",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image35.png",
+        "target_usage": [
+          "frontend-admin"
+        ],
+        "role": "header-logo-compact",
+        "format": "png",
+        "size_px": "unknown"
+      }
+    ],
+    "favicon": [
+      {
+        "file": "pics/image28.png",
+        "target_usage": [
+          "frontend",
+          "frontend-admin"
+        ],
+        "role": "favicon",
+        "format": "png",
+        "size_px": "unknown"
+      }
+    ],
+    "backgrounds": [
+      {
+        "file": "pics/image18.png",
+        "target_usage": [
+          "frontend",
+          "jitsi-fork"
+        ],
+        "role": "default-hero-background",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image29.png",
+        "target_usage": [
+          "jitsi-fork"
+        ],
+        "role": "meeting-background",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/hdphoto1.wdp",
+        "target_usage": [
+          "design-source"
+        ],
+        "role": "source-background-needs-conversion",
+        "format": "wdp",
+        "size_px": "unknown"
+      }
+    ],
+    "icons": [
+      {
+        "file": "pics/image12.png",
+        "target_usage": [
+          "frontend",
+          "frontend-admin"
+        ],
+        "role": "ui-icon-set-a",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image13.png",
+        "target_usage": [
+          "frontend",
+          "frontend-admin"
+        ],
+        "role": "ui-icon-set-b",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image14.png",
+        "target_usage": [
+          "frontend",
+          "frontend-admin"
+        ],
+        "role": "ui-icon-set-c",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image15.png",
+        "target_usage": [
+          "frontend",
+          "frontend-admin"
+        ],
+        "role": "ui-icon-set-d",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image16.png",
+        "target_usage": [
+          "jitsi-fork"
+        ],
+        "role": "toolbar-icons",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image17.png",
+        "target_usage": [
+          "jitsi-fork"
+        ],
+        "role": "brand-icons",
+        "format": "png",
+        "size_px": "unknown"
+      }
+    ],
+    "avatars": [
+      {
+        "file": "pics/image2.jpeg",
+        "target_usage": [
+          "frontend"
+        ],
+        "role": "default-avatar-a",
+        "format": "jpeg",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image3.png",
+        "target_usage": [
+          "frontend"
+        ],
+        "role": "default-avatar-b",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image4.png",
+        "target_usage": [
+          "frontend"
+        ],
+        "role": "default-avatar-c",
+        "format": "png",
+        "size_px": "unknown"
+      },
+      {
+        "file": "pics/image5.png",
+        "target_usage": [
+          "frontend"
+        ],
+        "role": "default-avatar-d",
+        "format": "png",
+        "size_px": "unknown"
+      }
+    ]
+  }
+}
