@@ -63,17 +63,22 @@
 git clone https://github.com/qmish/Focus.git
 cd Focus
 
-# Запустить зависимости через Docker Compose
-docker-compose up -d postgres redis keycloak
+# Подготовить env (один раз)
+cp .env.example .env
 
-# Запустить Go сервер
-cd API_Go
-go run cmd/server/main.go
+# One command up (весь dev-контур)
+docker compose --env-file .env up -d --build
 
-# Запустить фронтенд (в разработке)
-cd frontend
-npm install
-npm run dev
+# Локальные URL:
+# API            http://localhost:8080
+# Keycloak       http://localhost:8180
+# Frontend       http://localhost:5173
+# Frontend Admin http://localhost:5174
+```
+
+Для PowerShell можно использовать helper-скрипт:
+```powershell
+.\scripts\dev-up.ps1
 ```
 
 ## 🛠️ Технологический стек

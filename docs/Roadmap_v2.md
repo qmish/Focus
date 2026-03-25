@@ -162,9 +162,9 @@
 ## Этап 6. DevOps и среды (dev/stage/prod)
 
 ### 6.1 Docker Compose и локальный контур
-- [ ] Расширить `docker-compose` сервисами `frontend`, `frontend-admin`, (опционально) локальный jitsi stack.
-- [ ] Настроить единые env-конвенции и секреты для локальной разработки.
-- [ ] Обеспечить команду "one command up" для dev-окружения.
+- [x] Расширить `docker-compose` сервисами `frontend`, `frontend-admin`, (опционально) локальный jitsi stack.
+- [x] Настроить единые env-конвенции и секреты для локальной разработки.
+- [x] Обеспечить команду "one command up" для dev-окружения.
 
 ### 6.2 Kubernetes/stage/prod
 - [ ] Актуализировать манифесты для Focus API/frontends/Jitsi fork.
