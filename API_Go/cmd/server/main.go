@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -161,10 +162,18 @@ func main() {
 		r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
 			claims, err := websocket.AuthenticateRequest(r, []byte(cfg.Jitsi.AppSecret))
 			if err != nil {
+				if errors.Is(err, websocket.ErrExpiredWebSocketToken) {
+					http.Error(w, "token_expired", http.StatusUnauthorized)
+					return
+				}
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			wsHub.HandleWebSocket(w, r, claims.UserID)
+			expiresAt := time.Time{}
+			if claims.ExpiresAt != nil {
+				expiresAt = claims.ExpiresAt.Time
+			}
+			wsHub.HandleWebSocket(w, r, claims.UserID, expiresAt)
 		})
 
 		// Protected routes

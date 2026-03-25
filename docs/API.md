@@ -1212,9 +1212,18 @@ Authorization: Bearer <admin_token>
 ### 11.1. Подключение
 
 ```
-wss://api.company.com/ws
+wss://api.company.com/api/v1/ws
 Authorization: Bearer <session_token>
 ```
+
+Также поддерживаются query параметры для подключения:
+- `?token=<session_token>`
+- `?access_token=<session_token>`
+
+Важно:
+- при истекшем токене сервер возвращает `401 token_expired`;
+- при истечении токена во время активной сессии сервер закрывает WebSocket с reason `token_expired`;
+- для reconnect клиент должен получить новый токен и переподключиться.
 
 ### 11.2. Клиент → Сервер
 
@@ -1227,6 +1236,10 @@ Authorization: Bearer <session_token>
   }
 }
 ```
+
+Ограничения доступа:
+- подписка на комнату разрешается только участнику комнаты;
+- отправка `message` и `typing` разрешается только после успешной подписки на комнату.
 
 **Отправка сообщения:**
 ```json

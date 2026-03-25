@@ -106,7 +106,7 @@ func (p *OIDCProvider) Exchange(ctx context.Context, code string) (*oauth2.Token
 func (p *OIDCProvider) VerifyIDToken(ctx context.Context, rawIDToken string) (*UserInfo, error) {
 	idToken, err := p.Verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
 
 	var userInfo UserInfo

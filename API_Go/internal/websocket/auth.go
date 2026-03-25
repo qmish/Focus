@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/qmish/focus-api/internal/auth"
 )
 
 var (
 	ErrMissingWebSocketToken = errors.New("missing websocket auth token")
 	ErrInvalidWebSocketToken = errors.New("invalid websocket auth token")
+	ErrExpiredWebSocketToken = errors.New("expired websocket auth token")
 )
 
 // AuthenticateRequest validates auth for websocket upgrade requests.
@@ -25,6 +27,9 @@ func AuthenticateRequest(r *http.Request, secret []byte) (*auth.SessionClaims, e
 
 	claims, err := auth.ValidateSessionJWT(token, secret)
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) || strings.Contains(strings.ToLower(err.Error()), "expired") {
+			return nil, ErrExpiredWebSocketToken
+		}
 		return nil, ErrInvalidWebSocketToken
 	}
 

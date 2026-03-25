@@ -60,17 +60,31 @@ func TestAuthenticateRequest(t *testing.T) {
 		assert.Nil(t, claims)
 		assert.ErrorIs(t, err, ErrInvalidWebSocketToken)
 	})
+
+	t.Run("rejects expired token with explicit error", func(t *testing.T) {
+		expiredToken := mustSessionTokenWithLifetime(t, secret, -1*time.Minute)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/ws?token="+expiredToken, nil)
+
+		claims, err := AuthenticateRequest(req, secret)
+		require.Error(t, err)
+		assert.Nil(t, claims)
+		assert.ErrorIs(t, err, ErrExpiredWebSocketToken)
+	})
 }
 
 func mustSessionToken(t *testing.T, secret []byte) string {
 	t.Helper()
+	return mustSessionTokenWithLifetime(t, secret, time.Hour)
+}
 
+func mustSessionTokenWithLifetime(t *testing.T, secret []byte, lifetime time.Duration) string {
+	t.Helper()
 	token, err := auth.GenerateSessionJWT(&auth.UserInfo{
 		Sub:   "user-123",
 		Email: "user@example.com",
 		Name:  "Test User",
 		Roles: []string{"user"},
-	}, "session-123", secret, time.Hour)
+	}, "session-123", secret, lifetime)
 	require.NoError(t, err)
 	return token
 }

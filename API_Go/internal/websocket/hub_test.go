@@ -252,3 +252,14 @@ func mustReadWSMessage(t *testing.T, ch <-chan []byte) WSMessage {
 	}
 	return WSMessage{}
 }
+
+func TestClientTokenExpired(t *testing.T) {
+	client := &Client{ExpiresAt: time.Now().Add(-1 * time.Minute)}
+	assert.True(t, client.tokenExpired())
+
+	client = &Client{ExpiresAt: time.Now().Add(10 * time.Minute)}
+	assert.False(t, client.tokenExpired())
+
+	client = &Client{}
+	assert.False(t, client.tokenExpired())
+}

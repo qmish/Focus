@@ -71,6 +71,7 @@ type ErrorPayload struct {
 type Client struct {
 	ID       string
 	UserID   string
+	ExpiresAt time.Time
 	Conn     *websocket.Conn
 	Hub      *Hub
 	Rooms    map[string]bool // комнаты, на которые подписан
@@ -248,7 +249,7 @@ func (h *Hub) BroadcastToRoom(roomID string, msg WSMessage) {
 }
 
 // HandleWebSocket обрабатывает WebSocket подключение
-func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request, userID string) {
+func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request, userID string, expiresAt time.Time) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.Error("websocket upgrade failed", zap.Error(err))
@@ -258,6 +259,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request, userID str
 	client := &Client{
 		ID:       uuid.New().String(),
 		UserID:   userID,
+		ExpiresAt: expiresAt,
 		Conn:     conn,
 		Hub:      h,
 		Rooms:    make(map[string]bool),
@@ -281,6 +283,15 @@ func (c *Client) writePump() {
 	}()
 
 	for {
+		if c.tokenExpired() {
+			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			_ = c.Conn.WriteMessage(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "token_expired"),
+			)
+			return
+		}
+
 		select {
 		case message, ok := <-c.Send:
 			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
@@ -490,6 +501,13 @@ func (c *Client) isSubscribed(roomID string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Rooms[roomID]
+}
+
+func (c *Client) tokenExpired() bool {
+	if c.ExpiresAt.IsZero() {
+		return false
+	}
+	return time.Now().After(c.ExpiresAt)
 }
 
 // BroadcastUserJoined рассылает событие о присоединении пользователя
