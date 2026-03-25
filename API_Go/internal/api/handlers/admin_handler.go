@@ -273,6 +273,10 @@ func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	if req.DurationHours < 0 {
+		http.Error(w, "duration_hours must be non-negative", http.StatusBadRequest)
+		return
+	}
 
 	user, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
@@ -285,6 +289,12 @@ func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user.IsActive = false
+	var bannedUntil *time.Time
+	if req.DurationHours > 0 {
+		until := time.Now().UTC().Add(time.Duration(req.DurationHours) * time.Hour)
+		bannedUntil = &until
+	}
+	user.BannedUntil = bannedUntil
 	if err := h.userRepo.Update(r.Context(), user); err != nil {
 		http.Error(w, "failed to ban user", http.StatusInternalServerError)
 		return
@@ -294,7 +304,7 @@ func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 		"id":           user.ID.String(),
 		"banned":       true,
 		"reason":       req.Reason,
-		"banned_until": nil, // TODO: реализовать временные баны
+		"banned_until": bannedUntil,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -328,6 +338,7 @@ func (h *AdminHandler) UnbanUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user.IsActive = true
+	user.BannedUntil = nil
 	if err := h.userRepo.Update(r.Context(), user); err != nil {
 		http.Error(w, "failed to unban user", http.StatusInternalServerError)
 		return

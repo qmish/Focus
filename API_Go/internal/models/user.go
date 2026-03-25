@@ -15,6 +15,7 @@ type User struct {
 	AvatarURL   string     `gorm:"type:varchar(512)" json:"avatar_url"`
 	Roles       []string   `gorm:"type:text[]" json:"roles"`
 	IsActive    bool       `gorm:"not null;default:true" json:"is_active"`
+	BannedUntil *time.Time `json:"banned_until,omitempty"`
 	LastLoginAt *time.Time `json:"last_login_at"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`

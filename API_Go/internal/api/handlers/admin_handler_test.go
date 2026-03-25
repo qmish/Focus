@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -255,6 +256,7 @@ func TestAdminHandlerGetStatsForbidden(t *testing.T) {
 
 type fakeAdminUserRepo struct {
 	count int64
+	users map[uuid.UUID]*models.User
 }
 
 func (f *fakeAdminUserRepo) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
@@ -264,9 +266,18 @@ func (f *fakeAdminUserRepo) Count(ctx context.Context) (int64, error) {
 	return f.count, nil
 }
 func (f *fakeAdminUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	if f.users != nil {
+		user, ok := f.users[id]
+		if ok && user != nil {
+			return user, nil
+		}
+	}
 	return nil, repository.ErrUserNotFound
 }
 func (f *fakeAdminUserRepo) Update(ctx context.Context, user *models.User) error {
+	if f.users != nil {
+		f.users[user.ID] = user
+	}
 	return nil
 }
 
@@ -634,4 +645,44 @@ func TestAdminHandlerListCalendarAuditEvents(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), `"operation":"delete"`)
 	assert.NotContains(t, rr.Body.String(), `"operation":"create"`)
+}
+
+func TestAdminHandlerBanUserWithDuration(t *testing.T) {
+	user := models.NewUser(uuid.New(), "ban-user@example.com", "Ban User")
+	repo := &fakeAdminUserRepo{
+		users: map[uuid.UUID]*models.User{user.ID: user},
+	}
+	handler := NewAdminHandler(repo, nil)
+	claims := &auth.SessionClaims{Roles: []string{"admin"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := addURLParam(
+		httptest.NewRequest("POST", "/api/v1/admin/users/"+user.ID.String()+"/ban", strings.NewReader(`{"reason":"abuse","duration_hours":2}`)).WithContext(ctx),
+		"id",
+		user.ID.String(),
+	)
+	rr := httptest.NewRecorder()
+	handler.BanUser(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"banned":true`)
+	assert.Contains(t, rr.Body.String(), `"banned_until":"`)
+	assert.False(t, repo.users[user.ID].IsActive)
+	assert.NotNil(t, repo.users[user.ID].BannedUntil)
+}
+
+func TestAdminHandlerBanUserRejectsNegativeDuration(t *testing.T) {
+	user := models.NewUser(uuid.New(), "ban-negative@example.com", "Ban Negative")
+	repo := &fakeAdminUserRepo{
+		users: map[uuid.UUID]*models.User{user.ID: user},
+	}
+	handler := NewAdminHandler(repo, nil)
+	claims := &auth.SessionClaims{Roles: []string{"admin"}}
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
+	req := addURLParam(
+		httptest.NewRequest("POST", "/api/v1/admin/users/"+user.ID.String()+"/ban", strings.NewReader(`{"reason":"abuse","duration_hours":-1}`)).WithContext(ctx),
+		"id",
+		user.ID.String(),
+	)
+	rr := httptest.NewRecorder()
+	handler.BanUser(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }

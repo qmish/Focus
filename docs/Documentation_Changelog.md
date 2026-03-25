@@ -2,6 +2,13 @@
 
 ## 2026-03-25
 
+- Закрыт TODO по временным банам в admin API:
+  - `API_Go/internal/models/user.go`: добавлено поле `banned_until`.
+  - `API_Go/internal/api/handlers/admin_handler.go`: поддержка `duration_hours`,
+    валидация неотрицательного значения, возврат `banned_until`,
+    очистка срока при `unban`.
+  - `API_Go/internal/api/handlers/admin_handler_test.go`: добавлены тесты на временный бан и валидацию.
+- Обновлен `docs/Roadmap_v2.md` (этап `2.3`) с фиксацией закрытия admin ban TODO.
 - Усилен security-hardening WebSocket:
   - `API_Go/internal/websocket/hub.go`: origin allowlist (`WS_ALLOWED_ORIGINS`),
     strict room-access режим (`WS_STRICT_ROOM_ACCESS`) и fail-closed поведение без checker.
