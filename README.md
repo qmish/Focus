@@ -124,91 +124,29 @@ Focus/
 └── docker-compose.yml       # Локальное окружение
 ```
 
-## 📈 Статус реализации
+## 📈 Актуальный статус
 
-**Последний релиз:** v0.5.0 (24 марта 2026 г.)  
-**Общий прогресс:** ~70%
+**Последний релиз:** v0.5.19 (25 марта 2026 г.)  
+**Источник правды по плану:** `docs/Roadmap_v2.md`
 
-### Реализовано (✅)
+### Что уже реализовано
 
-- [x] **Бэкенд API** — 100% готово
-  - REST API (rooms, messages, calendar, admin)
-  - Keycloak OIDC аутентификация
-  - Jitsi JWT генерация
-  - MS Exchange интеграция
-  - WebSocket Hub
-  - Webhooks и чат-боты
+- Backend: auth/API/webhooks/bots/admin + websocket auth/room-level access.
+- Frontend: реальные room/message API-интеграции, единый API client, realtime websocket UX в `RoomPage`.
+- Frontend-admin: реальные users/stats/ban-unban, конференции, раздел наблюдаемости webhook/bot ошибок.
+- Dev/local: расширенный `docker-compose` (`api`, `frontend`, `frontend-admin`, `postgres`, `redis`, `keycloak`) + one-command startup.
+- CI/CD: quality/security gates, API e2e smoke, k6 load smoke, разделение pipelines для Focus и jitsi-fork.
 
-- [x] **Фронтенд (React)** — компоненты готовы
-  - Страницы: Login, Rooms, Room, Profile
-  - Jitsi Meeting компонент
-  - Zustand store
+### Что остается до go-live
 
-- [x] **Admin Frontend (React)** — компоненты готовы
-  - Dashboard, Users, Conferences, Settings
-  - Admin store
+- Этап 1: корпоративные интеграции AD/Exchange/role mapping (частично подготовлено, не завершено).
+- Этап 4: форк `jitsi-meet-master` и корпоративная кастомизация UI.
+- Этап 6.2: актуализация k8s stage/prod манифестов (ingress/TLS/policies/secrets/rotation).
+- Этап 7: полный e2e/load/security hardening и UAT/go-live.
 
-- [x] **Kubernetes** — 100% готов
-  - HPA конфигурации
-  - Prometheus мониторинг
-  - Production манифесты
+### Примечание
 
-- [x] **Тесты** — 86 тестов проходят
-  - Unit тесты (models, auth, jitsi, exchange)
-  - Integration тесты (handlers, webhooks, bots)
-
-- [x] **Документация** — 11 документов
-  - Architecture, HLD, Infrastructure
-  - API, Database, Integration
-  - Roadmap, Security
-
-### Требуется доработка (⚠️)
-
-- [ ] **Frontend интеграция** — подключить к API
-  - Добавить axios client
-  - Настроить interceptor для токенов
-  - Интегрировать REST API вызовы
-  - Обработать ошибки и loading states
-
-- [ ] **Admin интеграция** — подключить к API
-  - Admin API calls
-  - Users CRUD интеграция
-  - Stats и ban/unban
-
-- [ ] **WebSocket** — интегрировать во frontend
-  - Подключение к WebSocket
-  - Real-time сообщения
-  - Typing indicators
-
-- [ ] **Docker Compose** — настроить окружение
-  - Сервисы: postgres, redis, keycloak
-  - Сервисы: api, frontend, admin
-  - Network configuration
-
-- [ ] **CI/CD** — запустить pipeline
-  - GitHub Actions тестирование
-  - Автоматический деплой
-
-- [ ] **E2E и Load тесты** — запустить
-  - Playwright сценарии
-  - k6 нагрузочные тесты
-  - OWASP ZAP security scan
-
-### Прогресс по этапам
-
-| Этап | Статус | Готовность |
-|------|--------|------------|
-| Этап 0: Инициализация | ✅ Завершён | 100% |
-| Этап 1: Инфраструктура | ✅ Завершён | 100% |
-| Этап 2: Аутентификация и API | ✅ Завершён | 100% |
-| Этап 3: Фронтенд | ⚠️ Интеграция | 60% |
-| Этап 4: MS Exchange | ✅ Завершён | 100% |
-| Этап 5: Вебхуки и боты | ⏳ В плане | 0% |
-| Этап 6: Админка | ⚠️ Интеграция | 60% |
-| Этап 7: Тестирование | ⏳ В плане | 0% |
-
-**5 из 8 этапов завершены (62.5%)**  
-**До production-ready:** ~4 недели
+Старый `docs/Roadmap.md` сохранен как исторический документ. Для текущего execution-backlog и фактического прогресса используется `docs/Roadmap_v2.md`.
 
 ## 📄 Лицензия
 
