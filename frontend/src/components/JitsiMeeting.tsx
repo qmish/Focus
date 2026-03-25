@@ -6,14 +6,27 @@ interface JitsiMeetingProps {
   jwt: string
   userName?: string
   userEmail?: string
+  onJoin?: () => void
   onLeave?: () => void
+  onParticipantJoined?: (participant: unknown) => void
+  onParticipantLeft?: (participant: unknown) => void
 }
 
-export function JitsiMeeting({ roomName, jwt, userName, userEmail, onLeave }: JitsiMeetingProps) {
+export function JitsiMeeting({
+  roomName,
+  jwt,
+  userName,
+  userEmail,
+  onJoin,
+  onLeave,
+  onParticipantJoined,
+  onParticipantLeft,
+}: JitsiMeetingProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   const handleVideoConferenceJoined = () => {
     console.log('User joined the conference')
+    onJoin?.()
   }
 
   const handleVideoConferenceLeft = () => {
@@ -21,12 +34,14 @@ export function JitsiMeeting({ roomName, jwt, userName, userEmail, onLeave }: Ji
     onLeave?.()
   }
 
-  const handleParticipantJoined = (participant: any) => {
+  const handleParticipantJoined = (participant: unknown) => {
     console.log('Participant joined:', participant)
+    onParticipantJoined?.(participant)
   }
 
-  const handleParticipantLeft = (participant: any) => {
+  const handleParticipantLeft = (participant: unknown) => {
     console.log('Participant left:', participant)
+    onParticipantLeft?.(participant)
   }
 
   return (

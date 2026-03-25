@@ -19,6 +19,8 @@ export default function RoomPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
+  const [callStatus, setCallStatus] = useState<'idle' | 'joined' | 'left'>('idle')
+  const [participantEvents, setParticipantEvents] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectAttemptsRef = useRef(0)
@@ -160,8 +162,17 @@ export default function RoomPage() {
     setShowVideo(!showVideo)
   }
 
+  const handleJitsiJoin = () => {
+    setCallStatus('joined')
+  }
+
   const handleJitsiLeave = () => {
+    setCallStatus('left')
     setShowVideo(false)
+  }
+
+  const handleParticipantEvent = () => {
+    setParticipantEvents((value) => value + 1)
   }
 
   if (isLoading) {
@@ -185,6 +196,12 @@ export default function RoomPage() {
           <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.8 }}>
             {isRealtimeConnected ? 'WS: online' : 'WS: reconnecting...'}
           </span>
+          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.8 }}>
+            Call: {callStatus}
+          </span>
+          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.8 }}>
+            Events: {participantEvents}
+          </span>
         </div>
         <button onClick={handleVideoToggle} className="video-btn">
           {showVideo ? '💬 Чат' : '🎥 Видеозвонок'}
@@ -198,7 +215,10 @@ export default function RoomPage() {
             <JitsiMeeting
               roomName={currentRoom.jitsi_room_name}
               jwt={jitsiJWT}
+              onJoin={handleJitsiJoin}
               onLeave={handleJitsiLeave}
+              onParticipantJoined={handleParticipantEvent}
+              onParticipantLeft={handleParticipantEvent}
             />
           </div>
         ) : (

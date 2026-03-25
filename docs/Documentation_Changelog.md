@@ -2,6 +2,11 @@
 
 ## 2026-03-25
 
+- Во `frontend` реализован базовый event-bridge Jitsi iframe:
+  - `frontend/src/components/JitsiMeeting.tsx` поддерживает callbacks `onJoin/onLeave/onParticipantJoined/onParticipantLeft`,
+  - `frontend/src/pages/RoomPage.tsx` связывает события call lifecycle с состоянием UI (join/leave/events counters).
+- Добавлен тест `frontend/src/components/JitsiMeeting.test.tsx` на проброс событий в callbacks.
+- В `docs/Roadmap_v2.md` закрыт пункт `4.3` по согласованию iframe API событий и действий приложения.
 - В `API_Go/internal/auth/oidc.go` добавлена централизованная модель проверки доступов:
   - поддержка `scope/scopes` в session claims,
   - `RequireAccess` middleware (roles + scopes) для API маршрутов.
