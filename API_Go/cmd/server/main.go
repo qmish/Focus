@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/api/handlers"
 	"github.com/qmish/focus-api/internal/auth"
+	"github.com/qmish/focus-api/internal/bots"
 	"github.com/qmish/focus-api/internal/config"
 	"github.com/qmish/focus-api/internal/database"
 	"github.com/qmish/focus-api/internal/exchange"
@@ -127,10 +128,13 @@ func main() {
 	})
 	go wsHub.Run()
 
+	botUserID := uuid.NewSHA1(uuid.NameSpaceDNS, []byte("focus-system-bot"))
+	botEngine := bots.NewBotEngineWithDelivery(messageRepo, roomRepo, wsHub, botUserID)
+
 	// Создание handlers
 	authHandler := handlers.NewAuthHandler(oidcProvider, userRepo, jitsiGen, cfg, logger.WithContext(context.Background()))
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
-	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub)
+	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub, botEngine)
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
 	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
 	adminHandler.SetWebhookRepository(webhookRepo)

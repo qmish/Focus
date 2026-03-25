@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/auth"
+	"github.com/qmish/focus-api/internal/bots"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
 	"github.com/qmish/focus-api/internal/websocket"
@@ -15,15 +16,17 @@ import (
 
 // MessageHandler обработчики для messages
 type MessageHandler struct {
-	msgRepo *repository.MessageRepository
-	wsHub   *websocket.Hub
+	msgRepo    *repository.MessageRepository
+	wsHub      *websocket.Hub
+	botEngine  *bots.BotEngine
 }
 
 // NewMessageHandler создаёт новый MessageHandler
-func NewMessageHandler(msgRepo *repository.MessageRepository, wsHub *websocket.Hub) *MessageHandler {
+func NewMessageHandler(msgRepo *repository.MessageRepository, wsHub *websocket.Hub, botEngine *bots.BotEngine) *MessageHandler {
 	return &MessageHandler{
-		msgRepo: msgRepo,
-		wsHub:   wsHub,
+		msgRepo:   msgRepo,
+		wsHub:     wsHub,
+		botEngine: botEngine,
 	}
 }
 
@@ -159,6 +162,10 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 			"created_at": "` + message.CreatedAt.Format("2006-01-02T15:04:05Z07:00") + `"
 		}`),
 	})
+
+	if h.botEngine != nil {
+		_ = h.botEngine.HandleMessage(r.Context(), roomID.String(), userID.String(), req.Content)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

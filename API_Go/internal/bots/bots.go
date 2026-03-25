@@ -2,11 +2,14 @@ package bots
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/qmish/focus-api/internal/models"
+	"github.com/qmish/focus-api/internal/websocket"
 )
 
 // BotType тип бота
@@ -47,11 +50,30 @@ type BotCommand struct {
 
 // BotEngine движок ботов
 type BotEngine struct {
-	handlers map[string]BotHandler
+	handlers    map[string]BotHandler
+	messageRepo BotMessageRepository
+	roomChecker BotRoomAccessChecker
+	broadcaster BotBroadcaster
+	botUserID   uuid.UUID
 }
 
 // BotHandler обработчик команд бота
 type BotHandler func(ctx context.Context, roomID, userID, command, args string) (string, error)
+
+// BotMessageRepository stores bot responses as regular room messages.
+type BotMessageRepository interface {
+	Create(ctx context.Context, message *models.Message) error
+}
+
+// BotRoomAccessChecker validates whether user can execute commands in room.
+type BotRoomAccessChecker interface {
+	IsParticipant(ctx context.Context, roomID, userID uuid.UUID) (bool, error)
+}
+
+// BotBroadcaster publishes bot responses over websocket.
+type BotBroadcaster interface {
+	BroadcastToRoom(roomID string, message websocket.WSMessage)
+}
 
 // NewBotEngine создаёт новый BotEngine
 func NewBotEngine() *BotEngine {
@@ -62,6 +84,21 @@ func NewBotEngine() *BotEngine {
 	// Регистрируем встроенных ботов
 	engine.registerBuiltinBots()
 
+	return engine
+}
+
+// NewBotEngineWithDelivery creates bot engine with real room delivery.
+func NewBotEngineWithDelivery(
+	messageRepo BotMessageRepository,
+	roomChecker BotRoomAccessChecker,
+	broadcaster BotBroadcaster,
+	botUserID uuid.UUID,
+) *BotEngine {
+	engine := NewBotEngine()
+	engine.messageRepo = messageRepo
+	engine.roomChecker = roomChecker
+	engine.broadcaster = broadcaster
+	engine.botUserID = botUserID
 	return engine
 }
 
@@ -98,6 +135,9 @@ func (e *BotEngine) HandleMessage(ctx context.Context, roomID, userID, content s
 
 	// Проверяем встроенные команды
 	if handler, ok := e.handlers[command]; ok {
+		if !e.canHandleInRoom(ctx, roomID, userID) {
+			return nil
+		}
 		response, err := handler(ctx, roomID, userID, command, args)
 		if err != nil {
 			return err
@@ -110,8 +150,53 @@ func (e *BotEngine) HandleMessage(ctx context.Context, roomID, userID, content s
 }
 
 func (e *BotEngine) sendResponse(ctx context.Context, roomID, content string) error {
-	// TODO: Использовать реальную реализацию отправки сообщений
+	if e.messageRepo == nil || e.broadcaster == nil || e.botUserID == uuid.Nil {
+		return nil
+	}
+	roomUUID, err := uuid.Parse(roomID)
+	if err != nil {
+		return nil
+	}
+	message := models.NewMessage(roomUUID, e.botUserID, content, models.MessageTypeSystem)
+	if err := e.messageRepo.Create(ctx, message); err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(map[string]interface{}{
+		"id":         message.ID.String(),
+		"room_id":    roomUUID.String(),
+		"user_id":    e.botUserID.String(),
+		"content":    content,
+		"type":       string(message.Type),
+		"created_at": message.CreatedAt.Format(time.RFC3339),
+	})
+	if err != nil {
+		return err
+	}
+	e.broadcaster.BroadcastToRoom(roomUUID.String(), websocket.WSMessage{
+		Type:    websocket.MessageTypeMessage,
+		Payload: payload,
+	})
 	return nil
+}
+
+func (e *BotEngine) canHandleInRoom(ctx context.Context, roomID, userID string) bool {
+	if e.roomChecker == nil {
+		return true
+	}
+	roomUUID, err := uuid.Parse(roomID)
+	if err != nil {
+		return false
+	}
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return false
+	}
+	isParticipant, err := e.roomChecker.IsParticipant(ctx, roomUUID, userUUID)
+	if err != nil {
+		return false
+	}
+	return isParticipant
 }
 
 // handleMeetingCreate обработчик команды /create
