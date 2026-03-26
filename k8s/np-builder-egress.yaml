@@ -1,0 +1,13 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-all-temp
+  namespace: messenger-stage
+spec:
+  podSelector:
+    matchLabels:
+      role: builder
+  policyTypes:
+  - Egress
+  egress:
+  - {}

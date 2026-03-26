@@ -1,0 +1,22 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: focus-local-tls
+  namespace: messenger-stage
+spec:
+  secretName: focus-local-tls
+  duration: 8760h # 1 year
+  renewBefore: 720h # 30 days
+  commonName: "*.focus.local"
+  dnsNames:
+    - focus.local
+    - "*.focus.local"
+    - chat.focus.local
+    - admin.focus.local
+    - api.focus.local
+    - meet.focus.local
+  issuerRef:
+    name: focus-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io

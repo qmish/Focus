@@ -54,3 +54,16 @@ swagger-ui/
 
 # MinIO
 data/
+
+# Build artifacts
+*.tar
+*.tar.gz
+*.b64
+api-go
+layer/
+admin-layer/
+frontend-layer/
+.kaniko-api-tag
+.kaniko-release-tag
+.last-kaniko-tag
+crane-linux.tar.gz

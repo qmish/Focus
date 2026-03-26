@@ -1,0 +1,60 @@
+---
+# Jitsi Ingress for stage
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jitsi-stage-ingress
+  namespace: jitsi
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - meet.focus.local
+      secretName: jitsi-focus-local-tls
+  rules:
+    - host: meet.focus.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jitsi-web
+                port:
+                  number: 80
+---
+# Jitsi Ingress for prod
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jitsi-prod-ingress
+  namespace: jitsi
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - meet.focus.ftsystems.ru
+      secretName: jitsi-ftsystems-tls
+  rules:
+    - host: meet.focus.ftsystems.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jitsi-web
+                port:
+                  number: 80

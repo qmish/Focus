@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kaniko-staging
+  namespace: kaniko
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: t4-k3s-mkuryatnikov-05-fts
+  containers:
+  - name: staging
+    image: alpine:3.20
+    command: ["sleep", "3600"]
+    volumeMounts:
+    - name: context
+      mountPath: /workspace
+  volumes:
+  - name: context
+    emptyDir: {}
+  restartPolicy: Never

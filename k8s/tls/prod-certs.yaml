@@ -1,0 +1,22 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: focus-ftsystems-tls
+  namespace: messenger-prod
+spec:
+  secretName: focus-ftsystems-tls
+  duration: 8760h # 1 year
+  renewBefore: 720h # 30 days
+  commonName: "*.focus.ftsystems.ru"
+  dnsNames:
+    - focus.ftsystems.ru
+    - "*.focus.ftsystems.ru"
+    - chat.focus.ftsystems.ru
+    - admin.focus.ftsystems.ru
+    - api.focus.ftsystems.ru
+    - meet.focus.ftsystems.ru
+  issuerRef:
+    name: focus-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io

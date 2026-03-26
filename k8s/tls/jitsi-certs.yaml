@@ -1,0 +1,34 @@
+---
+# Jitsi TLS for stage
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: jitsi-focus-local-tls
+  namespace: jitsi
+spec:
+  secretName: jitsi-focus-local-tls
+  duration: 8760h
+  renewBefore: 720h
+  dnsNames:
+    - meet.focus.local
+  issuerRef:
+    name: focus-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# Jitsi TLS for prod
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: jitsi-ftsystems-tls
+  namespace: jitsi
+spec:
+  secretName: jitsi-ftsystems-tls
+  duration: 8760h
+  renewBefore: 720h
+  dnsNames:
+    - meet.focus.ftsystems.ru
+  issuerRef:
+    name: focus-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
