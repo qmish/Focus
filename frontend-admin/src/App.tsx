@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useAdminAuthStore } from './store/adminAuthStore'
 import Layout from './components/Layout'
 import DashboardPage from './pages/DashboardPage'
 import UsersPage from './pages/UsersPage'
@@ -8,6 +10,9 @@ import ObservabilityPage from './pages/ObservabilityPage'
 import LoginPage from './pages/LoginPage'
 
 function AdminApp() {
+  const init = useAdminAuthStore(s => s.init)
+  useEffect(() => { init() }, [init])
+
   return (
     <BrowserRouter>
       <Routes>

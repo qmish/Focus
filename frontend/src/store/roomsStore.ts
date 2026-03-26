@@ -20,6 +20,13 @@ export interface Message {
   type: 'text' | 'image' | 'file' | 'system'
   created_at: string
   updated_at: string
+  metadata?: {
+    file_id?: string
+    file_name?: string
+    file_size?: number
+    file_mime?: string
+    edited?: boolean
+  }
   user?: {
     id: string
     name: string
@@ -38,7 +45,7 @@ interface RoomsState {
   deleteRoom: (roomId: string) => Promise<void>
 }
 
-export const useRoomsStore = create<RoomsState>((set, get) => ({
+export const useRoomsStore = create<RoomsState>((set, _get) => ({
   rooms: [],
   currentRoom: null,
   isLoading: false,

@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react'
 import { JitsiMeeting as JitsiReactMeeting } from '@jitsi/react-sdk'
 
 type BrandingConfig = {
@@ -19,8 +18,6 @@ interface JitsiMeetingProps {
   userEmail?: string
   onJoin?: () => void
   onLeave?: () => void
-  onParticipantJoined?: (participant: unknown) => void
-  onParticipantLeft?: (participant: unknown) => void
 }
 
 export function JitsiMeeting({
@@ -30,12 +27,8 @@ export function JitsiMeeting({
   branding,
   userName,
   userEmail,
-  onJoin,
   onLeave,
-  onParticipantJoined,
-  onParticipantLeft,
 }: JitsiMeetingProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
   const toolbarButtons = branding?.toolbarButtons ?? [
     'microphone',
     'camera',
@@ -52,28 +45,8 @@ export function JitsiMeeting({
     'videoquality',
   ]
 
-  const handleVideoConferenceJoined = () => {
-    console.log('User joined the conference')
-    onJoin?.()
-  }
-
-  const handleVideoConferenceLeft = () => {
-    console.log('User left the conference')
-    onLeave?.()
-  }
-
-  const handleParticipantJoined = (participant: unknown) => {
-    console.log('Participant joined:', participant)
-    onParticipantJoined?.(participant)
-  }
-
-  const handleParticipantLeft = (participant: unknown) => {
-    console.log('Participant left:', participant)
-    onParticipantLeft?.(participant)
-  }
-
   return (
-    <div ref={containerRef} className="jitsi-meeting-container">
+    <div className="jitsi-meeting-container">
       <JitsiReactMeeting
         domain={domain || 'meet.company.com'}
         roomName={roomName}
@@ -97,14 +70,17 @@ export function JitsiMeeting({
           TOOLBAR_BUTTONS: toolbarButtons,
         }}
         userInfo={{
-          displayName: userName,
-          email: userEmail,
+          displayName: userName || '',
+          email: userEmail || '',
         }}
-        onVideoConferenceJoined={handleVideoConferenceJoined}
-        onVideoConferenceLeft={handleVideoConferenceLeft}
-        onParticipantJoined={handleParticipantJoined}
-        onParticipantLeft={handleParticipantLeft}
-        style={{ height: '100%', width: '100%' }}
+        onApiReady={(api) => {
+          api.addEventListener('videoConferenceLeft', () => onLeave?.())
+        }}
+        onReadyToClose={() => onLeave?.()}
+        getIFrameRef={(node) => {
+          node.style.height = '100%'
+          node.style.width = '100%'
+        }}
       />
     </div>
   )

@@ -1,18 +1,16 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
-import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
-import RoomsPage from './pages/RoomsPage'
-import RoomPage from './pages/RoomPage'
+import MessengerPage from './pages/MessengerPage'
 import ProfilePage from './pages/ProfilePage'
 import NotFoundPage from './pages/NotFoundPage'
 
-// Protected Route компонент
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
 
   if (isLoading) {
-    return <div>Загрузка...</div>
+    return <div className="loading-screen">Загрузка...</div>
   }
 
   if (!isAuthenticated) {
@@ -23,25 +21,26 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  const init = useAuthStore(s => s.init)
+  useEffect(() => { init() }, [init])
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        
         <Route
           path="/"
           element={
             <ProtectedRoute>
-              <Layout />
+              <MessengerPage />
             </ProtectedRoute>
           }
         >
           <Route index element={<Navigate to="/rooms" replace />} />
-          <Route path="rooms" element={<RoomsPage />} />
-          <Route path="rooms/:roomId" element={<RoomPage />} />
-          <Route path="profile" element={<ProfilePage />} />
+          <Route path="rooms" element={null} />
+          <Route path="rooms/:roomId" element={null} />
         </Route>
-
+        <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>

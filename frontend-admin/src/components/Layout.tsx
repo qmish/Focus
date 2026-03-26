@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAdminAuthStore } from '../store/adminAuthStore'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, logout, isAuthenticated } = useAdminAuthStore()
+  const { user, logout, isAuthenticated, isLoading } = useAdminAuthStore()
 
   const navItems = [
     { path: '/dashboard', label: 'Дашборд', icon: '📊' },
@@ -16,15 +16,19 @@ export default function Layout() {
     { path: '/settings', label: 'Настройки', icon: '⚙️' },
   ]
 
+  if (isLoading) {
+    return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'#a6adc8'}}>Загрузка...</div>
+  }
+
   if (!isAuthenticated) {
-    return null
+    return <Navigate to="/login" replace />
   }
 
   return (
     <div className="admin-layout">
       <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
         <div className="sidebar-header">
-          <h1>⚙️ Focus Admin</h1>
+          <h1>Focus Admin</h1>
           <button onClick={() => setSidebarOpen(!sidebarOpen)}>
             {sidebarOpen ? '◀' : '▶'}
           </button>
@@ -51,7 +55,7 @@ export default function Layout() {
             </div>
           )}
           <button onClick={() => { logout(); navigate('/login') }} className="logout-btn">
-            {sidebarOpen ? '🚪 Выйти' : '🚪'}
+            {sidebarOpen ? 'Выйти' : '🚪'}
           </button>
         </div>
       </aside>
@@ -71,16 +75,9 @@ export default function Layout() {
         </header>
 
         <div className="page-content">
-          {location.pathname === '/' ? null : (
-            <div className="outlet-wrapper">
-              <Outlet />
-            </div>
-          )}
+          <Outlet />
         </div>
       </main>
     </div>
   )
 }
-
-// Import Outlet from react-router-dom
-import { Outlet } from 'react-router-dom'
