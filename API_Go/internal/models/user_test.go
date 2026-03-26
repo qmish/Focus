@@ -17,7 +17,7 @@ func TestNewUser(t *testing.T) {
 
 	assert.Equal(t, email, user.Email)
 	assert.Equal(t, name, user.Name)
-	assert.Equal(t, keycloakID, user.KeycloakID)
+	assert.Equal(t, &keycloakID, user.KeycloakID)
 	assert.True(t, user.IsActive)
 	assert.Contains(t, user.Roles, "user")
 	assert.NotEmpty(t, user.ID)
@@ -62,7 +62,7 @@ func TestUserSerialization(t *testing.T) {
 	now := time.Now()
 	user := &User{
 		ID:          uuid.New(),
-		KeycloakID:  keycloakID,
+		KeycloakID:  &keycloakID,
 		Email:       "test@example.com",
 		Name:        "Test User",
 		AvatarURL:   "https://example.com/avatar.jpg",

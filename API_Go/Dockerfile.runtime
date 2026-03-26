@@ -1,0 +1,12 @@
+FROM alpine:3.20
+
+WORKDIR /root/
+
+RUN apk --no-cache add ca-certificates
+
+COPY dist/api-go ./api-go
+RUN chmod +x ./api-go
+
+EXPOSE 8080
+
+CMD ["./api-go"]

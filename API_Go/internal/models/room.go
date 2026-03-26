@@ -1,6 +1,9 @@
 package models
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +23,21 @@ type RoomSettings struct {
 	AllowGuests             bool `json:"allow_guests"`
 	RequireModeratorForMsgs bool `json:"require_moderator_for_messages"`
 	MaxParticipants         int  `json:"max_participants"`
+}
+
+func (s RoomSettings) Value() (driver.Value, error) {
+	return json.Marshal(s)
+}
+
+func (s *RoomSettings) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("RoomSettings.Scan: expected []byte, got %T", value)
+	}
+	return json.Unmarshal(bytes, s)
 }
 
 // Room представляет комнату чата/встречи
