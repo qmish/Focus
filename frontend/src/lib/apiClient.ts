@@ -1,5 +1,5 @@
 import { useAuthStore } from '../store/authStore'
-import { apiRequest } from './apiClientCore'
+import { apiRequest, ApiError } from './apiClientCore'
 
 function getToken(): string | null {
   return useAuthStore.getState().token
@@ -17,5 +17,20 @@ export const apiClient = {
   },
   delete(url: string): Promise<void> {
     return apiRequest<void>(url, { method: 'DELETE', token: getToken(), retry: 0 })
+  },
+  async uploadFile<T>(url: string, file: File): Promise<T> {
+    const token = getToken()
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    })
+    if (!res.ok) {
+      const text = await res.text()
+      throw new ApiError(text || `HTTP ${res.status}`, res.status, text)
+    }
+    return res.json() as Promise<T>
   },
 }

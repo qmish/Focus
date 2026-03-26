@@ -1,6 +1,9 @@
 package models
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +45,31 @@ type Metadata struct {
 	EditedBy  *uuid.UUID `json:"edited_by,omitempty"`
 	ReplyTo   *uuid.UUID `json:"reply_to,omitempty"`
 	Reactions []Reaction `json:"reactions,omitempty"`
+	FileName  string     `json:"file_name,omitempty"`
+	FileSize  int64      `json:"file_size,omitempty"`
+	FileMIME  string     `json:"file_mime,omitempty"`
+	FileID    string     `json:"file_id,omitempty"`
+}
+
+func (m Metadata) Value() (driver.Value, error) {
+	return json.Marshal(m)
+}
+
+func (m *Metadata) Scan(value interface{}) error {
+	if value == nil {
+		*m = Metadata{}
+		return nil
+	}
+	var bytes []byte
+	switch v := value.(type) {
+	case []byte:
+		bytes = v
+	case string:
+		bytes = []byte(v)
+	default:
+		return fmt.Errorf("Metadata.Scan: unsupported type %T", value)
+	}
+	return json.Unmarshal(bytes, m)
 }
 
 // Reaction реакция на сообщение

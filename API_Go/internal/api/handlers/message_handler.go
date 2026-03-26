@@ -102,8 +102,12 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Content == "" || len(req.Content) > 10000 {
-		http.Error(w, "invalid content (1-10000 characters)", http.StatusBadRequest)
+	if len(req.Content) > 10000 {
+		http.Error(w, "content too long (max 10000 characters)", http.StatusBadRequest)
+		return
+	}
+	if req.Content == "" && req.Type != "file" && req.Type != "image" {
+		http.Error(w, "content is required", http.StatusBadRequest)
 		return
 	}
 
@@ -136,6 +140,14 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	// Создаём сообщение
 	message := models.NewMessage(roomID, userID, req.Content, msgType)
 
+	// Обрабатываем metadata (file attachments)
+	if req.Metadata != nil {
+		var meta models.Metadata
+		if err := json.Unmarshal(req.Metadata, &meta); err == nil {
+			message.Metadata = meta
+		}
+	}
+
 	// Обрабатываем reply_to
 	if req.ReplyToID != "" {
 		replyToID, err := uuid.Parse(req.ReplyToID)
@@ -150,17 +162,11 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Рассылаем сообщение через WebSocket
+	// Рассылаем сообщение через WebSocket (proper JSON marshal for safety)
+	wsPayload, _ := json.Marshal(message)
 	h.wsHub.BroadcastToRoom(roomID.String(), websocket.WSMessage{
-		Type: websocket.MessageTypeMessage,
-		Payload: json.RawMessage(`{
-			"id": "` + message.ID.String() + `",
-			"room_id": "` + roomID.String() + `",
-			"user_id": "` + userID.String() + `",
-			"content": "` + req.Content + `",
-			"type": "` + string(msgType) + `",
-			"created_at": "` + message.CreatedAt.Format("2006-01-02T15:04:05Z07:00") + `"
-		}`),
+		Type:    websocket.MessageTypeMessage,
+		Payload: wsPayload,
 	})
 
 	if h.botEngine != nil {
