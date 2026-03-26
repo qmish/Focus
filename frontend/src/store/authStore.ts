@@ -2,30 +2,39 @@ import { create } from 'zustand'
 import Keycloak from 'keycloak-js'
 
 const ACCESS_TOKEN_KEY = 'focus_access_token'
+const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || ''
 
-// Инициализация Keycloak
-const keycloak = new Keycloak({
-  url: import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8180',
-  realm: import.meta.env.VITE_KEYCLOAK_REALM || 'company',
-  clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'messenger-frontend',
-})
+const keycloak = KEYCLOAK_URL
+  ? new Keycloak({
+      url: KEYCLOAK_URL,
+      realm: import.meta.env.VITE_KEYCLOAK_REALM || 'company',
+      clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'messenger-frontend',
+    })
+  : null
+
+interface AuthUser {
+  id: string
+  email: string
+  name: string
+  roles: string[]
+}
 
 interface AuthState {
-  keycloak: typeof keycloak | null
+  keycloak: Keycloak | null
   isAuthenticated: boolean
   isLoading: boolean
-  user: {
-    id: string
-    email: string
-    name: string
-    roles: string[]
-  } | null
+  user: AuthUser | null
   token: string | null
+  keycloakAvailable: boolean
   init: () => Promise<void>
-  login: () => Promise<void>
+  loginLocal: (email: string, password: string) => Promise<void>
+  registerLocal: (email: string, password: string, name: string) => Promise<void>
+  loginKeycloak: () => Promise<void>
   logout: () => Promise<void>
   refreshToken: () => Promise<void>
 }
+
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   keycloak: null,
@@ -33,93 +42,151 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   user: null,
   token: null,
+  keycloakAvailable: !!KEYCLOAK_URL,
 
   init: async () => {
-    try {
-      const authenticated = await keycloak.init({
-        onLoad: 'check-sso',
-        silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
-        pkceMethod: 'S256',
-      })
+    const saved = localStorage.getItem(ACCESS_TOKEN_KEY)
+    if (saved) {
+      try {
+        const res = await fetch(`${API_BASE}/v1/auth/me`, {
+          headers: { Authorization: `Bearer ${saved}` },
+        })
+        if (res.ok) {
+          const user = await res.json()
+          set({
+            isAuthenticated: true,
+            isLoading: false,
+            user,
+            token: saved,
+          })
+          return
+        }
+      } catch { /* token expired or invalid */ }
+      localStorage.removeItem(ACCESS_TOKEN_KEY)
+    }
 
-      const token = keycloak.token || localStorage.getItem(ACCESS_TOKEN_KEY) || null
-      const user = token ? {
-        id: keycloak.subject || '',
-        email: keycloak.idTokenParsed?.email || '',
-        name: keycloak.idTokenParsed?.name || '',
-        roles: keycloak.resourceAccess?.['messenger-api']?.roles || [],
-      } : null
+    if (keycloak) {
+      try {
+        const authenticated = await keycloak.init({
+          onLoad: 'check-sso',
+          silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
+          pkceMethod: 'S256',
+        })
 
-      if (token) {
-        localStorage.setItem(ACCESS_TOKEN_KEY, token)
-      } else {
-        localStorage.removeItem(ACCESS_TOKEN_KEY)
-      }
-
-      set({
-        keycloak,
-        isAuthenticated: authenticated || Boolean(token),
-        isLoading: false,
-        user,
-        token,
-      })
-
-      // Настраиваем автоматическое обновление токена
-      if (authenticated) {
-        setInterval(async () => {
+        if (authenticated && keycloak.idToken) {
           try {
-            await keycloak.updateToken(30)
-            const nextToken = keycloak.token || null
-            set({
-              token: nextToken,
-              isAuthenticated: Boolean(nextToken),
+            const res = await fetch(`${API_BASE}/v1/auth/token-exchange`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: keycloak.idToken }),
             })
-            if (nextToken) {
-              localStorage.setItem(ACCESS_TOKEN_KEY, nextToken)
-            } else {
-              localStorage.removeItem(ACCESS_TOKEN_KEY)
+            if (res.ok) {
+              const data = await res.json()
+              localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token)
+              set({
+                keycloak,
+                isAuthenticated: true,
+                isLoading: false,
+                user: data.user,
+                token: data.access_token,
+              })
+              return
             }
-          } catch {
-            get().logout()
+          } catch (err) {
+            console.error('Token exchange failed:', err)
           }
-        }, 60000)
+        }
+
+        set({ keycloak, isAuthenticated: false, isLoading: false, user: null, token: null })
+        return
+      } catch (err) {
+        console.error('Keycloak init failed:', err)
       }
-    } catch (error) {
-      console.error('Failed to initialize Keycloak:', error)
-      set({ isLoading: false })
+    }
+
+    set({ isLoading: false })
+  },
+
+  loginLocal: async (email: string, password: string) => {
+    const res = await fetch(`${API_BASE}/v1/auth/local/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(text || 'Login failed')
+    }
+
+    const data = await res.json()
+    localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token)
+    set({
+      isAuthenticated: true,
+      isLoading: false,
+      user: data.user,
+      token: data.access_token,
+    })
+  },
+
+  registerLocal: async (email: string, password: string, name: string) => {
+    const res = await fetch(`${API_BASE}/v1/auth/local/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, name }),
+    })
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(text || 'Registration failed')
+    }
+
+    const data = await res.json()
+    localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token)
+    set({
+      isAuthenticated: true,
+      isLoading: false,
+      user: data.user,
+      token: data.access_token,
+    })
+  },
+
+  loginKeycloak: async () => {
+    if (keycloak) {
+      await keycloak.login()
     }
   },
 
-  login: async () => {
-    await keycloak.login()
-  },
-
   logout: async () => {
-    await keycloak.logout({ redirectUri: window.location.origin })
-    set({
-      isAuthenticated: false,
-      user: null,
-      token: null,
-    })
+    const { token } = get()
+    if (token && token !== 'bypass-token') {
+      try {
+        await fetch(`${API_BASE}/v1/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      } catch { /* ignore */ }
+    }
+
+    if (keycloak?.authenticated) {
+      await keycloak.logout({ redirectUri: window.location.origin })
+    }
+
+    set({ isAuthenticated: false, user: null, token: null })
     localStorage.removeItem(ACCESS_TOKEN_KEY)
   },
 
   refreshToken: async () => {
-    try {
-      await keycloak.updateToken(30)
-      const nextToken = keycloak.token || null
-      set({
-        token: nextToken,
-        isAuthenticated: Boolean(nextToken),
-      })
-      if (nextToken) {
-        localStorage.setItem(ACCESS_TOKEN_KEY, nextToken)
-      } else {
-        localStorage.removeItem(ACCESS_TOKEN_KEY)
+    if (keycloak?.authenticated) {
+      try {
+        await keycloak.updateToken(30)
+        const nextToken = keycloak.token || null
+        set({ token: nextToken, isAuthenticated: Boolean(nextToken) })
+        if (nextToken) localStorage.setItem(ACCESS_TOKEN_KEY, nextToken)
+        else localStorage.removeItem(ACCESS_TOKEN_KEY)
+      } catch {
+        get().logout()
       }
-    } catch (error) {
-      console.error('Failed to refresh token:', error)
-      get().logout()
     }
   },
 }))

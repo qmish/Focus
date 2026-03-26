@@ -70,6 +70,7 @@ type RedisConfig struct {
 // KeycloakConfig конфигурация Keycloak OIDC
 type KeycloakConfig struct {
 	ServerURL          string
+	InternalURL        string // optional: internal cluster URL for OIDC discovery
 	Realm              string
 	ClientID           string
 	ClientSecret       string
@@ -152,6 +153,7 @@ func Load() *Config {
 		},
 		Keycloak: KeycloakConfig{
 			ServerURL:          getEnv("KEYCLOAK_URL", "http://localhost:8180"),
+			InternalURL:        getEnv("KEYCLOAK_INTERNAL_URL", ""),
 			Realm:              getEnv("KEYCLOAK_REALM", "company"),
 			ClientID:           getEnv("KEYCLOAK_CLIENT_ID", "messenger-api"),
 			ClientSecret:       getEnv("KEYCLOAK_CLIENT_SECRET", ""),

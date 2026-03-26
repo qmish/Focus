@@ -72,6 +72,7 @@ func main() {
 		&models.RevokedSession{},
 		&bots.BotCommandEvent{},
 		&webhooks.IncomingEvent{},
+		&webhooks.WebhookDelivery{},
 	); err != nil {
 		logger.Error("Database migration failed", zap.Error(err))
 		os.Exit(1)
@@ -104,13 +105,17 @@ func main() {
 	}
 
 	// Инициализация OIDC провайдера
-	oidcProvider, err := auth.NewOIDCProvider(auth.OIDCConfig{
+	oidcCfg := auth.OIDCConfig{
 		IssuerURL:    fmt.Sprintf("%s/realms/%s", cfg.Keycloak.ServerURL, cfg.Keycloak.Realm),
 		ClientID:     cfg.Keycloak.ClientID,
 		ClientSecret: cfg.Keycloak.ClientSecret,
 		RedirectURL:  cfg.Keycloak.RedirectURL,
 		Scopes:       []string{"openid", "profile", "email", "roles"},
-	})
+	}
+	if cfg.Keycloak.InternalURL != "" {
+		oidcCfg.DiscoveryURL = fmt.Sprintf("%s/realms/%s", cfg.Keycloak.InternalURL, cfg.Keycloak.Realm)
+	}
+	oidcProvider, err := auth.NewOIDCProvider(oidcCfg)
 	if err != nil {
 		logger.Error("Failed to create OIDC provider", zap.Error(err))
 		// Продолжаем без OIDC для разработки
@@ -160,6 +165,7 @@ func main() {
 	authHandler.SetSessionRevocationRepository(sessionRevocationRepo)
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub, botEngine)
+	fileHandler := handlers.NewFileHandler("/data/uploads")
 	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
 	calendarHandler.SetCalendarAuditRepository(calendarAuditRepo)
 	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
@@ -169,6 +175,12 @@ func main() {
 	adminHandler.SetAuthAuditRepository(authAuditRepo)
 	adminHandler.SetCalendarAuditRepository(calendarAuditRepo)
 	brandingHandler := handlers.NewJitsiBrandingHandler()
+	localAuthHandler := handlers.NewLocalAuthHandler(
+		userRepo,
+		resolveSessionSecret(cfg),
+		resolveSessionLifetimeDuration(cfg),
+		logger.WithContext(context.Background()),
+	)
 	// Warm in-memory revocation blacklist from persistent storage for API/WS checks.
 	if revokedSessions, err := sessionRevocationRepo.ListActiveRevokedSessions(context.Background(), time.Now(), 100000); err == nil {
 		for _, item := range revokedSessions {
@@ -223,6 +235,9 @@ func main() {
 			r.Get("/callback", authHandler.Callback)
 			r.Post("/refresh", authHandler.Refresh)
 			r.Post("/logout", authHandler.Logout)
+			r.Post("/token-exchange", authHandler.TokenExchange)
+			r.Post("/local/register", localAuthHandler.Register)
+			r.Post("/local/login", localAuthHandler.Login)
 		})
 
 		// WebSocket endpoint
@@ -276,6 +291,10 @@ func main() {
 					r.Delete("/", messageHandler.DeleteMessage)
 				})
 			})
+
+			// Files
+			r.Post("/files/upload", fileHandler.Upload)
+			r.Get("/files/{fileId}", fileHandler.Download)
 
 			// Calendar
 			if graphClient != nil {
@@ -384,6 +403,20 @@ func readinessCheck(db *database.Database) http.HandlerFunc {
 type botMeetingScheduler struct {
 	graphClient *exchange.GraphClient
 	userRepo    *repository.UserRepository
+}
+
+func resolveSessionSecret(cfg *config.Config) []byte {
+	if cfg == nil || cfg.Auth.SessionSecret == "" {
+		return []byte("dev-session-secret-change-me")
+	}
+	return []byte(cfg.Auth.SessionSecret)
+}
+
+func resolveSessionLifetimeDuration(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Auth.SessionTokenLifetime <= 0 {
+		return 24 * time.Hour
+	}
+	return cfg.Auth.SessionTokenLifetime
 }
 
 func (s *botMeetingScheduler) ScheduleMeeting(

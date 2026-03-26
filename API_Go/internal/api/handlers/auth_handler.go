@@ -228,6 +228,80 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// TokenExchange POST /api/v1/auth/token-exchange
+// Accepts a Keycloak ID token from SPA clients and returns an API session JWT.
+func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
+	if h.oidcProvider == nil {
+		http.Error(w, "auth provider unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+		http.Error(w, "missing token field", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	userInfo, err := h.oidcProvider.VerifyAccessToken(ctx, req.Token)
+	if err != nil {
+		h.logger.Error("token exchange: verification failed", zap.Error(err))
+		h.recordAudit(r, "token_exchange", "failed", "", "", "verification_failed")
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+	h.groupPolicyMapper.Apply(userInfo)
+
+	keycloakID, err := parseUUID(userInfo.Sub)
+	if err != nil {
+		h.logger.Error("token exchange: invalid keycloak id", zap.Error(err))
+		http.Error(w, "invalid user id", http.StatusInternalServerError)
+		return
+	}
+
+	user, err := h.userRepo.GetOrCreate(ctx, keycloakID, userInfo.Email, userInfo.Name)
+	if err != nil {
+		h.logger.Error("token exchange: failed to get or create user", zap.Error(err))
+		http.Error(w, "failed to create user", http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
+		h.logger.Warn("token exchange: failed to update last login", zap.Error(err))
+	}
+
+	sessionID, _ := generateSessionID()
+	userInfo.Sub = user.ID.String()
+	sessionJWT, err := auth.GenerateSessionJWT(userInfo, sessionID, h.sessionSecret, h.sessionTokenLifetime)
+	if err != nil {
+		h.logger.Error("token exchange: failed to generate session jwt", zap.Error(err))
+		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	jitsiJWT, _ := h.jitsiGen.GenerateTokenForUser("*", user.ID.String(), user.Name, user.Email, true)
+	h.recordAudit(r, "token_exchange", "success", user.ID.String(), user.Email, "")
+
+	response := map[string]interface{}{
+		"access_token": sessionJWT,
+		"token_type":   "Bearer",
+		"expires_in":   int(h.sessionTokenLifetime.Seconds()),
+		"user": map[string]interface{}{
+			"id":        user.ID.String(),
+			"email":     user.Email,
+			"name":      user.Name,
+			"roles":     user.Roles,
+			"jitsi_jwt": jitsiJWT,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // Refresh POST /api/v1/auth/refresh
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	refreshToken, err := extractBearerToken(r.Header.Get("Authorization"))

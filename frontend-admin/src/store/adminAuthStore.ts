@@ -1,11 +1,16 @@
 import { create } from 'zustand'
 import Keycloak from 'keycloak-js'
 
-const keycloak = new Keycloak({
-  url: import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8180',
-  realm: import.meta.env.VITE_KEYCLOAK_REALM || 'company',
-  clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'messenger-admin',
-})
+const ADMIN_TOKEN_KEY = 'admin_token'
+const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || ''
+
+const keycloak = KEYCLOAK_URL
+  ? new Keycloak({
+      url: KEYCLOAK_URL,
+      realm: import.meta.env.VITE_KEYCLOAK_REALM || 'company',
+      clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'messenger-admin',
+    })
+  : null
 
 interface AdminUser {
   id: string
@@ -15,17 +20,21 @@ interface AdminUser {
 }
 
 interface AdminAuthState {
-  keycloak: typeof keycloak | null
+  keycloak: Keycloak | null
   isAuthenticated: boolean
   isLoading: boolean
   user: AdminUser | null
   token: string | null
+  keycloakAvailable: boolean
   init: () => Promise<void>
-  login: () => Promise<void>
+  loginLocal: (email: string, password: string) => Promise<void>
+  loginKeycloak: () => Promise<void>
   logout: () => Promise<void>
   checkAdmin: () => boolean
   getAccessToken: () => string | null
 }
+
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
   keycloak: null,
@@ -33,87 +42,118 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
   isLoading: true,
   user: null,
   token: null,
+  keycloakAvailable: !!KEYCLOAK_URL,
 
   init: async () => {
-    try {
-      const authenticated = await keycloak.init({
-        onLoad: 'check-sso',
-        silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
-        pkceMethod: 'S256',
-      })
-
-      const token = keycloak.token || null
-      const user = token ? {
-        id: keycloak.subject || '',
-        email: keycloak.idTokenParsed?.email || '',
-        name: keycloak.idTokenParsed?.name || '',
-        roles: keycloak.resourceAccess?.['messenger-api']?.roles || [],
-      } : null
-
-      // Проверка роли администратора
-      const isAdmin = user?.roles?.includes('admin') || false
-
-      if (!isAdmin && authenticated) {
-        // Нет роли администратора - logout
-        await keycloak.logout()
-        set({
-          keycloak,
-          isAuthenticated: false,
-          isLoading: false,
-          user: null,
-          token: null,
+    const saved = localStorage.getItem(ADMIN_TOKEN_KEY)
+    if (saved) {
+      try {
+        const res = await fetch(`${API_BASE}/v1/auth/me`, {
+          headers: { Authorization: `Bearer ${saved}` },
         })
-        alert('Доступ запрещён: требуется роль администратора')
-        return
-      }
-
-      set({
-        keycloak,
-        isAuthenticated: authenticated && isAdmin,
-        isLoading: false,
-        user,
-        token,
-      })
-      if (token) {
-        localStorage.setItem('admin_token', token)
-      } else {
-        localStorage.removeItem('admin_token')
-      }
-
-      // Авто-обновление токена
-      if (authenticated) {
-        setInterval(async () => {
-          try {
-            await keycloak.updateToken(30)
-            set({ token: keycloak.token })
-            if (keycloak.token) {
-              localStorage.setItem('admin_token', keycloak.token)
-            } else {
-              localStorage.removeItem('admin_token')
-            }
-          } catch {
-            get().logout()
+        if (res.ok) {
+          const user = await res.json()
+          const isAdmin = user.roles?.includes('admin')
+          if (isAdmin) {
+            set({ isAuthenticated: true, isLoading: false, user, token: saved })
+            return
           }
-        }, 60000)
+        }
+      } catch { /* token expired or invalid */ }
+      localStorage.removeItem(ADMIN_TOKEN_KEY)
+    }
+
+    if (keycloak) {
+      try {
+        const authenticated = await keycloak.init({
+          onLoad: 'check-sso',
+          silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
+          pkceMethod: 'S256',
+        })
+
+        if (authenticated && keycloak.idToken) {
+          try {
+            const res = await fetch(`${API_BASE}/v1/auth/token-exchange`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: keycloak.idToken }),
+            })
+            if (res.ok) {
+              const data = await res.json()
+              const isAdmin = data.user?.roles?.includes('admin')
+              if (!isAdmin) {
+                await keycloak.logout()
+                set({ keycloak, isAuthenticated: false, isLoading: false, user: null, token: null })
+                alert('Доступ запрещён: требуется роль администратора')
+                return
+              }
+              localStorage.setItem(ADMIN_TOKEN_KEY, data.access_token)
+              set({
+                keycloak,
+                isAuthenticated: true,
+                isLoading: false,
+                user: data.user,
+                token: data.access_token,
+              })
+              return
+            }
+          } catch (err) {
+            console.error('Token exchange failed:', err)
+          }
+        }
+
+        set({ keycloak, isAuthenticated: false, isLoading: false, user: null, token: null })
+        return
+      } catch (err) {
+        console.error('Keycloak init failed:', err)
       }
-    } catch (error) {
-      console.error('Failed to initialize Keycloak:', error)
-      set({ isLoading: false })
+    }
+
+    set({ isLoading: false })
+  },
+
+  loginLocal: async (email: string, password: string) => {
+    const res = await fetch(`${API_BASE}/v1/auth/local/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(text || 'Login failed')
+    }
+    const data = await res.json()
+    const isAdmin = data.user?.roles?.includes('admin')
+    if (!isAdmin) {
+      throw new Error('Доступ запрещён: требуется роль администратора')
+    }
+    localStorage.setItem(ADMIN_TOKEN_KEY, data.access_token)
+    set({ isAuthenticated: true, isLoading: false, user: data.user, token: data.access_token })
+  },
+
+  loginKeycloak: async () => {
+    if (keycloak) {
+      await keycloak.login()
     }
   },
 
-  login: async () => {
-    await keycloak.login()
-  },
-
   logout: async () => {
-    await keycloak.logout({ redirectUri: window.location.origin })
-    set({
-      isAuthenticated: false,
-      user: null,
-      token: null,
-    })
-    localStorage.removeItem('admin_token')
+    const { token } = get()
+    if (token) {
+      try {
+        await fetch(`${API_BASE}/v1/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      } catch { /* ignore */ }
+    }
+
+    if (keycloak?.authenticated) {
+      await keycloak.logout({ redirectUri: window.location.origin })
+    }
+
+    set({ isAuthenticated: false, user: null, token: null })
+    localStorage.removeItem(ADMIN_TOKEN_KEY)
   },
 
   checkAdmin: () => {
@@ -123,9 +163,7 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
 
   getAccessToken: () => {
     const token = get().token
-    if (token) {
-      return token
-    }
-    return localStorage.getItem('admin_token')
+    if (token) return token
+    return localStorage.getItem(ADMIN_TOKEN_KEY)
   },
 }))

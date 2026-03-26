@@ -26,6 +26,7 @@ var (
 // OIDCConfig конфигурация OIDC провайдера
 type OIDCConfig struct {
 	IssuerURL    string
+	DiscoveryURL string // optional: separate URL for OIDC discovery (e.g. internal cluster URL)
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
@@ -69,7 +70,13 @@ type SessionClaims struct {
 func NewOIDCProvider(cfg OIDCConfig) (*OIDCProvider, error) {
 	ctx := context.Background()
 
-	provider, err := oidc.NewProvider(ctx, cfg.IssuerURL)
+	discoveryURL := cfg.IssuerURL
+	if cfg.DiscoveryURL != "" {
+		discoveryURL = cfg.DiscoveryURL
+		ctx = oidc.InsecureIssuerURLContext(ctx, cfg.IssuerURL)
+	}
+
+	provider, err := oidc.NewProvider(ctx, discoveryURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OIDC provider: %w", err)
 	}
@@ -126,6 +133,27 @@ func (p *OIDCProvider) VerifyIDToken(ctx context.Context, rawIDToken string) (*U
 		mergeKeycloakClaims(&userInfo, rawClaims, p.OAuth2Config.ClientID)
 	}
 
+	return &userInfo, nil
+}
+
+// VerifyAccessToken verifies a Keycloak token without strict audience check (for SPA token exchange).
+func (p *OIDCProvider) VerifyAccessToken(ctx context.Context, rawToken string) (*UserInfo, error) {
+	flexVerifier := p.Provider.Verifier(&oidc.Config{
+		SkipClientIDCheck: true,
+	})
+	idToken, err := flexVerifier.Verify(ctx, rawToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
+	}
+
+	var userInfo UserInfo
+	if err := idToken.Claims(&userInfo); err != nil {
+		return nil, fmt.Errorf("failed to parse claims: %w", err)
+	}
+	var rawClaims map[string]interface{}
+	if err := idToken.Claims(&rawClaims); err == nil {
+		mergeKeycloakClaims(&userInfo, rawClaims, p.OAuth2Config.ClientID)
+	}
 	return &userInfo, nil
 }
 
@@ -266,6 +294,12 @@ type AuthMiddleware struct {
 	requiredAudience  string
 	serviceAudiences  []string
 	serviceScopes     []string
+	bypassAuth        bool
+}
+
+// SetBypassAuth enables/disables auth bypass (stage/demo mode).
+func (m *AuthMiddleware) SetBypassAuth(bypass bool) {
+	m.bypassAuth = bypass
 }
 
 // NewAuthMiddleware создаёт новый auth middleware
@@ -304,6 +338,25 @@ func (m *AuthMiddleware) SetValidationSecrets(secrets []string) {
 // Middleware возвращает HTTP middleware для проверки JWT
 func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if m.bypassAuth {
+			claims := &SessionClaims{
+				UserID:    "00000000-0000-0000-0000-000000000001",
+				Email:     "demo@company.com",
+				Name:      "Demo User",
+				Roles:     []string{"user", "admin"},
+				SessionID: "bypass-session",
+				RegisteredClaims: jwt.RegisteredClaims{
+					Issuer:    "focus-api",
+					Audience:  jwt.ClaimStrings{"focus-frontend"},
+					ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+					IssuedAt:  jwt.NewNumericDate(time.Now()),
+				},
+			}
+			ctx := context.WithValue(r.Context(), ContextKeyUserClaims, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			http.Error(w, "missing authorization header", http.StatusUnauthorized)
