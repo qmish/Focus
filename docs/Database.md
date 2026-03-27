@@ -1105,3 +1105,51 @@ archive_timeout = 300  # 5 минут
 | updated_by | varchar(255) | Кто последний обновил |
 | created_at | timestamp | |
 | updated_at | timestamp | |
+
+---
+
+## 9. Таблицы Admin Panel Phase 2 (v1.4)
+
+### `app_settings`
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| id | varchar(32) PK | Всегда 'default' (singleton) |
+| theme_mode | varchar(16) NOT NULL DEFAULT 'system' | system / light / dark |
+| chat_accent_color | varchar(32) NOT NULL DEFAULT '#89b4fa' | Акцентный цвет чата |
+| chat_bg_primary | varchar(32) NOT NULL DEFAULT '#1e1e2e' | Основной фон чата |
+| chat_bg_secondary | varchar(32) NOT NULL DEFAULT '#181825' | Вторичный фон чата |
+| chat_text_primary | varchar(32) NOT NULL DEFAULT '#cdd6f4' | Основной текст чата |
+| conference_theme_json | text NOT NULL DEFAULT '{}' | JSON-палитра конференций |
+| branding_product_name | varchar(128) NOT NULL DEFAULT 'Focus' | Название продукта |
+| branding_logo_url | varchar(512) NOT NULL DEFAULT '/logo.png' | URL логотипа |
+| updated_by | varchar(255) | Кто последний обновил |
+| created_at | timestamp | |
+| updated_at | timestamp | |
+
+### `audit_logs`
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| id | uuid PK | Идентификатор записи |
+| actor_email | varchar(255) NOT NULL | Email выполнившего действие |
+| action | varchar(64) NOT NULL | Тип действия (create_user, delete_user и т.д.) |
+| resource_type | varchar(64) NOT NULL | Тип ресурса (user, bot, и т.д.) |
+| resource_id | varchar(128) | ID затронутого ресурса |
+| details | text | Дополнительная информация |
+| created_at | timestamp | Время действия |
+
+### `conference_policies`
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| id | varchar(32) PK | Всегда 'default' (singleton) |
+| max_participants | integer NOT NULL DEFAULT 100 | Макс. участников |
+| max_duration_minutes | integer NOT NULL DEFAULT 480 | Макс. длительность (мин) |
+| recording_enabled | boolean NOT NULL DEFAULT false | Разрешить запись |
+| lobby_enabled | boolean NOT NULL DEFAULT false | Зал ожидания |
+| auto_mute_on_join | boolean NOT NULL DEFAULT false | Mute при подключении |
+| require_password | boolean NOT NULL DEFAULT false | Требовать пароль |
+| updated_by | varchar(255) | Кто последний обновил |
+| created_at | timestamp | |
+| updated_at | timestamp | |

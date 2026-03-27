@@ -37,6 +37,10 @@ type AdminHandler struct {
 	botRepo              adminBotRepository
 	authAuditRepo        adminAuthAuditRepository
 	calendarAuditRepo    adminCalendarAuditRepository
+	botConfigReloader    BotConfigReloader
+	appSettingsRepo      appSettingsRepository
+	auditLogRepo         auditLogRepository
+	conferencePolicyRepo conferencePolicyRepository
 }
 
 type adminUserRepository interface {
@@ -79,6 +83,12 @@ type adminBotSettingsRepository interface {
 	Create(ctx context.Context, setting *models.BotSetting) error
 	GetByID(ctx context.Context, id uuid.UUID) (*models.BotSetting, error)
 	Update(ctx context.Context, setting *models.BotSetting) error
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// BotConfigReloader is implemented by BotEngine to reload settings from DB.
+type BotConfigReloader interface {
+	ReloadSettings(ctx context.Context) error
 }
 
 type adminExchangeSettingsRepository interface {
@@ -100,6 +110,21 @@ type adminAuthAuditRepository interface {
 
 type adminCalendarAuditRepository interface {
 	ListCalendarAuditEvents(ctx context.Context, limit int, onlyFailed bool) ([]*models.CalendarAuditEvent, error)
+}
+
+type appSettingsRepository interface {
+	Get(ctx context.Context) (*models.AppSetting, error)
+	Upsert(ctx context.Context, settings *models.AppSetting) error
+}
+
+type conferencePolicyRepository interface {
+	Get(ctx context.Context) (*models.ConferencePolicy, error)
+	Upsert(ctx context.Context, p *models.ConferencePolicy) error
+}
+
+type auditLogRepository interface {
+	Create(ctx context.Context, entry *models.AuditLog) error
+	List(ctx context.Context, limit, offset int, actorEmail, action, resourceType string, since time.Time) ([]*models.AuditLog, int64, error)
 }
 
 // NewAdminHandler создаёт новый AdminHandler
@@ -154,6 +179,41 @@ func (h *AdminHandler) SetAuthAuditRepository(authAuditRepo adminAuthAuditReposi
 // SetCalendarAuditRepository sets optional calendar audit repository.
 func (h *AdminHandler) SetCalendarAuditRepository(calendarAuditRepo adminCalendarAuditRepository) {
 	h.calendarAuditRepo = calendarAuditRepo
+}
+
+// SetBotConfigReloader sets BotEngine reference for hot-reload of bot settings.
+func (h *AdminHandler) SetBotConfigReloader(reloader BotConfigReloader) {
+	h.botConfigReloader = reloader
+}
+
+// SetAppSettingsRepository sets repository for global app appearance settings.
+func (h *AdminHandler) SetAppSettingsRepository(repo appSettingsRepository) {
+	h.appSettingsRepo = repo
+}
+
+// SetAuditLogRepository sets repository for admin audit logging.
+func (h *AdminHandler) SetAuditLogRepository(repo auditLogRepository) {
+	h.auditLogRepo = repo
+}
+
+// SetConferencePolicyRepository sets repository for conference policies.
+func (h *AdminHandler) SetConferencePolicyRepository(repo conferencePolicyRepository) {
+	h.conferencePolicyRepo = repo
+}
+
+func (h *AdminHandler) recordAudit(ctx context.Context, email, action, resourceType, resourceID, details string) {
+	if h.auditLogRepo == nil {
+		return
+	}
+	_ = h.auditLogRepo.Create(ctx, &models.AuditLog{
+		ID:           uuid.New(),
+		ActorEmail:   email,
+		Action:       action,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		Details:      details,
+		CreatedAt:    time.Now().UTC(),
+	})
 }
 
 // requireAdmin middleware для проверки роли администратора
@@ -360,6 +420,7 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create user", http.StatusInternalServerError)
 		return
 	}
+	h.recordAudit(r.Context(), claims.Email, "create_user", "user", user.ID.String(), "email="+user.Email)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(user)
@@ -448,6 +509,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to delete user", http.StatusInternalServerError)
 		return
 	}
+	h.recordAudit(r.Context(), claims.Email, "delete_user", "user", userID.String(), "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1315,6 +1377,87 @@ func (h *AdminHandler) DisableBot(w http.ResponseWriter, r *http.Request) {
 	h.SetBotEnabled(w, r, false)
 }
 
+// DeleteBot DELETE /api/v1/admin/bots/:id
+func (h *AdminHandler) DeleteBot(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.botSettingsRepo == nil {
+		http.Error(w, "bot settings repository is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	botID, err := uuid.Parse(id)
+	if err != nil {
+		http.Error(w, "invalid bot id", http.StatusBadRequest)
+		return
+	}
+	if err := h.botSettingsRepo.Delete(r.Context(), botID); err != nil {
+		http.Error(w, "failed to delete bot", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ReloadBotConfig POST /api/v1/admin/bots/reload
+func (h *AdminHandler) ReloadBotConfig(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.botConfigReloader == nil {
+		http.Error(w, "bot config reloader is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.botConfigReloader.ReloadSettings(r.Context()); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+}
+
+// GetBotStats GET /api/v1/admin/bots/:id/stats
+func (h *AdminHandler) GetBotStats(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.botRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"total_events": 0, "errors": 0})
+		return
+	}
+	allEvents, err := h.botRepo.ListCommandEvents(r.Context(), 1000, false)
+	if err != nil {
+		http.Error(w, "failed to get bot stats", http.StatusInternalServerError)
+		return
+	}
+	since24h := time.Now().Add(-24 * time.Hour)
+	totalLast24h := 0
+	errorsLast24h := 0
+	for _, e := range allEvents {
+		if e.CreatedAt.After(since24h) {
+			totalLast24h++
+			if e.Status == "failed" || e.Status == "permission_denied" || e.Status == "rate_limited" {
+				errorsLast24h++
+			}
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"total_events_24h": totalLast24h,
+		"errors_24h":       errorsLast24h,
+		"total_events":     len(allEvents),
+	})
+}
+
 // ListWebhookDeliveries GET /api/v1/admin/webhooks/deliveries
 func (h *AdminHandler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
@@ -1480,6 +1623,277 @@ func (h *AdminHandler) ListCalendarAuditEvents(w http.ResponseWriter, r *http.Re
 		"data":  events,
 		"total": len(events),
 	})
+}
+
+// GetAnalytics GET /api/v1/admin/analytics
+func (h *AdminHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+	if days < 1 || days > 90 {
+		days = 7
+	}
+
+	ctx := r.Context()
+	now := time.Now()
+
+	type DayStats struct {
+		Date     string `json:"date"`
+		Messages int64  `json:"messages"`
+	}
+	messageDays := make([]DayStats, 0, days)
+	for i := days - 1; i >= 0; i-- {
+		dayStart := time.Date(now.Year(), now.Month(), now.Day()-i, 0, 0, 0, 0, now.Location())
+		dayEnd := dayStart.Add(24 * time.Hour)
+		var count int64
+		if h.messageRepo != nil {
+			startCount, _ := h.messageRepo.CountSince(ctx, dayStart)
+			endCount, _ := h.messageRepo.CountSince(ctx, dayEnd)
+			count = startCount - endCount
+			if count < 0 {
+				count = startCount
+			}
+		}
+		messageDays = append(messageDays, DayStats{
+			Date:     dayStart.Format("2006-01-02"),
+			Messages: count,
+		})
+	}
+
+	var totalUsers, totalRooms, activeMeetings, messagesToday int64
+	if h.userRepo != nil {
+		totalUsers, _ = h.userRepo.Count(ctx)
+	}
+	if h.roomRepo != nil {
+		totalRooms, _ = h.roomRepo.Count(ctx)
+		activeMeetings, _ = h.roomRepo.CountByType(ctx, models.RoomTypeMeeting)
+	}
+	if h.messageRepo != nil {
+		startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		messagesToday, _ = h.messageRepo.CountSince(ctx, startOfDay)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"summary": map[string]interface{}{
+			"total_users":       totalUsers,
+			"total_rooms":       totalRooms,
+			"active_meetings":   activeMeetings,
+			"messages_today":    messagesToday,
+		},
+		"messages_by_day": messageDays,
+	})
+}
+
+// GetConferencePolicies GET /api/v1/admin/conference/policies
+func (h *AdminHandler) GetConferencePolicies(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.conferencePolicyRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"configured": false,
+			"policies": map[string]interface{}{
+				"max_participants": 100, "max_duration_minutes": 480,
+				"recording_enabled": false, "lobby_enabled": false,
+				"auto_mute_on_join": false, "require_password": false,
+			},
+		})
+		return
+	}
+	p, err := h.conferencePolicyRepo.Get(r.Context())
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"configured": false,
+			"policies": map[string]interface{}{
+				"max_participants": 100, "max_duration_minutes": 480,
+				"recording_enabled": false, "lobby_enabled": false,
+				"auto_mute_on_join": false, "require_password": false,
+			},
+		})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"configured": true, "policies": p})
+}
+
+// PutConferencePolicies PUT /api/v1/admin/conference/policies
+func (h *AdminHandler) PutConferencePolicies(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.conferencePolicyRepo == nil {
+		http.Error(w, "conference policy repository is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var req models.ConferencePolicy
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	req.UpdatedBy = claims.Email
+	if req.MaxParticipants <= 0 {
+		req.MaxParticipants = 100
+	}
+	if req.MaxDurationMinutes <= 0 {
+		req.MaxDurationMinutes = 480
+	}
+	if err := h.conferencePolicyRepo.Upsert(r.Context(), &req); err != nil {
+		http.Error(w, "failed to save conference policies", http.StatusInternalServerError)
+		return
+	}
+	h.recordAudit(r.Context(), claims.Email, "update_conference_policies", "conference_policy", "default", "")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"updated": true})
+}
+
+// ListAuditLogs GET /api/v1/admin/audit
+func (h *AdminHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.auditLogRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []interface{}{}, "total": 0})
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 500 {
+		limit = 50
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	actor := strings.TrimSpace(r.URL.Query().Get("actor"))
+	action := strings.TrimSpace(r.URL.Query().Get("action"))
+	resourceType := strings.TrimSpace(r.URL.Query().Get("resource_type"))
+	var since time.Time
+	if s := strings.TrimSpace(r.URL.Query().Get("since")); s != "" {
+		since, _ = time.Parse(time.RFC3339, s)
+	}
+	entries, total, err := h.auditLogRepo.List(r.Context(), limit, offset, actor, action, resourceType, since)
+	if err != nil {
+		http.Error(w, "failed to list audit logs", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": entries, "total": total})
+}
+
+// GetAppearanceSettings GET /api/v1/settings/appearance (public)
+func (h *AdminHandler) GetAppearanceSettings(w http.ResponseWriter, r *http.Request) {
+	if h.appSettingsRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"configured": false,
+			"settings": map[string]interface{}{
+				"theme_mode":       "system",
+				"chat_accent_color":  "#89b4fa",
+				"chat_bg_primary":    "#1e1e2e",
+				"chat_bg_secondary":  "#181825",
+				"chat_text_primary":  "#cdd6f4",
+				"branding_product_name": "Focus",
+				"branding_logo_url":    "/logo.png",
+			},
+		})
+		return
+	}
+	settings, err := h.appSettingsRepo.Get(r.Context())
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"configured": false,
+			"settings": map[string]interface{}{
+				"theme_mode":       "system",
+				"chat_accent_color":  "#89b4fa",
+				"chat_bg_primary":    "#1e1e2e",
+				"chat_bg_secondary":  "#181825",
+				"chat_text_primary":  "#cdd6f4",
+				"branding_product_name": "Focus",
+				"branding_logo_url":    "/logo.png",
+			},
+		})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"configured": true,
+		"settings":   settings,
+	})
+}
+
+// PutAppearanceSettings PUT /api/v1/admin/settings/appearance
+func (h *AdminHandler) PutAppearanceSettings(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.appSettingsRepo == nil {
+		http.Error(w, "app settings repository is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var req struct {
+		ThemeMode           string `json:"theme_mode"`
+		ChatAccentColor     string `json:"chat_accent_color"`
+		ChatBgPrimary       string `json:"chat_bg_primary"`
+		ChatBgSecondary     string `json:"chat_bg_secondary"`
+		ChatTextPrimary     string `json:"chat_text_primary"`
+		ConferenceThemeJSON string `json:"conference_theme_json"`
+		BrandingProductName string `json:"branding_product_name"`
+		BrandingLogoURL     string `json:"branding_logo_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	existing, err := h.appSettingsRepo.Get(r.Context())
+	if err != nil {
+		existing = &models.AppSetting{ID: "default"}
+	}
+
+	if t := strings.TrimSpace(req.ThemeMode); t != "" {
+		existing.ThemeMode = t
+	}
+	if c := strings.TrimSpace(req.ChatAccentColor); c != "" {
+		existing.ChatAccentColor = c
+	}
+	if c := strings.TrimSpace(req.ChatBgPrimary); c != "" {
+		existing.ChatBgPrimary = c
+	}
+	if c := strings.TrimSpace(req.ChatBgSecondary); c != "" {
+		existing.ChatBgSecondary = c
+	}
+	if c := strings.TrimSpace(req.ChatTextPrimary); c != "" {
+		existing.ChatTextPrimary = c
+	}
+	if c := strings.TrimSpace(req.ConferenceThemeJSON); c != "" {
+		existing.ConferenceThemeJSON = c
+	}
+	if n := strings.TrimSpace(req.BrandingProductName); n != "" {
+		existing.BrandingProductName = n
+	}
+	if u := strings.TrimSpace(req.BrandingLogoURL); u != "" {
+		existing.BrandingLogoURL = u
+	}
+	existing.UpdatedBy = claims.Email
+
+	if err := h.appSettingsRepo.Upsert(r.Context(), existing); err != nil {
+		http.Error(w, "failed to save appearance settings", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"updated": true})
 }
 
 func (h *AdminHandler) buildInviteURL(rawToken string) string {

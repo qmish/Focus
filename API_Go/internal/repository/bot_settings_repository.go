@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/models"
@@ -42,4 +43,18 @@ func (r *BotSettingsRepository) GetByID(ctx context.Context, id uuid.UUID) (*mod
 
 func (r *BotSettingsRepository) Update(ctx context.Context, s *models.BotSetting) error {
 	return r.db.WithContext(ctx).Save(s).Error
+}
+
+func (r *BotSettingsRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Delete(&models.BotSetting{}, "id = ?", id).Error
+}
+
+func (r *BotSettingsRepository) CountEvents(ctx context.Context, botName string, since time.Time) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("bot_command_events").
+		Where("command IN (SELECT jsonb_array_elements_text(commands_json::jsonb) FROM bot_settings WHERE name = ?)", botName).
+		Where("created_at >= ?", since).
+		Count(&count).Error
+	return count, err
 }

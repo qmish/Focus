@@ -68,9 +68,15 @@ type BotCommand struct {
 	IsActive    bool   `json:"is_active"`
 }
 
+// BotSettingsProvider reads bot settings from persistent storage.
+type BotSettingsProvider interface {
+	List(ctx context.Context) ([]*models.BotSetting, error)
+}
+
 // BotEngine движок ботов
 type BotEngine struct {
 	handlers          map[string]BotHandler
+	customHandlers    map[string]string // command -> static reply text
 	messageRepo       BotMessageRepository
 	roomChecker       BotRoomAccessChecker
 	roomRepo          BotRoomRepository
@@ -78,10 +84,14 @@ type BotEngine struct {
 	broadcaster       BotBroadcaster
 	calendarScheduler BotCalendarScheduler
 	eventStore        BotCommandEventStore
+	settingsProvider  BotSettingsProvider
 	botUserID         uuid.UUID
 	jitsiBaseURL      string
 	rateLimitWindow   time.Duration
 	lastCommandAt     map[string]time.Time
+	disabledCommands  map[string]bool
+	commandRooms      map[string]map[string]bool // command -> set of allowed room IDs
+	commandRateLimit  map[string]time.Duration   // command -> per-bot rate limit
 	mu                sync.Mutex
 	now               func() time.Time
 	startedAt         time.Time
@@ -134,12 +144,16 @@ type BotCommandEventStore interface {
 // NewBotEngine создаёт новый BotEngine
 func NewBotEngine() *BotEngine {
 	engine := &BotEngine{
-		handlers:        make(map[string]BotHandler),
-		jitsiBaseURL:    "https://meet.company.com",
-		rateLimitWindow: 2 * time.Second,
-		lastCommandAt:   make(map[string]time.Time),
-		now:             time.Now,
-		startedAt:       time.Now(),
+		handlers:         make(map[string]BotHandler),
+		customHandlers:   make(map[string]string),
+		jitsiBaseURL:     "https://meet.company.com",
+		rateLimitWindow:  2 * time.Second,
+		lastCommandAt:    make(map[string]time.Time),
+		disabledCommands: make(map[string]bool),
+		commandRooms:     make(map[string]map[string]bool),
+		commandRateLimit: make(map[string]time.Duration),
+		now:              time.Now,
+		startedAt:        time.Now(),
 	}
 
 	engine.registerBuiltinBots()
@@ -198,6 +212,79 @@ func (e *BotEngine) SetRateLimitWindow(window time.Duration) {
 	e.rateLimitWindow = window
 }
 
+// SetBotSettingsProvider injects a provider that reads BotSetting from DB.
+func (e *BotEngine) SetBotSettingsProvider(p BotSettingsProvider) {
+	e.settingsProvider = p
+}
+
+// ReloadSettings reads bot_settings from DB and updates runtime config.
+func (e *BotEngine) ReloadSettings(ctx context.Context) error {
+	if e.settingsProvider == nil {
+		return nil
+	}
+	settings, err := e.settingsProvider.List(ctx)
+	if err != nil {
+		return fmt.Errorf("reload bot settings: %w", err)
+	}
+
+	disabled := make(map[string]bool)
+	rooms := make(map[string]map[string]bool)
+	rateLimit := make(map[string]time.Duration)
+	custom := make(map[string]string)
+
+	for _, s := range settings {
+		if s == nil {
+			continue
+		}
+
+		var cmds []BotCommand
+		if err := json.Unmarshal([]byte(s.CommandsJSON), &cmds); err != nil {
+			cmds = nil
+		}
+
+		for _, cmd := range cmds {
+			cmdName := strings.TrimPrefix(strings.TrimSpace(cmd.Command), "/")
+			if cmdName == "" {
+				continue
+			}
+			if !s.IsEnabled || !cmd.IsActive {
+				disabled[cmdName] = true
+				continue
+			}
+			if cmd.Handler == "static-reply" && cmd.Description != "" {
+				custom[cmdName] = cmd.Description
+			}
+			if s.RateLimitMs > 0 {
+				rateLimit[cmdName] = time.Duration(s.RateLimitMs) * time.Millisecond
+			}
+			if len(s.AllowedRooms) > 0 {
+				roomSet := make(map[string]bool, len(s.AllowedRooms))
+				for _, rid := range s.AllowedRooms {
+					roomSet[rid] = true
+				}
+				rooms[cmdName] = roomSet
+			}
+		}
+
+		if !s.IsEnabled {
+			for _, cmd := range cmds {
+				cmdName := strings.TrimPrefix(strings.TrimSpace(cmd.Command), "/")
+				if cmdName != "" {
+					disabled[cmdName] = true
+				}
+			}
+		}
+	}
+
+	e.mu.Lock()
+	e.disabledCommands = disabled
+	e.commandRooms = rooms
+	e.commandRateLimit = rateLimit
+	e.customHandlers = custom
+	e.mu.Unlock()
+	return nil
+}
+
 func (e *BotEngine) registerBuiltinBots() {
 	e.handlers["create"] = e.handleMeetingCreate
 	e.handlers["schedule"] = e.handleMeetingSchedule
@@ -228,30 +315,58 @@ func (e *BotEngine) HandleMessage(ctx context.Context, roomID, userID, content s
 		args = strings.Join(parts[1:], " ")
 	}
 
-	// Проверяем встроенные команды
-	if handler, ok := e.handlers[command]; ok {
-		if !e.canHandleInRoom(ctx, roomID, userID) {
-			e.recordCommandEvent(ctx, roomID, userID, command, args, "permission_denied", "")
-			return nil
-		}
-		if e.isRateLimited(userID) {
-			e.recordCommandEvent(ctx, roomID, userID, command, args, "rate_limited", "")
-			return nil
-		}
-		response, err := handler(ctx, roomID, userID, command, args)
-		if err != nil {
-			e.recordCommandEvent(ctx, roomID, userID, command, args, "failed", err.Error())
-			return err
-		}
-		// Отправляем ответ
-		if err := e.sendResponse(ctx, roomID, response); err != nil {
-			e.recordCommandEvent(ctx, roomID, userID, command, args, "failed", err.Error())
-			return err
-		}
-		e.recordCommandEvent(ctx, roomID, userID, command, args, "sent", "")
+	e.mu.Lock()
+	isDisabled := e.disabledCommands[command]
+	allowedRooms := e.commandRooms[command]
+	cmdRateLimit := e.commandRateLimit[command]
+	customReply := e.customHandlers[command]
+	e.mu.Unlock()
+
+	if isDisabled {
+		e.recordCommandEvent(ctx, roomID, userID, command, args, "disabled", "")
 		return nil
 	}
 
+	if len(allowedRooms) > 0 && !allowedRooms[roomID] {
+		e.recordCommandEvent(ctx, roomID, userID, command, args, "room_not_allowed", "")
+		return nil
+	}
+
+	handler, isBuiltin := e.handlers[command]
+	if !isBuiltin && customReply == "" {
+		return nil
+	}
+
+	if !e.canHandleInRoom(ctx, roomID, userID) {
+		e.recordCommandEvent(ctx, roomID, userID, command, args, "permission_denied", "")
+		return nil
+	}
+	if cmdRateLimit > 0 {
+		if e.isRateLimitedWithWindow(userID, cmdRateLimit) {
+			e.recordCommandEvent(ctx, roomID, userID, command, args, "rate_limited", "")
+			return nil
+		}
+	} else if e.isRateLimited(userID) {
+		e.recordCommandEvent(ctx, roomID, userID, command, args, "rate_limited", "")
+		return nil
+	}
+
+	var response string
+	var err error
+	if isBuiltin {
+		response, err = handler(ctx, roomID, userID, command, args)
+	} else {
+		response = customReply
+	}
+	if err != nil {
+		e.recordCommandEvent(ctx, roomID, userID, command, args, "failed", err.Error())
+		return err
+	}
+	if err := e.sendResponse(ctx, roomID, response); err != nil {
+		e.recordCommandEvent(ctx, roomID, userID, command, args, "failed", err.Error())
+		return err
+	}
+	e.recordCommandEvent(ctx, roomID, userID, command, args, "sent", "")
 	return nil
 }
 
@@ -559,14 +674,18 @@ func CreateBot(name, description string, ownerID uuid.UUID, commands []BotComman
 }
 
 func (e *BotEngine) isRateLimited(userID string) bool {
-	if e.rateLimitWindow <= 0 {
+	return e.isRateLimitedWithWindow(userID, e.rateLimitWindow)
+}
+
+func (e *BotEngine) isRateLimitedWithWindow(userID string, window time.Duration) bool {
+	if window <= 0 {
 		return false
 	}
 	now := e.now()
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	lastAt, ok := e.lastCommandAt[userID]
-	if ok && now.Sub(lastAt) < e.rateLimitWindow {
+	if ok && now.Sub(lastAt) < window {
 		return true
 	}
 	e.lastCommandAt[userID] = now

@@ -65,11 +65,46 @@ export const adminApi = {
   createBot: (payload: Record<string, unknown>) => request('/api/v1/admin/bots', { method: 'POST', body: JSON.stringify(payload) }),
   patchBot: (botId: string, payload: Record<string, unknown>) =>
     request(`/api/v1/admin/bots/${botId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteBot: (botId: string) =>
+    request<void>(`/api/v1/admin/bots/${botId}`, { method: 'DELETE' }),
   toggleBot: (botId: string, enabled: boolean) =>
     request(`/api/v1/admin/bots/${botId}/${enabled ? 'enable' : 'disable'}`, { method: 'POST' }),
+  reloadBotConfig: () =>
+    request<{ ok: boolean }>('/api/v1/admin/bots/reload', { method: 'POST' }),
+  getBotStats: (botId: string) =>
+    request<{ total_events_24h: number; errors_24h: number; total_events: number }>(`/api/v1/admin/bots/${botId}/stats`),
+  getBotErrors: (limit = 50) =>
+    request<{ data: any[]; total: number }>(`/api/v1/admin/bots/errors?limit=${limit}`),
   getExchangeSettings: () => request('/api/v1/admin/exchange/settings'),
   putExchangeSettings: (payload: Record<string, unknown>) =>
     request('/api/v1/admin/exchange/settings', { method: 'PUT', body: JSON.stringify(payload) }),
   testExchangeConnection: (payload: { test_email?: string }) =>
     request('/api/v1/admin/exchange/test-connection', { method: 'POST', body: JSON.stringify(payload) }),
+  listWebhookDeliveries: (limit = 50) =>
+    request<{ data: any[] }>(`/api/v1/admin/webhooks/deliveries?limit=${limit}`),
+  listWebhookErrors: (limit = 50) =>
+    request<{ data: any[]; total: number }>(`/api/v1/admin/webhooks/errors?limit=${limit}`),
+  getAnalytics: (days = 7) =>
+    request<{ summary: any; messages_by_day: { date: string; messages: number }[] }>(`/api/v1/admin/analytics?days=${days}`),
+  getConferencePolicies: () =>
+    request<{ configured: boolean; policies: any }>('/api/v1/admin/conference/policies'),
+  putConferencePolicies: (payload: Record<string, unknown>) =>
+    request<{ updated: boolean }>('/api/v1/admin/conference/policies', { method: 'PUT', body: JSON.stringify(payload) }),
+  listAuditLogs: (queryString = '') =>
+    request<{ data: any[]; total: number }>(`/api/v1/admin/audit?${queryString}`),
+  getAppearanceSettings: () =>
+    request<{ configured: boolean; settings: AppearanceSettings }>('/api/v1/settings/appearance'),
+  putAppearanceSettings: (payload: Partial<AppearanceSettings>) =>
+    request<{ updated: boolean }>('/api/v1/admin/settings/appearance', { method: 'PUT', body: JSON.stringify(payload) }),
+}
+
+export type AppearanceSettings = {
+  theme_mode: string
+  chat_accent_color: string
+  chat_bg_primary: string
+  chat_bg_secondary: string
+  chat_text_primary: string
+  conference_theme_json: string
+  branding_product_name: string
+  branding_logo_url: string
 }

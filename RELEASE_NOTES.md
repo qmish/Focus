@@ -1,5 +1,43 @@
 # Release Notes
 
+## v1.4.0 — Admin Panel Phase 2: Боты, глобальная тема, новые модули (25 марта 2026)
+
+### Часть A: Полноценное управление ботами
+- BotEngine wiring: runtime-конфигурация из БД (`is_enabled`, `rate_limit_ms`, `allowed_rooms`, `commands_json`)
+- Hot-reload конфигурации через `POST /api/v1/admin/bots/reload`
+- Поддержка custom static-reply команд через `CommandsJSON`
+- Расширен admin API ботов: `DELETE /bots/:id`, `GET /bots/:id/stats`
+- Полноценный BotsPage: inline-edit всех полей, JSON-редактор команд, удаление, вкладка ошибок, статистика 24ч
+
+### Часть B: Глобальная тема для чата и конференций
+- Новая модель `app_settings` (singleton): `theme_mode`, `chat_accent_color`, `chat_bg_primary`, `chat_bg_secondary`, `chat_text_primary`, `conference_theme_json`, `branding_product_name`, `branding_logo_url`
+- `GET /api/v1/settings/appearance` — публичный endpoint для чат-клиентов
+- `PUT /api/v1/admin/settings/appearance` — admin-only
+- Frontend чат: `ThemeProvider`, light/dark CSS-переменные, автоприменение из API
+- `GET /api/v1/branding/jitsi` теперь мержит `conference_theme_json` из `app_settings`
+- Admin SettingsPage: секции «Тема чата» и «Тема конференций» с color picker и JSON-editor
+
+### Часть C: Новые модули админки
+- **Аудит-лог**: модель `audit_logs`, автозапись при admin-мутациях, `GET /api/v1/admin/audit` с фильтрами, страница `/audit` с экспортом CSV
+- **Вебхуки**: страница `/webhooks` для просмотра доставок и ошибок
+- **Политики конференций**: модель `conference_policies` (singleton), `GET/PUT /api/v1/admin/conference/policies`, страница с toggle-переключателями
+- **Аналитика**: `GET /api/v1/admin/analytics?days=N` (сводка + сообщения по дням), страница `/analytics` с bar chart
+
+### Новые файлы
+- `API_Go/internal/models/app_settings.go`
+- `API_Go/internal/models/audit_log.go`
+- `API_Go/internal/models/conference_policy.go`
+- `API_Go/internal/repository/app_settings_repository.go`
+- `API_Go/internal/repository/audit_log_repository.go`
+- `API_Go/internal/repository/conference_policy_repository.go`
+- `frontend/src/providers/ThemeProvider.tsx`
+- `frontend-admin/src/pages/AuditPage.tsx`
+- `frontend-admin/src/pages/WebhooksPage.tsx`
+- `frontend-admin/src/pages/ConferencePoliciesPage.tsx`
+- `frontend-admin/src/pages/AnalyticsPage.tsx`
+
+---
+
 ## v1.3.0 — Admin Panel Expansion Phase 1 (28 марта 2026)
 
 ### ✨ Новое

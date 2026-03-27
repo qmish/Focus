@@ -80,6 +80,9 @@ func main() {
 		&models.AdminInvite{},
 		&models.BotSetting{},
 		&models.ExchangeSetting{},
+		&models.AppSetting{},
+		&models.AuditLog{},
+		&models.ConferencePolicy{},
 		&models.RevokedSession{},
 		&bots.BotCommandEvent{},
 		&webhooks.IncomingEvent{},
@@ -103,6 +106,9 @@ func main() {
 	adminInviteRepo := repository.NewAdminInviteRepository(db.DB)
 	botSettingsRepo := repository.NewBotSettingsRepository(db.DB)
 	exchangeSettingsRepo := repository.NewExchangeSettingsRepository(db.DB)
+	appSettingsRepo := repository.NewAppSettingsRepository(db.DB)
+	auditLogRepo := repository.NewAuditLogRepository(db.DB)
+	conferencePolicyRepo := repository.NewConferencePolicyRepository(db.DB)
 	sessionRevocationRepo := repository.NewSessionRevocationRepository(db.DB)
 
 	// Инициализация Exchange EWS клиента (on-prem)
@@ -186,6 +192,10 @@ func main() {
 		calendarService: calendarService,
 		userRepo:        userRepo,
 	})
+	botEngine.SetBotSettingsProvider(botSettingsRepo)
+	if err := botEngine.ReloadSettings(context.Background()); err != nil {
+		logger.Warn("Failed to load bot settings from DB", zap.Error(err))
+	}
 
 	// Создание handlers
 	authHandler := handlers.NewAuthHandler(oidcProvider, userRepo, jitsiGen, cfg, logger.WithContext(context.Background()))
@@ -205,6 +215,10 @@ func main() {
 	adminHandler.SetExchangeSettingsRepository(exchangeSettingsRepo)
 	adminHandler.SetWebhookRepository(webhookRepo)
 	adminHandler.SetBotRepository(botRepo)
+	adminHandler.SetBotConfigReloader(botEngine)
+	adminHandler.SetAppSettingsRepository(appSettingsRepo)
+	adminHandler.SetAuditLogRepository(auditLogRepo)
+	adminHandler.SetConferencePolicyRepository(conferencePolicyRepo)
 	adminHandler.SetAuthAuditRepository(authAuditRepo)
 	adminHandler.SetCalendarAuditRepository(calendarAuditRepo)
 	if cfg.Email.SMTPHost != "" && cfg.Email.FromAddress != "" {
@@ -222,6 +236,7 @@ func main() {
 		adminHandler.SetInviteMailer(nil, cfg.Email.InviteBaseURL)
 	}
 	brandingHandler := handlers.NewJitsiBrandingHandler()
+	brandingHandler.SetAppSettingsGetter(appSettingsRepo)
 	localAuthHandler := handlers.NewLocalAuthHandler(
 		userRepo,
 		resolveSessionSecret(cfg),
@@ -291,6 +306,7 @@ func main() {
 		r.Route("/branding", func(r chi.Router) {
 			r.Get("/jitsi", brandingHandler.DynamicBranding)
 		})
+		r.Get("/settings/appearance", adminHandler.GetAppearanceSettings)
 
 		r.Route("/webhooks", func(r chi.Router) {
 			r.Post("/jitsi", inboundWebhookHandler.JitsiWebhook)
@@ -405,12 +421,19 @@ func main() {
 				r.Post("/invites/:id/resend", adminHandler.ResendInvite)
 				r.Get("/bots", adminHandler.ListBots)
 				r.Post("/bots", adminHandler.CreateBot)
+				r.Post("/bots/reload", adminHandler.ReloadBotConfig)
 				r.Patch("/bots/:id", adminHandler.PatchBot)
+				r.Delete("/bots/:id", adminHandler.DeleteBot)
 				r.Post("/bots/:id/enable", adminHandler.EnableBot)
 				r.Post("/bots/:id/disable", adminHandler.DisableBot)
+				r.Get("/bots/:id/stats", adminHandler.GetBotStats)
+				r.Put("/settings/appearance", adminHandler.PutAppearanceSettings)
 				r.Get("/exchange/settings", adminHandler.GetExchangeSettings)
 				r.Put("/exchange/settings", adminHandler.PutExchangeSettings)
 				r.Post("/exchange/test-connection", adminHandler.TestExchangeConnection)
+				r.Get("/analytics", adminHandler.GetAnalytics)
+				r.Get("/conference/policies", adminHandler.GetConferencePolicies)
+				r.Put("/conference/policies", adminHandler.PutConferencePolicies)
 				r.Get("/conferences", adminHandler.ListConferences)
 				r.With(auth.RequireABAC(abacEngine, "conference.end", nil)).Post("/conferences/:id/end", adminHandler.EndConference)
 				r.Get("/stats", adminHandler.GetStats)
@@ -419,6 +442,7 @@ func main() {
 				r.Get("/bots/errors", adminHandler.ListBotErrors)
 				r.Get("/auth/audit", adminHandler.ListAuthAuditEvents)
 				r.Get("/calendar/audit", adminHandler.ListCalendarAuditEvents)
+				r.Get("/audit", adminHandler.ListAuditLogs)
 			})
 		})
 	})

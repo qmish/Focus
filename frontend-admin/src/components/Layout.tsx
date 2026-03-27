@@ -12,10 +12,14 @@ export default function Layout() {
 
   const navItems = [
     { path: '/dashboard', label: 'Дашборд', icon: '📊' },
+    { path: '/analytics', label: 'Аналитика', icon: '📈' },
     { path: '/users', label: 'Пользователи', icon: '👥' },
     { path: '/conferences', label: 'Конференции', icon: '🎥' },
+    { path: '/conferences/policies', label: 'Политики конф.', icon: '📋' },
     { path: '/bots', label: 'Боты', icon: '🤖' },
     { path: '/integrations', label: 'Интеграции', icon: '🔌' },
+    { path: '/webhooks', label: 'Вебхуки', icon: '🔗' },
+    { path: '/audit', label: 'Аудит', icon: '📝' },
     { path: '/observability', label: 'Наблюдаемость', icon: '🩺' },
     { path: '/settings', label: 'Настройки', icon: '⚙️' },
   ]
