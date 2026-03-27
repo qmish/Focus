@@ -42,6 +42,7 @@ func main() {
 		zap.String("env", cfg.Env),
 		zap.String("host", cfg.Server.Host),
 		zap.String("port", cfg.Server.Port),
+		zap.String("swagger_port", cfg.Server.SwaggerPort),
 	)
 
 	if err := cfg.ValidateSecurity(); err != nil {
@@ -259,15 +260,6 @@ func main() {
 	// Health check endpoints
 	r.Get("/health", healthCheck)
 	r.Get("/ready", readinessCheck(db))
-	r.Get("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/yaml")
-		http.ServeFile(w, r, "docs/openapi.yaml")
-	})
-	r.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("/openapi.yaml"),
-		httpSwagger.DocExpansion("list"),
-		httpSwagger.DefaultModelsExpandDepth(-1),
-	))
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -399,6 +391,37 @@ func main() {
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
+	var swaggerSrv *http.Server
+	if cfg.Server.SwaggerPort != "" && cfg.Server.SwaggerPort != cfg.Server.Port {
+		swaggerRouter := chi.NewRouter()
+		swaggerRouter.Use(middleware.RequestID)
+		swaggerRouter.Use(middleware.RealIP)
+		swaggerRouter.Use(middleware.Logger)
+		swaggerRouter.Use(middleware.Recoverer)
+		swaggerRouter.Get("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/yaml")
+			http.ServeFile(w, r, "docs/openapi.yaml")
+		})
+		swaggerRouter.Get("/swagger/*", httpSwagger.Handler(
+			httpSwagger.URL("/openapi.yaml"),
+			httpSwagger.DocExpansion("list"),
+			httpSwagger.DefaultModelsExpandDepth(-1),
+		))
+		swaggerAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.SwaggerPort)
+		swaggerSrv = &http.Server{
+			Addr:         swaggerAddr,
+			Handler:      swaggerRouter,
+			ReadTimeout:  cfg.Server.ReadTimeout,
+			WriteTimeout: cfg.Server.WriteTimeout,
+			IdleTimeout:  cfg.Server.IdleTimeout,
+		}
+		go func() {
+			logger.Info("Swagger server starting", zap.String("address", swaggerAddr))
+			if err := swaggerSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Error("Swagger server failed", zap.Error(err))
+			}
+		}()
+	}
 
 	// Запуск сервера в горутине
 	go func() {
@@ -423,6 +446,12 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("Server forced to shutdown", zap.Error(err))
 		os.Exit(1)
+	}
+	if swaggerSrv != nil {
+		if err := swaggerSrv.Shutdown(ctx); err != nil {
+			logger.Error("Swagger server forced to shutdown", zap.Error(err))
+			os.Exit(1)
+		}
 	}
 
 	logger.Info("Server stopped")

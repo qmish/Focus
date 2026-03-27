@@ -41,6 +41,7 @@ type WebSocketConfig struct {
 type ServerConfig struct {
 	Host         string
 	Port         string
+	SwaggerPort  string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
@@ -128,6 +129,7 @@ func Load() *Config {
 		Server: ServerConfig{
 			Host:         getEnv("SERVER_HOST", "0.0.0.0"),
 			Port:         getEnv("SERVER_PORT", "8080"),
+			SwaggerPort:  getEnv("SWAGGER_PORT", "8081"),
 			ReadTimeout:  getDurationEnv("SERVER_READ_TIMEOUT", 15*time.Second),
 			WriteTimeout: getDurationEnv("SERVER_WRITE_TIMEOUT", 15*time.Second),
 			IdleTimeout:  getDurationEnv("SERVER_IDLE_TIMEOUT", 60*time.Second),

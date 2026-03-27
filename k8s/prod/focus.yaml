@@ -55,11 +55,15 @@ spec:
         ports:
         - containerPort: 8080
           name: http
+        - containerPort: 8081
+          name: swagger
         env:
         - name: ENV
           value: production
         - name: SERVER_PORT
           value: "8080"
+        - name: SWAGGER_PORT
+          value: "8081"
         - name: DB_HOST
           value: postgres.infra.svc.cluster.local
         - name: DB_PORT
@@ -258,6 +262,9 @@ spec:
   - name: http
     port: 80
     targetPort: http
+  - name: swagger
+    port: 8081
+    targetPort: swagger
 ---
 apiVersion: v1
 kind: Service
@@ -373,6 +380,16 @@ spec:
             name: frontend-admin
             port:
               number: 80
+  - host: swagger.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-go
+            port:
+              number: 8081
   tls:
   - hosts:
     - api.company.com
@@ -383,6 +400,9 @@ spec:
   - hosts:
     - admin.company.com
     secretName: admin-prod-tls
+  - hosts:
+    - swagger.company.com
+    secretName: swagger-prod-tls
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
