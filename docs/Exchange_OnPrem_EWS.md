@@ -85,6 +85,11 @@ Microsoft Graph/Exchange Online для текущего контура не ис
 - `POST /api/v1/calendar/events` (`Idempotency-Key` optional)
 - `PUT /api/v1/calendar/events/{id}`
 - `DELETE /api/v1/calendar/events/{id}`
+- `GET /api/v1/admin/exchange/settings`
+- `PUT /api/v1/admin/exchange/settings`
+- `POST /api/v1/admin/exchange/test-connection`
+
+Persisted настройки Exchange теперь хранятся в БД (`exchange_settings`) и управляются из `frontend-admin` страницы Integrations.
 
 ---
 

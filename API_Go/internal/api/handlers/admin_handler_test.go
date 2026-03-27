@@ -259,6 +259,14 @@ type fakeAdminUserRepo struct {
 	users map[uuid.UUID]*models.User
 }
 
+func (f *fakeAdminUserRepo) Create(ctx context.Context, user *models.User) error {
+	if f.users == nil {
+		f.users = map[uuid.UUID]*models.User{}
+	}
+	f.users[user.ID] = user
+	return nil
+}
+
 func (f *fakeAdminUserRepo) List(ctx context.Context, limit, offset int) ([]*models.User, error) {
 	return []*models.User{}, nil
 }
@@ -277,6 +285,15 @@ func (f *fakeAdminUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.
 func (f *fakeAdminUserRepo) Update(ctx context.Context, user *models.User) error {
 	if f.users != nil {
 		f.users[user.ID] = user
+	}
+	return nil
+}
+func (f *fakeAdminUserRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	if f.users != nil {
+		if user, ok := f.users[id]; ok {
+			user.IsActive = false
+			f.users[id] = user
+		}
 	}
 	return nil
 }

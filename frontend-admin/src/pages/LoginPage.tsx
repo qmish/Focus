@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAdminAuthStore } from '../store/adminAuthStore'
+import { useAdminUi } from '../providers/AdminUiProvider'
 
 export default function LoginPage() {
   const { isAuthenticated, isLoading, loginLocal, loginKeycloak, keycloakAvailable, init } = useAdminAuthStore()
+  const { branding } = useAdminUi()
   const navigate = useNavigate()
 
   const [email, setEmail] = useState('')
@@ -40,8 +42,8 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-container">
         <div className="login-card">
-          <img src="/logo.png" alt="Focus" className="login-logo" />
-          <h1 className="login-title">Focus Admin</h1>
+          <img src={branding.logoUrl} alt={branding.productName} className="login-logo" />
+          <h1 className="login-title">{branding.productName}</h1>
           <p className="login-subtitle">Панель администратора</p>
 
           <form onSubmit={handleSubmit} className="login-form">

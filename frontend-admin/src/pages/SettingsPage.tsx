@@ -1,41 +1,51 @@
+import { useState } from 'react'
+import { useAdminUi, type AdminThemeMode } from '../providers/AdminUiProvider'
+
 export default function SettingsPage() {
+  const { branding, setBranding, theme, setTheme } = useAdminUi()
+  const [productName, setProductName] = useState(branding.productName)
+  const [logoUrl, setLogoUrl] = useState(branding.logoUrl)
+  const [accentColor, setAccentColor] = useState(branding.accentColor)
+
+  const saveBranding = () => {
+    setBranding({
+      productName: productName.trim() || 'Focus Admin',
+      logoUrl: logoUrl.trim() || '/logo.png',
+      accentColor: accentColor.trim() || '#2563eb',
+    })
+  }
+
   return (
     <div className="settings-page">
       <h1>Настройки</h1>
 
       <div className="settings-section">
-        <h2>Общие настройки</h2>
+        <h2>Брендирование</h2>
         <div className="form-group">
-          <label>Название системы</label>
-          <input type="text" defaultValue="Focus Messenger" />
+          <label>Название продукта</label>
+          <input type="text" value={productName} onChange={(e) => setProductName(e.target.value)} />
         </div>
         <div className="form-group">
-          <label>Максимум участников в конференции</label>
-          <input type="number" defaultValue="100" />
+          <label>URL логотипа</label>
+          <input type="text" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
         </div>
-        <button className="primary">Сохранить</button>
+        <div className="form-group">
+          <label>Акцентный цвет</label>
+          <input type="text" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} />
+        </div>
+        <button className="primary" onClick={saveBranding}>Сохранить брендирование</button>
       </div>
 
       <div className="settings-section">
-        <h2>Интеграции</h2>
+        <h2>Тема</h2>
         <div className="form-group">
-          <label>Keycloak URL</label>
-          <input type="text" defaultValue="http://localhost:8180" />
+          <label>Режим темы</label>
+          <select value={theme} onChange={(e) => setTheme(e.target.value as AdminThemeMode)}>
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
         </div>
-        <div className="form-group">
-          <label>Jitsi Base URL</label>
-          <input type="text" defaultValue="https://meet.company.com" />
-        </div>
-        <button className="primary">Сохранить</button>
-      </div>
-
-      <div className="settings-section">
-        <h2>Безопасность</h2>
-        <div className="form-group">
-          <label>Время жизни сессии (часы)</label>
-          <input type="number" defaultValue="24" />
-        </div>
-        <button className="primary">Сохранить</button>
       </div>
     </div>
   )

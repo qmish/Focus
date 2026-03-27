@@ -8,6 +8,8 @@ import ConferencesPage from './pages/ConferencesPage'
 import SettingsPage from './pages/SettingsPage'
 import ObservabilityPage from './pages/ObservabilityPage'
 import LoginPage from './pages/LoginPage'
+import BotsPage from './pages/BotsPage'
+import IntegrationsPage from './pages/IntegrationsPage'
 
 function AdminApp() {
   const init = useAdminAuthStore(s => s.init)
@@ -24,6 +26,8 @@ function AdminApp() {
           <Route path="users" element={<UsersPage />} />
           <Route path="conferences" element={<ConferencesPage />} />
           <Route path="observability" element={<ObservabilityPage />} />
+          <Route path="bots" element={<BotsPage />} />
+          <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>

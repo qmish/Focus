@@ -17,6 +17,7 @@ spec:
         - chat.focus.local
         - admin.focus.local
         - api.focus.local
+        - swagger.focus.local
       secretName: focus-local-tls
   rules:
     - host: api.focus.local
@@ -49,3 +50,13 @@ spec:
                 name: frontend-admin
                 port:
                   number: 80
+    - host: swagger.focus.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-go
+                port:
+                  number: 8081

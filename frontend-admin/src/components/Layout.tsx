@@ -1,17 +1,21 @@
 import { useState } from 'react'
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAdminAuthStore } from '../store/adminAuthStore'
+import { useAdminUi } from '../providers/AdminUiProvider'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const location = useLocation()
   const navigate = useNavigate()
   const { user, logout, isAuthenticated, isLoading } = useAdminAuthStore()
+  const { branding, theme, setTheme } = useAdminUi()
 
   const navItems = [
     { path: '/dashboard', label: 'Дашборд', icon: '📊' },
     { path: '/users', label: 'Пользователи', icon: '👥' },
     { path: '/conferences', label: 'Конференции', icon: '🎥' },
+    { path: '/bots', label: 'Боты', icon: '🤖' },
+    { path: '/integrations', label: 'Интеграции', icon: '🔌' },
     { path: '/observability', label: 'Наблюдаемость', icon: '🩺' },
     { path: '/settings', label: 'Настройки', icon: '⚙️' },
   ]
@@ -28,7 +32,10 @@ export default function Layout() {
     <div className="admin-layout">
       <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
         <div className="sidebar-header">
-          <h1>Focus Admin</h1>
+          <div className="brand-title">
+            <img src={branding.logoUrl} alt={branding.productName} className="brand-logo" />
+            {sidebarOpen && <h1>{branding.productName}</h1>}
+          </div>
           <button onClick={() => setSidebarOpen(!sidebarOpen)}>
             {sidebarOpen ? '◀' : '▶'}
           </button>
@@ -71,6 +78,13 @@ export default function Layout() {
                 {index < arr.length - 1 && ' / '}
               </span>
             ))}
+          </div>
+          <div className="top-bar-actions">
+            <select value={theme} onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'system')}>
+              <option value="system">Тема: system</option>
+              <option value="light">Тема: light</option>
+              <option value="dark">Тема: dark</option>
+            </select>
           </div>
         </header>
 

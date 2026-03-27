@@ -1053,3 +1053,55 @@ archive_timeout = 300  # 5 минут
 - [pgAdmin](https://www.pgadmin.org/) — GUI для PostgreSQL
 - [DBeaver](https://dbeaver.io/) — Универсальный DB клиент
 - [pgMustard](https://www.pgmustard.com/) — Анализ EXPLAIN
+
+---
+
+## 8. Таблицы Admin Panel Expansion (v1.3)
+
+### `admin_invites`
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| id | uuid PK | Идентификатор инвайта |
+| email | varchar(255) NOT NULL | Email приглашённого |
+| token_hash | varchar(128) UNIQUE NOT NULL | SHA-256 хеш одноразового токена |
+| roles | text[] | Роли, предустанавливаемые при принятии |
+| status | varchar(32) NOT NULL DEFAULT 'pending' | pending / sent / accepted / expired |
+| invited_by | varchar(255) NOT NULL | Email пригласившего администратора |
+| expires_at | timestamp NOT NULL | Дата/время истечения инвайта |
+| sent_at | timestamp | Дата/время фактической отправки email |
+| accepted_at | timestamp | Дата/время принятия инвайта |
+| created_at | timestamp | |
+| updated_at | timestamp | |
+
+### `bot_settings`
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| id | uuid PK | Идентификатор настройки бота |
+| name | varchar(128) UNIQUE NOT NULL | Уникальное имя бота |
+| description | text | Описание бота |
+| is_enabled | boolean NOT NULL DEFAULT true | Включён / отключён |
+| rate_limit_ms | integer NOT NULL DEFAULT 2000 | Лимит (мс) между командами |
+| allowed_rooms | text[] | Ограничение по комнатам |
+| commands_json | text NOT NULL DEFAULT '[]' | JSON конфигурация команд |
+| created_at | timestamp | |
+| updated_at | timestamp | |
+
+### `exchange_settings`
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| id | varchar(32) PK | Всегда 'default' (singleton) |
+| ews_url | varchar(512) NOT NULL | URL EWS endpoint |
+| username | varchar(255) NOT NULL | Учётная запись EWS |
+| password | text NOT NULL | Пароль (не показывается в API) |
+| domain | varchar(255) | NTLM/Kerberos домен |
+| auth_mode | varchar(32) NOT NULL DEFAULT 'basic' | basic / ntlm / kerberos |
+| insecure_tls | boolean DEFAULT false | Пропускать проверку TLS |
+| timeout_seconds | integer DEFAULT 15 | Таймаут SOAP-запроса |
+| sync_enabled | boolean DEFAULT false | Включить sync worker |
+| sync_interval_s | integer DEFAULT 120 | Интервал синхронизации (сек) |
+| updated_by | varchar(255) | Кто последний обновил |
+| created_at | timestamp | |
+| updated_at | timestamp | |

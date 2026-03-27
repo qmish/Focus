@@ -440,6 +440,147 @@ paths:
       responses:
         "200":
           description: Users list
+    post:
+      tags: [Admin]
+      summary: Создать пользователя (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateUserRequest"
+      responses:
+        "201":
+          description: User created
+  /api/v1/admin/users/{id}:
+    patch:
+      tags: [Admin]
+      summary: Частичное обновление пользователя (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminPatchUserRequest"
+      responses:
+        "200":
+          description: User updated
+    delete:
+      tags: [Admin]
+      summary: Деактивация пользователя (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: User deactivated
+  /api/v1/admin/invites:
+    get:
+      tags: [Admin]
+      summary: Список инвайтов (admin)
+      responses:
+        "200":
+          description: Invite list
+    post:
+      tags: [Admin]
+      summary: Создать инвайт по email (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateInviteRequest"
+      responses:
+        "201":
+          description: Invite created
+  /api/v1/admin/invites/{id}/resend:
+    post:
+      tags: [Admin]
+      summary: Повторно отправить инвайт (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Invite resent
+  /api/v1/admin/bots:
+    get:
+      tags: [Admin]
+      summary: Список настроек ботов (admin)
+      responses:
+        "200":
+          description: Bot settings list
+    post:
+      tags: [Admin]
+      summary: Создать настройки бота (admin)
+      responses:
+        "201":
+          description: Bot setting created
+  /api/v1/admin/bots/{id}:
+    patch:
+      tags: [Admin]
+      summary: Обновить настройки бота (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Bot setting updated
+  /api/v1/admin/bots/{id}/enable:
+    post:
+      tags: [Admin]
+      summary: Включить бота (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Bot enabled
+  /api/v1/admin/bots/{id}/disable:
+    post:
+      tags: [Admin]
+      summary: Отключить бота (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Bot disabled
+  /api/v1/admin/exchange/settings:
+    get:
+      tags: [Admin]
+      summary: Получить persisted настройки Exchange (admin)
+      responses:
+        "200":
+          description: Exchange settings
+    put:
+      tags: [Admin]
+      summary: Обновить persisted настройки Exchange (admin)
+      responses:
+        "200":
+          description: Exchange settings updated
+  /api/v1/admin/exchange/test-connection:
+    post:
+      tags: [Admin]
+      summary: Проверить подключение к Exchange EWS (admin)
+      responses:
+        "200":
+          description: Connection test OK
   /api/v1/admin/stats:
     get:
       tags: [Admin]
@@ -550,3 +691,31 @@ components:
         room_id: { type: string }
         exchange_event_id: { type: string }
         sync_status: { type: string }
+    AdminCreateUserRequest:
+      type: object
+      required: [email, name]
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+        password: { type: string }
+        roles:
+          type: array
+          items: { type: string }
+        is_active: { type: boolean }
+    AdminPatchUserRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+        avatar_url: { type: string }
+        is_active: { type: boolean }
+        banned_until: { type: string, format: date-time, nullable: true }
+    AdminCreateInviteRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        roles:
+          type: array
+          items: { type: string }
+        expires_in_hours: { type: integer, minimum: 1 }

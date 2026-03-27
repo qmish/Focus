@@ -67,3 +67,11 @@ frontend-layer/
 .kaniko-release-tag
 .last-kaniko-tag
 crane-linux.tar.gz
+
+# Kaniko build context
+.kaniko-build/
+.kaniko-tag.txt
+.kaniko-api-tag.txt
+
+# Temp scripts
+tmp-frontend-stage.js

@@ -28,6 +28,15 @@
   - базовый `fetch` wrapper
   - retry для GET
   - прокидывание auth/token/custom headers
+- `frontend-admin/src/providers/AdminUiProvider.tsx`
+  - `BrandingProvider + ThemeProvider` поведение в одном контексте
+  - localStorage persistence (`focus_admin_branding`, `focus_admin_theme`)
+- `frontend-admin/src/lib/adminApi.ts`
+  - единый API-клиент для admin endpoint'ов (users/invites/bots/exchange)
+- `frontend-admin/src/pages/BotsPage.tsx`
+  - управление persisted настройками ботов
+- `frontend-admin/src/pages/IntegrationsPage.tsx`
+  - настройки Exchange EWS + test connection
 
 ---
 
@@ -52,6 +61,14 @@
 1. `POST /api/v1/files/upload` multipart.
 2. Сохранение метаданных вложения в сообщение.
 3. `GET /api/v1/files/{fileId}` для скачивания.
+
+### 3.4 Admin-панель
+
+1. CRUD пользователей: `GET/POST/PATCH/DELETE /api/v1/admin/users`.
+2. Роли и блокировки: `PUT /users/:id/roles`, `POST /users/:id/ban|unban`.
+3. Инвайты: `GET/POST /admin/invites`, `POST /admin/invites/:id/resend`.
+4. Боты: `GET/POST/PATCH /admin/bots`, `POST /admin/bots/:id/enable|disable`.
+5. Exchange: `GET/PUT /admin/exchange/settings`, `POST /admin/exchange/test-connection`.
 
 ---
 

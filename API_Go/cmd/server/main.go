@@ -21,6 +21,7 @@ import (
 	"github.com/qmish/focus-api/internal/exchange"
 	"github.com/qmish/focus-api/internal/jitsi"
 	"github.com/qmish/focus-api/internal/models"
+	"github.com/qmish/focus-api/internal/notifications"
 	"github.com/qmish/focus-api/internal/repository"
 	"github.com/qmish/focus-api/internal/webhooks"
 	"github.com/qmish/focus-api/internal/websocket"
@@ -76,6 +77,9 @@ func main() {
 		&models.CalendarAuditEvent{},
 		&models.MeetingLink{},
 		&models.CalendarIdempotencyKey{},
+		&models.AdminInvite{},
+		&models.BotSetting{},
+		&models.ExchangeSetting{},
 		&models.RevokedSession{},
 		&bots.BotCommandEvent{},
 		&webhooks.IncomingEvent{},
@@ -96,6 +100,9 @@ func main() {
 	calendarAuditRepo := repository.NewCalendarAuditRepository(db.DB)
 	meetingLinkRepo := repository.NewMeetingLinkRepository(db.DB)
 	calendarIdempotencyRepo := repository.NewCalendarIdempotencyRepository(db.DB)
+	adminInviteRepo := repository.NewAdminInviteRepository(db.DB)
+	botSettingsRepo := repository.NewBotSettingsRepository(db.DB)
+	exchangeSettingsRepo := repository.NewExchangeSettingsRepository(db.DB)
 	sessionRevocationRepo := repository.NewSessionRevocationRepository(db.DB)
 
 	// Инициализация Exchange EWS клиента (on-prem)
@@ -193,10 +200,27 @@ func main() {
 	calendarHandler.SetCalendarIdempotencyRepository(calendarIdempotencyRepo)
 	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
 	adminHandler.SetMessageRepository(messageRepo)
+	adminHandler.SetInviteRepository(adminInviteRepo)
+	adminHandler.SetBotSettingsRepository(botSettingsRepo)
+	adminHandler.SetExchangeSettingsRepository(exchangeSettingsRepo)
 	adminHandler.SetWebhookRepository(webhookRepo)
 	adminHandler.SetBotRepository(botRepo)
 	adminHandler.SetAuthAuditRepository(authAuditRepo)
 	adminHandler.SetCalendarAuditRepository(calendarAuditRepo)
+	if cfg.Email.SMTPHost != "" && cfg.Email.FromAddress != "" {
+		adminHandler.SetInviteMailer(
+			notifications.NewSMTPInviteMailer(
+				cfg.Email.SMTPHost,
+				cfg.Email.SMTPPort,
+				cfg.Email.SMTPUser,
+				cfg.Email.SMTPPassword,
+				cfg.Email.FromAddress,
+			),
+			cfg.Email.InviteBaseURL,
+		)
+	} else {
+		adminHandler.SetInviteMailer(nil, cfg.Email.InviteBaseURL)
+	}
 	brandingHandler := handlers.NewJitsiBrandingHandler()
 	localAuthHandler := handlers.NewLocalAuthHandler(
 		userRepo,
@@ -280,6 +304,9 @@ func main() {
 			r.Post("/token-exchange", authHandler.TokenExchange)
 			r.Post("/local/register", localAuthHandler.Register)
 			r.Post("/local/login", localAuthHandler.Login)
+		})
+		r.Route("/invites", func(r chi.Router) {
+			r.Post("/accept", adminHandler.AcceptInvite)
 		})
 
 		// WebSocket endpoint
@@ -366,10 +393,24 @@ func main() {
 				}))
 
 				r.Get("/users", adminHandler.ListUsers)
+				r.Post("/users", adminHandler.CreateUser)
 				r.Get("/users/:id", adminHandler.GetUser)
+				r.Patch("/users/:id", adminHandler.PatchUser)
+				r.Delete("/users/:id", adminHandler.DeleteUser)
 				r.Put("/users/:id/roles", adminHandler.UpdateUserRoles)
 				r.With(auth.RequireABAC(abacEngine, "user.ban", nil)).Post("/users/:id/ban", adminHandler.BanUser)
 				r.With(auth.RequireABAC(abacEngine, "user.unban", nil)).Post("/users/:id/unban", adminHandler.UnbanUser)
+				r.Get("/invites", adminHandler.ListInvites)
+				r.Post("/invites", adminHandler.CreateInvite)
+				r.Post("/invites/:id/resend", adminHandler.ResendInvite)
+				r.Get("/bots", adminHandler.ListBots)
+				r.Post("/bots", adminHandler.CreateBot)
+				r.Patch("/bots/:id", adminHandler.PatchBot)
+				r.Post("/bots/:id/enable", adminHandler.EnableBot)
+				r.Post("/bots/:id/disable", adminHandler.DisableBot)
+				r.Get("/exchange/settings", adminHandler.GetExchangeSettings)
+				r.Put("/exchange/settings", adminHandler.PutExchangeSettings)
+				r.Post("/exchange/test-connection", adminHandler.TestExchangeConnection)
 				r.Get("/conferences", adminHandler.ListConferences)
 				r.With(auth.RequireABAC(abacEngine, "conference.end", nil)).Post("/conferences/:id/end", adminHandler.EndConference)
 				r.Get("/stats", adminHandler.GetStats)

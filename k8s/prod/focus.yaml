@@ -173,7 +173,7 @@ spec:
           runAsNonRoot: true
           runAsUser: 10001
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
+          readOnlyRootFilesystem: false
           capabilities:
             drop:
             - ALL
@@ -238,6 +238,14 @@ spec:
       labels:
         app: frontend-admin
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-run
+        emptyDir: {}
       containers:
       - name: frontend-admin
         image: ghcr.io/qmish/focus/frontend-admin:latest
@@ -245,6 +253,11 @@ spec:
         ports:
         - containerPort: 80
           name: http
+        volumeMounts:
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-run
+          mountPath: /var/run
         resources:
           requests:
             cpu: 150m
@@ -252,6 +265,14 @@ spec:
           limits:
             cpu: "1"
             memory: 1Gi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
 ---
 apiVersion: v1
 kind: Service

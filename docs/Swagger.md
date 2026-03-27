@@ -23,7 +23,11 @@ Swagger UI подключён в `cmd/server/main.go`.
 - Rooms/messages/files
 - Calendar CRUD (включая `Idempotency-Key`)
 - Webhook endpoint (`X-Jitsi-Signature`)
-- Admin endpoints (базовый набор)
+- Admin endpoints (расширенный набор):
+  - users CRUD + roles + ban/unban
+  - invites API
+  - bot settings API
+  - Exchange settings + test-connection
 
 ---
 

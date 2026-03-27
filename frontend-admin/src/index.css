@@ -7,6 +7,18 @@
   --sidebar-text: #f1f5f9;
   --card-bg: #ffffff;
   --border-color: #e2e8f0;
+  --text-color: #1f2937;
+  --muted-color: #6b7280;
+}
+
+:root[data-theme='dark'] {
+  --bg-color: #0f172a;
+  --sidebar-bg: #020617;
+  --sidebar-text: #e2e8f0;
+  --card-bg: #111827;
+  --border-color: #1f2937;
+  --text-color: #e5e7eb;
+  --muted-color: #94a3b8;
 }
 
 * {
@@ -18,7 +30,7 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-color);
-  color: #1f2937;
+  color: var(--text-color);
 }
 
 /* Layout */
@@ -44,6 +56,18 @@ body {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.brand-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
 }
 
 .sidebar-header h1 {
@@ -114,11 +138,14 @@ body {
   background: var(--card-bg);
   padding: 1rem;
   border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .breadcrumb {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--muted-color);
 }
 
 .breadcrumb a {
@@ -178,10 +205,10 @@ th, td {
 }
 
 th {
-  background: #f9fafb;
+  background: color-mix(in srgb, var(--card-bg) 88%, #ffffff 12%);
   font-weight: 600;
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--muted-color);
 }
 
 /* Badges */
@@ -460,6 +487,19 @@ button:hover {
   padding: 0.5rem;
   border: 1px solid var(--border-color);
   border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--text-color);
+}
+
+.form-group select,
+.top-bar-actions select {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--text-color);
 }
 
 /* Health */
@@ -492,14 +532,14 @@ button:hover {
 .loading {
   text-align: center;
   padding: 2rem;
-  color: #6b7280;
+  color: var(--muted-color);
 }
 
 /* Empty state */
 .empty-state {
   text-align: center;
   padding: 3rem;
-  color: #6b7280;
+  color: var(--muted-color);
 }
 
 /* Dashboard content */

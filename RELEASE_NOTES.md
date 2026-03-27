@@ -1,8 +1,45 @@
 # Release Notes
 
-## v0.6.0 — Документация + Swagger + EWS hardening (27 марта 2026)
+## v1.3.0 — Admin Panel Expansion Phase 1 (28 марта 2026)
 
-**Последний релиз** ✅
+### ✨ Новое
+- Расширен backend admin API:
+  - users CRUD (`POST/PATCH/DELETE /api/v1/admin/users`)
+  - invites API (`GET/POST /api/v1/admin/invites`, `POST /:id/resend`, `POST /api/v1/invites/accept`)
+  - persisted bot settings API (`GET/POST/PATCH /api/v1/admin/bots`, `POST /:id/enable|disable`)
+  - persisted Exchange settings API (`GET/PUT /api/v1/admin/exchange/settings`, `POST /test-connection`)
+- Добавлены новые модели и миграции:
+  - `admin_invites`
+  - `bot_settings`
+  - `exchange_settings`
+- Добавлен SMTP mailer для email-инвайтов:
+  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`
+  - `INVITE_BASE_URL`
+- Расширен frontend-admin:
+  - branding + theme provider (light/dark/system, localStorage)
+  - Users page: create/edit/delete, roles, ban/unban, invites
+  - Новые страницы `BotsPage` и `IntegrationsPage`
+  - Единый `adminApi` клиент
+- Обновлены OpenAPI и документация (`Frontend.md`, `Swagger.md`, `Exchange_OnPrem_EWS.md`)
+
+### 🔧 Инфраструктура / Kubernetes
+- `k8s/stage/focus.yaml`, `k8s/prod/focus.yaml`:
+  - Добавлен `securityContext` для `frontend-admin` (seccompProfile, runAsNonRoot, capabilities.drop)
+  - emptyDir volumes `nginx-cache`, `nginx-run` для writable nginx каталогов
+- `k8s/tls/stage-ingress.yaml`: добавлен хост `swagger.focus.local` с маршрутом к порту 8081
+- Образы собраны через Kaniko и опубликованы на Docker Hub:
+  - `docker.io/qmishnik/focus-api-go:adminexp-20260327-235237-api-runtime`
+  - `docker.io/qmishnik/focus-admin:adminexp-20260327-231708`
+- Rollout выполнен в `messenger-stage` и `messenger-prod`
+
+### ✅ Проверка
+- `go test ./...` — успешно
+- `npm run build` (`frontend-admin`) — успешно
+- Smoke: `admin.focus.local` → 200, `api.focus.local/health` → healthy
+
+---
+
+## v0.6.0 — Документация + Swagger + EWS hardening (27 марта 2026)
 
 ### 🎯 Цель
 Привести документацию к фактической кодовой базе (EWS-only, sync worker, Kerberos, идемпотентность) и добавить встроенный Swagger/OpenAPI для API.

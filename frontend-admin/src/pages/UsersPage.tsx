@@ -2,14 +2,36 @@ import { useEffect, useState } from 'react'
 import { useAdminStore, type User } from '../store/adminStore'
 
 export default function UsersPage() {
-  const { users, pagination, error, loading, fetchUsers, updateUserRoles, banUser, unbanUser } = useAdminStore()
+  const {
+    users,
+    invites,
+    pagination,
+    error,
+    loading,
+    fetchUsers,
+    fetchInvites,
+    createUser,
+    patchUser,
+    deleteUser,
+    updateUserRoles,
+    banUser,
+    unbanUser,
+    createInvite,
+    resendInvite,
+  } = useAdminStore()
   const [page, setPage] = useState(1)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [selectedRoles, setSelectedRoles] = useState<string[]>([])
   const [showModal, setShowModal] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchUsers(page)
+    void fetchUsers(page)
+    void fetchInvites()
   }, [page])
 
   const handleRoleChange = (userId: string, roles: string[]) => {
@@ -19,7 +41,8 @@ export default function UsersPage() {
 
   const handleBan = (userId: string) => {
     if (confirm('Заблокировать пользователя?')) {
-      void banUser(userId, 'Нарушение правил')
+      const reason = prompt('Причина блокировки', 'Нарушение правил') || 'Нарушение правил'
+      void banUser(userId, reason, 0)
     }
   }
 
@@ -39,6 +62,44 @@ export default function UsersPage() {
     ))
   }
 
+  const handleCreateUser = () => {
+    if (!newName.trim() || !newEmail.trim()) return
+    void createUser({
+      name: newName.trim(),
+      email: newEmail.trim(),
+      password: newPassword.trim() || undefined,
+      roles: ['user'],
+      is_active: true,
+    })
+    setNewName('')
+    setNewEmail('')
+    setNewPassword('')
+  }
+
+  const handleEditUser = (user: User) => {
+    const name = prompt('Новое имя пользователя', user.name)
+    if (!name || !name.trim()) return
+    void patchUser(user.id, { name: name.trim() })
+  }
+
+  const handleDeleteUser = (userId: string) => {
+    if (confirm('Деактивировать пользователя?')) {
+      void deleteUser(userId)
+    }
+  }
+
+  const handleCreateInvite = async () => {
+    if (!inviteEmail.trim()) return
+    const inviteUrl = await createInvite({ email: inviteEmail.trim(), roles: ['user'], expires_in_hours: 72 })
+    setLastInviteUrl(inviteUrl)
+    setInviteEmail('')
+  }
+
+  const handleResendInvite = async (inviteId: string) => {
+    const inviteUrl = await resendInvite(inviteId)
+    setLastInviteUrl(inviteUrl)
+  }
+
   if (loading) {
     return <div className="loading">Загрузка...</div>
   }
@@ -47,6 +108,23 @@ export default function UsersPage() {
     <div className="users-page">
       <h1>Пользователи</h1>
       {error && <p className="error">{error}</p>}
+
+      <div className="settings-section">
+        <h2>Создать пользователя</h2>
+        <div className="form-group">
+          <label>Имя</label>
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label>Email</label>
+          <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label>Пароль (опционально)</label>
+          <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+        </div>
+        <button className="primary" onClick={handleCreateUser}>Создать</button>
+      </div>
 
       <div className="users-table">
         <table>
@@ -80,6 +158,12 @@ export default function UsersPage() {
                   <button onClick={() => openRolesModal(user)}>
                     Роли
                   </button>
+                  <button onClick={() => handleEditUser(user)}>
+                    Изменить
+                  </button>
+                  <button onClick={() => handleDeleteUser(user.id)} className="danger">
+                    Удалить
+                  </button>
                   {user.is_active ? (
                     <button onClick={() => handleBan(user.id)} className="danger">
                       Заблокировать
@@ -107,6 +191,31 @@ export default function UsersPage() {
         >
           Вперёд →
         </button>
+      </div>
+
+      <div className="settings-section">
+        <h2>Инвайты</h2>
+        <div className="form-group">
+          <label>Email для инвайта</label>
+          <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+        </div>
+        <button className="primary" onClick={() => void handleCreateInvite()}>
+          Отправить инвайт
+        </button>
+        {lastInviteUrl && (
+          <p style={{ marginTop: 12 }}>
+            Ссылка инвайта: <a href={lastInviteUrl} target="_blank" rel="noreferrer">{lastInviteUrl}</a>
+          </p>
+        )}
+        <div style={{ marginTop: 16 }}>
+          {invites.map((invite) => (
+            <div key={invite.id} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+              <span>{invite.email}</span>
+              <span className="status-badge">{invite.status}</span>
+              <button onClick={() => void handleResendInvite(invite.id)}>Повторно отправить</button>
+            </div>
+          ))}
+        </div>
       </div>
 
       {showModal && selectedUser && (

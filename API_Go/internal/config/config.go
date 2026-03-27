@@ -18,6 +18,7 @@ type Config struct {
 	Keycloak  KeycloakConfig
 	Jitsi     JitsiConfig
 	Exchange  ExchangeConfig
+	Email     EmailConfig
 	Log       LogConfig
 }
 
@@ -109,6 +110,16 @@ type ExchangeConfig struct {
 	SyncInterval   time.Duration
 	SyncLookback   time.Duration
 	SyncLookahead  time.Duration
+}
+
+// EmailConfig configures SMTP sending for admin invites.
+type EmailConfig struct {
+	SMTPHost      string
+	SMTPPort      string
+	SMTPUser      string
+	SMTPPassword  string
+	FromAddress   string
+	InviteBaseURL string
 }
 
 // LogConfig конфигурация логирования
@@ -204,6 +215,14 @@ func Load() *Config {
 			SyncInterval:   getDurationEnv("EXCHANGE_SYNC_INTERVAL", 2*time.Minute),
 			SyncLookback:   getDurationEnv("EXCHANGE_SYNC_LOOKBACK", 12*time.Hour),
 			SyncLookahead:  getDurationEnv("EXCHANGE_SYNC_LOOKAHEAD", 14*24*time.Hour),
+		},
+		Email: EmailConfig{
+			SMTPHost:      getEnv("SMTP_HOST", ""),
+			SMTPPort:      getEnv("SMTP_PORT", "587"),
+			SMTPUser:      getEnv("SMTP_USER", ""),
+			SMTPPassword:  getEnv("SMTP_PASSWORD", ""),
+			FromAddress:   getEnv("SMTP_FROM", ""),
+			InviteBaseURL: getEnv("INVITE_BASE_URL", "https://admin.focus.local:30443/invite/accept"),
 		},
 		Log: LogConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),

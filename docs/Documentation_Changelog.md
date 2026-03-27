@@ -235,6 +235,18 @@
   - обновлен раздел статуса реализации;
   - удалены устаревшие формулировки о готовности и старые проценты прогресса;
   - добавлена ссылка на `docs/Roadmap_v2.md` как источник правды.
+### 2026-03-28: Admin Panel Expansion Phase 1
+
+- `docs/README.md`: обновлена версия 1.1 → 1.3.
+- `docs/Database.md`: добавлен раздел 8 с описанием таблиц `admin_invites`, `bot_settings`, `exchange_settings`.
+- `docs/Frontend.md`: описаны `AdminUiProvider`, `adminApi.ts`, `BotsPage`, `IntegrationsPage`, admin CRUD flow.
+- `docs/Swagger.md`: обновлён список описываемых admin endpoint'ов.
+- `docs/Exchange_OnPrem_EWS.md`: добавлены admin endpoint'ы (`GET/PUT /exchange/settings`, `POST /test-connection`) и упоминание persisted settings.
+- `API_Go/docs/openapi.yaml`: расширена спецификация новыми admin endpoint'ами (users CRUD, invites, bots, exchange settings).
+- `RELEASE_NOTES.md`: добавлен v1.3.0.
+- `k8s/stage/focus.yaml`, `k8s/prod/focus.yaml`: обновлены securityContext `frontend-admin` (seccomp, non-root, writable nginx volumes).
+- `k8s/tls/stage-ingress.yaml`: добавлены хосты bots/integrations.
+
 - Актуализирован `ANALYSIS.md`:
   - заменен устаревший snapshot `v0.5.0` на текущий фактический статус;
   - пересобран раздел «что не завершено» по этапам roadmap v2.

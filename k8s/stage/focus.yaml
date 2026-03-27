@@ -168,7 +168,7 @@ spec:
           runAsNonRoot: true
           runAsUser: 10001
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
+          readOnlyRootFilesystem: false
           capabilities:
             drop:
             - ALL
@@ -223,6 +223,14 @@ spec:
       labels:
         app: frontend-admin
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-run
+        emptyDir: {}
       containers:
       - name: frontend-admin
         image: ghcr.io/qmish/focus/frontend-admin:latest
@@ -230,6 +238,11 @@ spec:
         ports:
         - containerPort: 80
           name: http
+        volumeMounts:
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-run
+          mountPath: /var/run
         resources:
           requests:
             cpu: 100m
@@ -237,6 +250,14 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
 ---
 apiVersion: v1
 kind: Service
@@ -331,6 +352,36 @@ spec:
             name: frontend
             port:
               number: 80
+  - host: chat.focus.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+  - host: admin.focus.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-admin
+            port:
+              number: 80
+  - host: api.focus.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-go
+            port:
+              number: 80
   - host: admin-stage.company.com
     http:
       paths:
@@ -351,6 +402,16 @@ spec:
             name: api-go
             port:
               number: 8081
+  - host: swagger.focus.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-go
+            port:
+              number: 8081
   tls:
   - hosts:
     - api-stage.company.com
@@ -359,11 +420,21 @@ spec:
     - chat-stage.company.com
     secretName: chat-stage-tls
   - hosts:
+    - chat.focus.local
+    secretName: focus-local-tls
+  - hosts:
+    - admin.focus.local
+    - api.focus.local
+    secretName: focus-local-tls
+  - hosts:
     - admin-stage.company.com
     secretName: admin-stage-tls
   - hosts:
     - swagger-stage.company.com
     secretName: swagger-stage-tls
+  - hosts:
+    - swagger.focus.local
+    secretName: focus-local-tls
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
