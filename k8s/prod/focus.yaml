@@ -48,6 +48,9 @@ spec:
       labels:
         app: api-go
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: api-go
         image: ghcr.io/qmish/focus/api-go:latest
