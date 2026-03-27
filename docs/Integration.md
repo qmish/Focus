@@ -13,9 +13,11 @@
 | Сервис | Тип | Назначение | Протокол |
 |--------|-----|------------|----------|
 | Keycloak | SSO | Аутентификация и авторизация | OIDC/OAuth 2.0 |
-| MS Exchange | Календари | Синхронизация встреч | Microsoft Graph API |
+| MS Exchange (on-prem) | Календари | Синхронизация встреч | EWS SOAP |
 | Jitsi Meet | Видеоконференции | Встраивание звонков | JWT + iframe |
 | Azure AD | Identity Provider | Корпоративные пользователи | SAML/OIDC |
+
+> Актуальная реализация календарной интеграции для on-prem Exchange/OWA описана в `Exchange_OnPrem_EWS.md`.
 
 ---
 

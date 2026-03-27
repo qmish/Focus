@@ -72,7 +72,7 @@ graph TB
     P4 -->|XMPP| Jitsi[("Jitsi Meet")]
 
     User -->|Создать встречу| P5
-    P5 -->|Graph API| Exchange
+    P5 -->|EWS SOAP| Exchange
     P5 -->|Сохранить| D5
 
     P2 -->|События| P6
@@ -251,7 +251,7 @@ graph TB
 graph TB
     subgraph "External"
         User[("Пользователь")]
-        GraphAPI[("MS Graph API")]
+        EWS[("Exchange EWS")]
         Exchange[("Exchange Server")]
         Attendees[("Участники встречи")]
     end
@@ -271,26 +271,23 @@ graph TB
     end
 
     User -->|GET /calendar/events| P5_1
-    P5_1 -->|Получить токен Graph| Cache
-    Cache -->|Token| P5_1
-    P5_1 -->|GET /events| GraphAPI
-    GraphAPI -->|Events list| P5_1
+    P5_1 -->|FindItem/GetItem| EWS
+    EWS -->|Events list| P5_1
     P5_1 -->|JSON| User
 
     User -->|POST /calendar/events| P5_2
     P5_2 -->|Создать комнату| P5_3
     P5_3 -->|Сохранить| D2
     P5_3 -->|Jitsi URL| P5_2
-    P5_2 -->|POST /events с Jitsi URL| GraphAPI
-    GraphAPI -->|Создать событие| Exchange
+    P5_2 -->|CreateItem с Jitsi URL| EWS
+    EWS -->|Создать событие| Exchange
     Exchange -->|Event ID| P5_2
     P5_2 -->|Отправить приглашения| P5_4
     P5_4 -->|Email| Attendees
     P5_2 -->|Сохранить связь| D5
     P5_2 -->|Event data| User
 
-    GraphAPI -->|Webhook изменение| P5_5
-    P5_5 -->|Обновить кэш| Cache
+    P5_5 -->|Polling sync window| EWS
     P5_5 -->|Обновить| D5
 ```
 
@@ -388,7 +385,7 @@ sequenceDiagram
     participant FE as Frontend
     participant API as Go API
     participant DB as PostgreSQL
-    participant Graph as MS Graph
+    participant EWS as Exchange EWS
     participant Exch as Exchange
     participant Att as Участники
 
@@ -399,12 +396,12 @@ sequenceDiagram
     API->>DB: INSERT rooms (jitsi_room)
     DB->>API: room_id
     API->>API: Создать Jitsi JWT
-    API->>Graph: POST /users/:id/calendar/events
-    Note right of Graph: Body:<br/>- subject<br/>- start/end<br/>- attendees<br/>- location: Jitsi URL
-    Graph->>Exch: Создать событие
-    Exch->>Graph: Event ID
-    Graph->>Att: Отправить приглашения (email)
-    Graph->>API: Event data
+    API->>EWS: CreateItem
+    Note right of EWS: Body:<br/>- subject<br/>- start/end<br/>- attendees<br/>- location: Jitsi URL
+    EWS->>Exch: Создать событие
+    Exch->>EWS: Event ID
+    EWS->>Att: Отправить приглашения (email)
+    EWS->>API: Event data
     API->>DB: INSERT meetings (exchange_event_id)
     API->>FE: { event_id, jitsi_url }
     FE->>U: Показать встречу в календаре
@@ -469,8 +466,8 @@ sequenceDiagram
 | F14 | Frontend | Jitsi iframe | Video conference | HTTPS | По запросу |
 | F15 | Go API | Jitsi Prosody | JWT generation | JWT | По запросу |
 | F16 | Jitsi Prosody | Go API | Webhook events | HTTPS | По событию |
-| F17 | Go API | MS Graph | Calendar API | HTTPS | По запросу |
-| F18 | MS Graph | Go API | Events data | HTTPS | По запросу |
+| F17 | Go API | Exchange EWS | Calendar API (SOAP) | HTTPS | По запросу |
+| F18 | Exchange EWS | Go API | Events data | HTTPS | По запросу |
 | F19 | Go API | External | Outgoing webhooks | HTTPS | По событию |
 
 ---

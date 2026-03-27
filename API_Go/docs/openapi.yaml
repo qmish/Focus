@@ -1,0 +1,552 @@
+openapi: 3.0.3
+info:
+  title: Focus API
+  description: REST API корпоративного мессенджера Focus.
+  version: 0.6.0
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+  - name: Auth
+  - name: Rooms
+  - name: Messages
+  - name: Files
+  - name: Calendar
+  - name: Webhooks
+  - name: Branding
+  - name: Admin
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Проверка liveness
+      security: []
+      responses:
+        "200":
+          description: OK
+  /ready:
+    get:
+      tags: [Health]
+      summary: Проверка readiness
+      security: []
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: Not ready
+  /api/v1/auth/login:
+    get:
+      tags: [Auth]
+      summary: Начать OIDC login
+      security: []
+      responses:
+        "302":
+          description: Redirect to IdP
+  /api/v1/auth/callback:
+    get:
+      tags: [Auth]
+      summary: OIDC callback
+      security: []
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema: { type: string }
+        - in: query
+          name: state
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Обновить токен
+      security: []
+      responses:
+        "200":
+          description: Token refreshed
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Выйти и отозвать сессию
+      responses:
+        "200":
+          description: Logged out
+  /api/v1/auth/local/register:
+    post:
+      tags: [Auth]
+      summary: Локальная регистрация
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalRegisterRequest"
+      responses:
+        "201":
+          description: Registered
+  /api/v1/auth/local/login:
+    post:
+      tags: [Auth]
+      summary: Локальный вход
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalLoginRequest"
+      responses:
+        "200":
+          description: Authorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Профиль текущего пользователя
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /api/v1/rooms:
+    get:
+      tags: [Rooms]
+      summary: Список комнат
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Rooms
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Room" }
+    post:
+      tags: [Rooms]
+      summary: Создать комнату
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoomRequest"
+      responses:
+        "201":
+          description: Room created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Room"
+  /api/v1/rooms/{id}:
+    get:
+      tags: [Rooms]
+      summary: Получить комнату
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Room
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Room"
+    put:
+      tags: [Rooms]
+      summary: Обновить комнату
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoomRequest"
+      responses:
+        "200":
+          description: Room updated
+    delete:
+      tags: [Rooms]
+      summary: Удалить комнату
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Room deleted
+  /api/v1/rooms/{id}/join:
+    post:
+      tags: [Rooms]
+      summary: Вступить в комнату
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Joined
+  /api/v1/messages:
+    get:
+      tags: [Messages]
+      summary: Получить сообщения комнаты
+      parameters:
+        - in: query
+          name: room_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Message" }
+    post:
+      tags: [Messages]
+      summary: Отправить сообщение
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMessageRequest"
+      responses:
+        "201":
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+  /api/v1/messages/{id}:
+    get:
+      tags: [Messages]
+      summary: Получить сообщение
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Message
+    put:
+      tags: [Messages]
+      summary: Обновить сообщение
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [Messages]
+      summary: Удалить сообщение
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Deleted
+  /api/v1/files/upload:
+    post:
+      tags: [Files]
+      summary: Загрузить файл
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Uploaded
+  /api/v1/files/{fileId}:
+    get:
+      tags: [Files]
+      summary: Скачать файл
+      parameters:
+        - in: path
+          name: fileId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: File content
+  /api/v1/calendar/events:
+    get:
+      tags: [Calendar]
+      summary: Список событий календаря
+      parameters:
+        - in: query
+          name: start
+          schema: { type: string, format: date-time }
+        - in: query
+          name: end
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Events list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CalendarEvent" }
+    post:
+      tags: [Calendar]
+      summary: Создать событие в календаре
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string, minLength: 8, maxLength: 128 }
+          required: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCalendarEventRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEvent"
+        "200":
+          description: Idempotent replay
+          headers:
+            X-Idempotent-Replay:
+              schema: { type: string, enum: ["true"] }
+  /api/v1/calendar/events/{id}:
+    put:
+      tags: [Calendar]
+      summary: Обновить событие календаря
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCalendarEventRequest"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [Calendar]
+      summary: Удалить событие календаря
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: send_cancellation
+          required: false
+          schema: { type: boolean, default: true }
+      responses:
+        "204":
+          description: Deleted
+  /api/v1/branding/jitsi:
+    get:
+      tags: [Branding]
+      summary: Динамический брендинг Jitsi
+      security: []
+      responses:
+        "200":
+          description: Branding config
+  /api/v1/webhooks/jitsi:
+    post:
+      tags: [Webhooks]
+      summary: Входящий webhook от Jitsi
+      security:
+        - webhookSignature: []
+      parameters:
+        - in: header
+          name: X-Idempotency-Key
+          schema: { type: string }
+          required: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "202":
+          description: Accepted
+  /api/v1/admin/users:
+    get:
+      tags: [Admin]
+      summary: Список пользователей (admin)
+      responses:
+        "200":
+          description: Users list
+  /api/v1/admin/stats:
+    get:
+      tags: [Admin]
+      summary: Системная статистика (admin)
+      responses:
+        "200":
+          description: Stats
+  /api/v1/admin/auth/audit:
+    get:
+      tags: [Admin]
+      summary: Аудит аутентификации (admin)
+      responses:
+        "200":
+          description: Audit list
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    webhookSignature:
+      type: apiKey
+      in: header
+      name: X-Jitsi-Signature
+  schemas:
+    AuthTokenResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer }
+        user:
+          $ref: "#/components/schemas/User"
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        roles:
+          type: array
+          items: { type: string }
+    Room:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        type: { type: string, example: public }
+        jitsi_room_name: { type: string }
+    Message:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        room_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        type: { type: string, example: text }
+        content: { type: string }
+        created_at: { type: string, format: date-time }
+    CreateRoomRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        type: { type: string, example: public }
+    UpdateRoomRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+    CreateMessageRequest:
+      type: object
+      required: [room_id, content]
+      properties:
+        room_id: { type: string, format: uuid }
+        content: { type: string }
+        type: { type: string, default: text }
+    CreateCalendarEventRequest:
+      type: object
+      required: [subject, start_time, end_time]
+      properties:
+        subject: { type: string }
+        description: { type: string }
+        start_time: { type: string, format: date-time }
+        end_time: { type: string, format: date-time }
+        attendee_emails:
+          type: array
+          items: { type: string, format: email }
+        create_jitsi_room: { type: boolean, default: true }
+    UpdateCalendarEventRequest:
+      type: object
+      properties:
+        subject: { type: string }
+        description: { type: string }
+        start_time: { type: string, format: date-time }
+        end_time: { type: string, format: date-time }
+    CalendarEvent:
+      type: object
+      properties:
+        id: { type: string }
+        subject: { type: string }
+        description: { type: string }
+        start_time: { type: string, format: date-time }
+        end_time: { type: string, format: date-time }
+        jitsi_url: { type: string }
+        location: { type: string }
+        room_id: { type: string }
+        exchange_event_id: { type: string }
+        sync_status: { type: string }

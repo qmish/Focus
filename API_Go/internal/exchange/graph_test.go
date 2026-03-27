@@ -82,16 +82,20 @@ func TestPtrToString(t *testing.T) {
 	})
 }
 
-func TestGraphConfig(t *testing.T) {
-	cfg := GraphConfig{
-		TenantID:     "tenant-123",
-		ClientID:     "client-456",
-		ClientSecret: "secret-789",
+func TestEWSConfig(t *testing.T) {
+	cfg := EWSConfig{
+		URL:           "https://exchange.local/EWS/Exchange.asmx",
+		Username:      "svc_focus",
+		Password:      "secret",
+		Domain:        "CORP",
+		Impersonation: true,
 	}
 
-	assert.Equal(t, "tenant-123", cfg.TenantID)
-	assert.Equal(t, "client-456", cfg.ClientID)
-	assert.Equal(t, "secret-789", cfg.ClientSecret)
+	assert.Equal(t, "https://exchange.local/EWS/Exchange.asmx", cfg.URL)
+	assert.Equal(t, "svc_focus", cfg.Username)
+	assert.Equal(t, "secret", cfg.Password)
+	assert.Equal(t, "CORP", cfg.Domain)
+	assert.True(t, cfg.Impersonation)
 }
 
 func TestCalendarEventTimezone(t *testing.T) {
@@ -142,6 +146,33 @@ func TestCalendarEventWithJitsiURL(t *testing.T) {
 	assert.NotEmpty(t, event.JitsiURL)
 }
 
+func TestBuildRequiredAttendeesXML(t *testing.T) {
+	xml := buildRequiredAttendeesXML([]EventAttendee{
+		{Email: "a@example.com", Name: "A"},
+		{Email: "b@example.com"},
+	})
+	assert.Contains(t, xml, "<t:RequiredAttendees>")
+	assert.Contains(t, xml, "a@example.com")
+	assert.Contains(t, xml, "b@example.com")
+}
+
+func TestExtractJitsiURL(t *testing.T) {
+	body := "Описание\nСсылка на встречу Focus: https://meet.focus.local/room-1\nДетали"
+	assert.Equal(t, "https://meet.focus.local/room-1", extractJitsiURL(body))
+}
+
+func TestWithDomain(t *testing.T) {
+	client := &EWSClient{domain: "CORP"}
+	assert.Equal(t, `CORP\svc_focus`, client.withDomain("svc_focus"))
+	assert.Equal(t, `CORP\svc_focus`, client.withDomain(`CORP\svc_focus`))
+}
+
+func TestParseEWSTime(t *testing.T) {
+	t1, err := parseEWSTime("2030-01-01T10:00:00Z")
+	assert.NoError(t, err)
+	assert.Equal(t, 2030, t1.Year())
+}
+
 func TestCalendarEventEmptyAttendees(t *testing.T) {
 	event := CalendarEvent{
 		Subject:   "Meeting",
@@ -168,14 +199,14 @@ func TestCalendarEventOrganizer(t *testing.T) {
 // Integration tests (require actual Azure credentials)
 // These tests are skipped by default
 
-func TestGraphClientCreationSkipped(t *testing.T) {
-	t.Skip("Skipping integration test - requires Azure credentials")
+func TestEWSClientCreationSkipped(t *testing.T) {
+	t.Skip("Skipping integration test - requires on-prem Exchange credentials")
 }
 
-func TestGraphClientCreateEventSkipped(t *testing.T) {
-	t.Skip("Skipping integration test - requires Azure credentials")
+func TestEWSClientCreateEventSkipped(t *testing.T) {
+	t.Skip("Skipping integration test - requires on-prem Exchange credentials")
 }
 
-func TestGraphClientGetEventsSkipped(t *testing.T) {
-	t.Skip("Skipping integration test - requires Azure credentials")
+func TestEWSClientGetEventsSkipped(t *testing.T) {
+	t.Skip("Skipping integration test - requires on-prem Exchange credentials")
 }

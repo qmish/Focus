@@ -88,11 +88,26 @@ type JitsiConfig struct {
 	TokenLifetime time.Duration
 }
 
-// ExchangeConfig конфигурация MS Exchange
+// ExchangeConfig конфигурация on-prem Exchange/OWA (EWS).
 type ExchangeConfig struct {
-	TenantID     string
-	ClientID     string
-	ClientSecret string
+	Provider       string
+	EWSURL         string
+	Username       string
+	Password       string
+	Domain         string
+	AuthMode       string
+	CACertPath     string
+	InsecureTLS    bool
+	Krb5ConfigPath string
+	Krb5KeytabPath string
+	Krb5Realm      string
+	Krb5SPN        string
+	Impersonation  bool
+	Timeout        time.Duration
+	SyncEnabled    bool
+	SyncInterval   time.Duration
+	SyncLookback   time.Duration
+	SyncLookahead  time.Duration
 }
 
 // LogConfig конфигурация логирования
@@ -169,9 +184,24 @@ func Load() *Config {
 			TokenLifetime: getDurationEnv("JITSI_TOKEN_LIFETIME", 8*time.Hour),
 		},
 		Exchange: ExchangeConfig{
-			TenantID:     getEnv("EXCHANGE_TENANT_ID", ""),
-			ClientID:     getEnv("EXCHANGE_CLIENT_ID", ""),
-			ClientSecret: getEnv("EXCHANGE_CLIENT_SECRET", ""),
+			Provider:       getEnv("EXCHANGE_PROVIDER", "ews"),
+			EWSURL:         getEnv("EXCHANGE_EWS_URL", ""),
+			Username:       getEnv("EXCHANGE_USERNAME", ""),
+			Password:       getEnv("EXCHANGE_PASSWORD", ""),
+			Domain:         getEnv("EXCHANGE_DOMAIN", ""),
+			AuthMode:       strings.ToLower(getEnv("EXCHANGE_AUTH_MODE", "basic")),
+			CACertPath:     getEnv("EXCHANGE_CA_CERT_PATH", ""),
+			InsecureTLS:    getBoolEnv("EXCHANGE_INSECURE_TLS", false),
+			Krb5ConfigPath: getEnv("EXCHANGE_KRB5_CONFIG_PATH", ""),
+			Krb5KeytabPath: getEnv("EXCHANGE_KRB5_KEYTAB_PATH", ""),
+			Krb5Realm:      getEnv("EXCHANGE_KRB5_REALM", ""),
+			Krb5SPN:        getEnv("EXCHANGE_KRB5_SERVICE_PRINCIPAL", ""),
+			Impersonation:  getBoolEnv("EXCHANGE_IMPERSONATION", true),
+			Timeout:        getDurationEnv("EXCHANGE_TIMEOUT", 15*time.Second),
+			SyncEnabled:    getBoolEnv("EXCHANGE_SYNC_ENABLED", false),
+			SyncInterval:   getDurationEnv("EXCHANGE_SYNC_INTERVAL", 2*time.Minute),
+			SyncLookback:   getDurationEnv("EXCHANGE_SYNC_LOOKBACK", 12*time.Hour),
+			SyncLookahead:  getDurationEnv("EXCHANGE_SYNC_LOOKAHEAD", 14*24*time.Hour),
 		},
 		Log: LogConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),

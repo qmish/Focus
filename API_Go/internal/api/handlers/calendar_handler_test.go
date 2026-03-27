@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -96,6 +97,10 @@ func (f *fakeCalendarService) CreateEvent(ctx context.Context, userID string, ev
 	return &event, nil
 }
 
+func (f *fakeCalendarService) GetEvent(ctx context.Context, userID, eventID string) (*exchange.CalendarEvent, error) {
+	return &exchange.CalendarEvent{ID: eventID, Subject: "event"}, nil
+}
+
 func (f *fakeCalendarService) UpdateEvent(ctx context.Context, userID, eventID string, event exchange.CalendarEvent) error {
 	if f.failUpdate {
 		return assert.AnError
@@ -113,6 +118,79 @@ func (f *fakeCalendarService) DeleteEvent(ctx context.Context, userID, eventID s
 
 type fakeCalendarAuditRepo struct {
 	events []*models.CalendarAuditEvent
+}
+
+type fakeMeetingLinkRepo struct {
+	links map[string]*models.MeetingLink
+}
+
+type fakeCalendarIdempotencyRepo struct {
+	records map[string]*models.CalendarIdempotencyKey
+}
+
+func (f *fakeMeetingLinkRepo) Create(ctx context.Context, link *models.MeetingLink) error {
+	if f.links == nil {
+		f.links = make(map[string]*models.MeetingLink)
+	}
+	f.links[link.ExchangeEventID] = link
+	return nil
+}
+
+func (f *fakeMeetingLinkRepo) GetByExchangeEventID(ctx context.Context, eventID string) (*models.MeetingLink, error) {
+	if f.links == nil {
+		return nil, errors.New("not found")
+	}
+	link, ok := f.links[eventID]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return link, nil
+}
+
+func (f *fakeMeetingLinkRepo) Update(ctx context.Context, link *models.MeetingLink) error {
+	if f.links == nil {
+		f.links = make(map[string]*models.MeetingLink)
+	}
+	f.links[link.ExchangeEventID] = link
+	return nil
+}
+
+func (f *fakeCalendarIdempotencyRepo) CreatePending(ctx context.Context, key, userEmail string) error {
+	if f.records == nil {
+		f.records = make(map[string]*models.CalendarIdempotencyKey)
+	}
+	f.records[key+"|"+userEmail] = &models.CalendarIdempotencyKey{
+		Key:       key,
+		UserEmail: userEmail,
+	}
+	return nil
+}
+
+func (f *fakeCalendarIdempotencyRepo) Get(ctx context.Context, key, userEmail string) (*models.CalendarIdempotencyKey, error) {
+	if f.records == nil {
+		return nil, errors.New("not found")
+	}
+	record, ok := f.records[key+"|"+userEmail]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return record, nil
+}
+
+func (f *fakeCalendarIdempotencyRepo) MarkCompleted(ctx context.Context, key, userEmail, eventID, roomID, responseBody string) error {
+	if f.records == nil {
+		f.records = make(map[string]*models.CalendarIdempotencyKey)
+	}
+	now := time.Now().UTC()
+	f.records[key+"|"+userEmail] = &models.CalendarIdempotencyKey{
+		Key:          key,
+		UserEmail:    userEmail,
+		EventID:      eventID,
+		RoomID:       roomID,
+		ResponseBody: responseBody,
+		CompletedAt:  &now,
+	}
+	return nil
 }
 
 func (f *fakeCalendarAuditRepo) CreateCalendarAuditEvent(ctx context.Context, event *models.CalendarAuditEvent) error {
@@ -145,8 +223,10 @@ func withClaims(req *http.Request) *http.Request {
 func TestCalendarHandlerCreateEventAudit(t *testing.T) {
 	client := &fakeCalendarService{}
 	auditRepo := &fakeCalendarAuditRepo{}
+	linkRepo := &fakeMeetingLinkRepo{}
 	handler := &CalendarHandler{calendarService: client}
 	handler.SetCalendarAuditRepository(auditRepo)
+	handler.SetMeetingLinkRepository(linkRepo)
 
 	body := `{"subject":"Demo","description":"test","start_time":"2030-01-01T10:00:00Z","end_time":"2030-01-01T11:00:00Z","attendee_emails":["a@example.com"],"create_jitsi_room":false}`
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/v1/calendar/events", strings.NewReader(body)))
@@ -158,6 +238,9 @@ func TestCalendarHandlerCreateEventAudit(t *testing.T) {
 		assert.Equal(t, "create", auditRepo.events[0].Operation)
 		assert.Equal(t, "success", auditRepo.events[0].Status)
 		assert.Equal(t, "event-created-1", auditRepo.events[0].EventID)
+	}
+	if assert.NotNil(t, linkRepo.links["event-created-1"]) {
+		assert.Equal(t, "scheduled", linkRepo.links["event-created-1"].Status)
 	}
 }
 
@@ -204,4 +287,27 @@ func TestCalendarHandlerDeleteEventAuditFailure(t *testing.T) {
 		assert.Equal(t, "failed", auditRepo.events[0].Status)
 		assert.Equal(t, "event-5", auditRepo.events[0].EventID)
 	}
+}
+
+func TestCalendarHandlerCreateEventIdempotentReplay(t *testing.T) {
+	client := &fakeCalendarService{}
+	idempotencyRepo := &fakeCalendarIdempotencyRepo{}
+	handler := &CalendarHandler{calendarService: client}
+	handler.SetCalendarIdempotencyRepository(idempotencyRepo)
+
+	body := `{"subject":"Demo","description":"test","start_time":"2030-01-01T10:00:00Z","end_time":"2030-01-01T11:00:00Z","attendee_emails":["a@example.com"],"create_jitsi_room":false}`
+	req1 := withClaims(httptest.NewRequest(http.MethodPost, "/api/v1/calendar/events", strings.NewReader(body)))
+	req1.Header.Set("Idempotency-Key", "cal-req-1")
+	rr1 := httptest.NewRecorder()
+	handler.CreateEvent(rr1, req1)
+	assert.Equal(t, http.StatusCreated, rr1.Code)
+
+	req2 := withClaims(httptest.NewRequest(http.MethodPost, "/api/v1/calendar/events", strings.NewReader(body)))
+	req2.Header.Set("Idempotency-Key", "cal-req-1")
+	rr2 := httptest.NewRecorder()
+	handler.CreateEvent(rr2, req2)
+
+	assert.Equal(t, http.StatusOK, rr2.Code)
+	assert.Equal(t, "true", rr2.Header().Get("X-Idempotent-Replay"))
+	assert.Equal(t, rr1.Body.String(), rr2.Body.String())
 }

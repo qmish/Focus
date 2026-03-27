@@ -14,10 +14,11 @@ interface RequestOptions {
   body?: unknown
   token?: string | null
   retry?: number
+  headers?: Record<string, string>
 }
 
 export async function apiRequest<T>(url: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, token, retry = method === 'GET' ? 1 : 0 } = options
+  const { method = 'GET', body, token, retry = method === 'GET' ? 1 : 0, headers = {} } = options
 
   let attempt = 0
   while (true) {
@@ -28,6 +29,7 @@ export async function apiRequest<T>(url: string, options: RequestOptions = {}): 
         headers: {
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...headers,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       })

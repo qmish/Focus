@@ -23,11 +23,14 @@ type CalendarHandler struct {
 	jitsiGen             *jitsi.TokenGenerator
 	cancellationNotifier CancellationNotifier
 	calendarAuditRepo    calendarAuditRepository
+	meetingLinkRepo      meetingLinkRepository
+	idempotencyRepo      calendarIdempotencyRepository
 }
 
 type calendarService interface {
 	GetEvents(ctx context.Context, userID string, start, end time.Time) ([]exchange.CalendarEvent, error)
 	CreateEvent(ctx context.Context, userID string, event exchange.CalendarEvent) (*exchange.CalendarEvent, error)
+	GetEvent(ctx context.Context, userID, eventID string) (*exchange.CalendarEvent, error)
 	UpdateEvent(ctx context.Context, userID, eventID string, event exchange.CalendarEvent) error
 	DeleteEvent(ctx context.Context, userID, eventID string) error
 }
@@ -38,10 +41,37 @@ type calendarAuditRepository interface {
 	CreateCalendarAuditEvent(ctx context.Context, event *models.CalendarAuditEvent) error
 }
 
+type meetingLinkRepository interface {
+	Create(ctx context.Context, link *models.MeetingLink) error
+	GetByExchangeEventID(ctx context.Context, eventID string) (*models.MeetingLink, error)
+	Update(ctx context.Context, link *models.MeetingLink) error
+}
+
+type calendarIdempotencyRepository interface {
+	CreatePending(ctx context.Context, key, userEmail string) error
+	Get(ctx context.Context, key, userEmail string) (*models.CalendarIdempotencyKey, error)
+	MarkCompleted(ctx context.Context, key, userEmail, eventID, roomID, responseBody string) error
+}
+
+type calendarEventResponse struct {
+	ID              string                   `json:"id"`
+	Subject         string                   `json:"subject"`
+	Description     string                   `json:"description,omitempty"`
+	StartTime       time.Time                `json:"start_time"`
+	EndTime         time.Time                `json:"end_time"`
+	Location        string                   `json:"location,omitempty"`
+	JitsiURL        string                   `json:"jitsi_url,omitempty"`
+	RoomID          string                   `json:"room_id,omitempty"`
+	SyncStatus      string                   `json:"sync_status,omitempty"`
+	ExchangeEventID string                   `json:"exchange_event_id,omitempty"`
+	Organizer       exchange.EventAttendee   `json:"organizer,omitempty"`
+	Attendees       []exchange.EventAttendee `json:"attendees,omitempty"`
+}
+
 // NewCalendarHandler создаёт новый CalendarHandler
-func NewCalendarHandler(graphClient *exchange.GraphClient, roomRepo *repository.RoomRepository, jitsiGen *jitsi.TokenGenerator) *CalendarHandler {
+func NewCalendarHandler(service exchange.CalendarService, roomRepo *repository.RoomRepository, jitsiGen *jitsi.TokenGenerator) *CalendarHandler {
 	return &CalendarHandler{
-		calendarService: graphClient,
+		calendarService: service,
 		roomRepo:        roomRepo,
 		jitsiGen:        jitsiGen,
 		cancellationNotifier: func(ctx context.Context, userEmail, eventID string) error {
@@ -63,6 +93,15 @@ func (h *CalendarHandler) SetCalendarAuditRepository(repo calendarAuditRepositor
 	h.calendarAuditRepo = repo
 }
 
+// SetMeetingLinkRepository sets optional room/event mapping repository.
+func (h *CalendarHandler) SetMeetingLinkRepository(repo meetingLinkRepository) {
+	h.meetingLinkRepo = repo
+}
+
+func (h *CalendarHandler) SetCalendarIdempotencyRepository(repo calendarIdempotencyRepository) {
+	h.idempotencyRepo = repo
+}
+
 // GetEvents GET /api/v1/calendar/events
 func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	if h.calendarService == nil {
@@ -74,7 +113,6 @@ func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-
 	// Получаем параметры времени
 	startStr := r.URL.Query().Get("start")
 	endStr := r.URL.Query().Get("end")
@@ -112,8 +150,19 @@ func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Формируем ответ
+	enriched := make([]calendarEventResponse, 0, len(events))
+	for _, event := range events {
+		item := toCalendarEventResponse(event)
+		if h.meetingLinkRepo != nil && strings.TrimSpace(event.ID) != "" {
+			if link, linkErr := h.meetingLinkRepo.GetByExchangeEventID(r.Context(), event.ID); linkErr == nil {
+				item.RoomID = link.RoomID.String()
+				item.SyncStatus = link.Status
+			}
+		}
+		enriched = append(enriched, item)
+	}
 	response := map[string]interface{}{
-		"data": events,
+		"data": enriched,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -130,6 +179,19 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	if claims == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
+	}
+	userEmail := strings.TrimSpace(strings.ToLower(claims.Email))
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if idempotencyKey != "" && h.idempotencyRepo != nil {
+		if existing, err := h.idempotencyRepo.Get(r.Context(), idempotencyKey, userEmail); err == nil &&
+			existing.CompletedAt != nil && strings.TrimSpace(existing.ResponseBody) != "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Idempotent-Replay", "true")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(existing.ResponseBody))
+			return
+		}
+		_ = h.idempotencyRepo.CreatePending(r.Context(), idempotencyKey, userEmail)
 	}
 
 	var req struct {
@@ -209,8 +271,6 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// В production использовать реальный email пользователя
-	userEmail := claims.Email
 	createdEvent, err := h.calendarService.CreateEvent(r.Context(), userEmail, event)
 	if err != nil {
 		h.recordCalendarAudit(r, "create", "failed", "", "create_event_failed")
@@ -219,20 +279,67 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	h.recordCalendarAudit(r, "create", "success", createdEvent.ID, "")
 
+	var link *models.MeetingLink
+	if h.meetingLinkRepo != nil && strings.TrimSpace(createdEvent.ID) != "" {
+		organizer := strings.TrimSpace(claims.Email)
+		if organizer == "" {
+			organizer = strings.TrimSpace(createdEvent.Organizer.Email)
+		}
+		now := time.Now().UTC()
+		link = &models.MeetingLink{
+			ID:              uuid.New(),
+			RoomID:          uuid.Nil,
+			ExchangeEventID: createdEvent.ID,
+			OrganizerEmail:  organizer,
+			Subject:         strings.TrimSpace(createdEvent.Subject),
+			StartAt:         createdEvent.StartTime.UTC(),
+			EndAt:           createdEvent.EndTime.UTC(),
+			Status:          "scheduled",
+			SyncSource:      "focus",
+			LastSyncAt:      &now,
+		}
+		if roomID != "" {
+			if roomUUID, parseErr := uuid.Parse(roomID); parseErr == nil {
+				link.RoomID = roomUUID
+			}
+		}
+		_ = h.meetingLinkRepo.Create(r.Context(), link)
+	}
+
 	// Формируем ответ
+	resp := toCalendarEventResponse(*createdEvent)
+	resp.RoomID = roomID
+	if link != nil {
+		resp.SyncStatus = link.Status
+	}
 	response := map[string]interface{}{
-		"id":               createdEvent.ID,
-		"subject":          createdEvent.Subject,
-		"start_time":       createdEvent.StartTime,
-		"end_time":         createdEvent.EndTime,
-		"jitsi_url":        createdEvent.JitsiURL,
-		"room_id":          roomID,
-		"invitations_sent": len(createdEvent.Attendees),
+		"id":                resp.ID,
+		"subject":           resp.Subject,
+		"description":       resp.Description,
+		"start_time":        resp.StartTime,
+		"end_time":          resp.EndTime,
+		"jitsi_url":         resp.JitsiURL,
+		"location":          resp.Location,
+		"room_id":           resp.RoomID,
+		"sync_status":       resp.SyncStatus,
+		"exchange_event_id": resp.ExchangeEventID,
+		"invitations_sent":  len(createdEvent.Attendees),
+	}
+	responseBytes, _ := json.Marshal(response)
+	if idempotencyKey != "" && h.idempotencyRepo != nil {
+		_ = h.idempotencyRepo.MarkCompleted(
+			r.Context(),
+			idempotencyKey,
+			userEmail,
+			createdEvent.ID,
+			roomID,
+			string(responseBytes),
+		)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	_, _ = w.Write(responseBytes)
 }
 
 // UpdateEvent PUT /api/v1/calendar/events/:id
@@ -297,6 +404,23 @@ func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.recordCalendarAudit(r, "update", "success", eventID, "")
+	if h.meetingLinkRepo != nil {
+		if link, lookupErr := h.meetingLinkRepo.GetByExchangeEventID(r.Context(), eventID); lookupErr == nil {
+			if strings.TrimSpace(event.Subject) != "" {
+				link.Subject = strings.TrimSpace(event.Subject)
+			}
+			if !event.StartTime.IsZero() {
+				link.StartAt = event.StartTime.UTC()
+			}
+			if !event.EndTime.IsZero() {
+				link.EndAt = event.EndTime.UTC()
+			}
+			now := time.Now().UTC()
+			link.LastSyncAt = &now
+			link.Status = "updated"
+			_ = h.meetingLinkRepo.Update(r.Context(), link)
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -334,6 +458,14 @@ func (h *CalendarHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.recordCalendarAudit(r, "delete", "success", eventID, "")
+	if h.meetingLinkRepo != nil {
+		if link, lookupErr := h.meetingLinkRepo.GetByExchangeEventID(r.Context(), eventID); lookupErr == nil {
+			link.Status = "cancelled"
+			now := time.Now().UTC()
+			link.LastSyncAt = &now
+			_ = h.meetingLinkRepo.Update(r.Context(), link)
+		}
+	}
 	if sendCancellation && h.cancellationNotifier != nil {
 		_ = h.cancellationNotifier(r.Context(), userEmail, eventID)
 	}
@@ -362,4 +494,21 @@ func (h *CalendarHandler) recordCalendarAudit(r *http.Request, operation, status
 		Details:   strings.TrimSpace(details),
 		CreatedAt: time.Now().UTC(),
 	})
+}
+
+func toCalendarEventResponse(event exchange.CalendarEvent) calendarEventResponse {
+	return calendarEventResponse{
+		ID:              strings.TrimSpace(event.ID),
+		Subject:         strings.TrimSpace(event.Subject),
+		Description:     strings.TrimSpace(event.Description),
+		StartTime:       event.StartTime,
+		EndTime:         event.EndTime,
+		Location:        strings.TrimSpace(event.Location),
+		JitsiURL:        strings.TrimSpace(event.JitsiURL),
+		RoomID:          strings.TrimSpace(event.RoomID),
+		SyncStatus:      strings.TrimSpace(event.SyncStatus),
+		ExchangeEventID: strings.TrimSpace(event.ExchangeEventID),
+		Organizer:       event.Organizer,
+		Attendees:       event.Attendees,
+	}
 }

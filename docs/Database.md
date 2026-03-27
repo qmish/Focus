@@ -237,6 +237,43 @@ erDiagram
 
 ## 2. Схема базы данных
 
+### 2.0. Актуальные таблицы интеграции Exchange (реализовано)
+
+В рабочей кодовой базе дополнительно используются таблицы:
+
+```sql
+CREATE TABLE meeting_links (
+    id uuid PRIMARY KEY,
+    room_id uuid NOT NULL,
+    exchange_event_id varchar(255) NOT NULL UNIQUE,
+    organizer_email varchar(255) NOT NULL,
+    subject varchar(255) NOT NULL,
+    start_at timestamptz NOT NULL,
+    end_at timestamptz NOT NULL,
+    status varchar(32) NOT NULL DEFAULT 'scheduled',
+    sync_source varchar(32) NOT NULL DEFAULT 'focus',
+    last_sync_at timestamptz NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+);
+
+CREATE TABLE calendar_idempotency_keys (
+    key varchar(128) NOT NULL,
+    user_email varchar(255) NOT NULL,
+    event_id varchar(255) NULL,
+    room_id varchar(64) NULL,
+    response_body text NULL,
+    completed_at timestamptz NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (key, user_email)
+);
+```
+
+Назначение:
+- `meeting_links` — связь Focus room с Exchange event для двусторонней синхронизации.
+- `calendar_idempotency_keys` — защита от дублирующих запросов `POST /api/v1/calendar/events`.
+
 ### 2.1. Расширения PostgreSQL
 
 ```sql

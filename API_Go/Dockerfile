@@ -26,6 +26,7 @@ RUN apk --no-cache add ca-certificates
 
 # Copy binary from builder
 COPY --from=builder /app/api-go .
+COPY --from=builder /app/docs ./docs
 
 # Expose port
 EXPOSE 8080

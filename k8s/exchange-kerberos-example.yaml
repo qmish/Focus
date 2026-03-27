@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: exchange-kerberos-secrets
+  namespace: messenger-stage
+type: Opaque
+stringData:
+  # Principal short name, for example: svc_focus
+  ews-username: CHANGE_ME_EWS_USERNAME
+  # Optional: only if you authenticate via password (no keytab).
+  ews-password: ""
+  # Base64 is not required with stringData.
+  krb5.conf: |
+    [libdefaults]
+      default_realm = CORP.LOCAL
+      dns_lookup_kdc = false
+      rdns = false
+    [realms]
+      CORP.LOCAL = {
+        kdc = dc1.corp.local
+        admin_server = dc1.corp.local
+      }
+    [domain_realm]
+      .corp.local = CORP.LOCAL
+      corp.local = CORP.LOCAL
+  # Use keytab authentication for production.
+  # Fill with `kubectl create secret ... --from-file` in real env.
+  focus.keytab: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-go
+  namespace: messenger-stage
+spec:
+  template:
+    spec:
+      volumes:
+        - name: exchange-kerberos-config
+          secret:
+            secretName: exchange-kerberos-secrets
+            items:
+              - key: krb5.conf
+                path: krb5.conf
+              - key: focus.keytab
+                path: focus.keytab
+      containers:
+        - name: api-go
+          env:
+            - name: EXCHANGE_AUTH_MODE
+              value: kerberos
+            - name: EXCHANGE_KRB5_CONFIG_PATH
+              value: /etc/krb5/krb5.conf
+            - name: EXCHANGE_KRB5_KEYTAB_PATH
+              value: /etc/krb5/focus.keytab
+            - name: EXCHANGE_KRB5_REALM
+              value: CORP.LOCAL
+            # Optional. Empty means auto-detect HTTP/<exchange-host>.
+            - name: EXCHANGE_KRB5_SERVICE_PRINCIPAL
+              value: ""
+            - name: EXCHANGE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: exchange-kerberos-secrets
+                  key: ews-username
+            - name: EXCHANGE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: exchange-kerberos-secrets
+                  key: ews-password
+          volumeMounts:
+            - name: exchange-kerberos-config
+              mountPath: /etc/krb5
+              readOnly: true

@@ -32,7 +32,7 @@ C4Context
     Rel(employee, messenger, "Использует", "HTTPS")
     Rel(admin, messenger, "Управляет", "HTTPS")
     Rel(messenger, keycloak, "Аутентифицирует через", "OIDC")
-    Rel(messenger, exchange, "Синхронизирует календари", "Graph API")
+    Rel(messenger, exchange, "Синхронизирует календари", "EWS SOAP")
     Rel(messenger, jitsi, "Встраивает видеозвонки", "JWT + iframe")
 ```
 
@@ -84,7 +84,7 @@ C4Container
     Rel(api_go, postgres, "Чтение/запись", "SQL")
     Rel(api_go, redis, "Кэш сессий", "Redis Protocol")
     Rel(api_go, keycloak, "OIDC аутентификация", "HTTPS")
-    Rel(api_go, exchange, "Graph API вызовы", "HTTPS")
+    Rel(api_go, exchange, "EWS SOAP вызовы", "HTTPS")
     Rel(web_app, jitsi_web, "Встраивает iframe", "HTTPS")
     Rel(api_go, prosody, "Генерирует JWT", "JWT")
     Rel(jicofo, prosody, "Координация", "XMPP")
@@ -111,7 +111,7 @@ C4Component
 
         Component(auth_middleware, "Auth Middleware", "Go", "Проверка JWT токенов")
         Component(jitsi_service, "Jitsi Service", "Go", "Генерация JWT для Jitsi")
-        Component(exchange_service, "Exchange Service", "Go", "Graph API клиент")
+        Component(exchange_service, "Exchange Service", "Go", "EWS клиент + sync worker")
         Component(user_repo, "User Repository", "Go", "Доступ к БД пользователей")
         Component(room_repo, "Room Repository", "Go", "Доступ к БД комнат")
         Component(message_repo, "Message Repository", "Go", "Доступ к БД сообщений")
@@ -290,17 +290,17 @@ sequenceDiagram
     participant FE as Frontend
     participant API as Go API
     participant Jitsi as Jitsi Service
-    participant Graph as MS Graph
+    participant EWS as Exchange EWS
     participant Exch as Exchange
 
     U->>FE: Создать встречу
     FE->>API: POST /calendar/events
     API->>Jitsi: Создать комнату + JWT
     Jitsi->>API: Room URL + JWT
-    API->>Graph: Создать событие в Exchange
-    Graph->>Exch: Сохранить встречу
-    Exch->>Graph: Event ID
-    Graph->>API: Подтверждение
+    API->>EWS: CreateItem в Exchange
+    EWS->>Exch: Сохранить встречу
+    Exch->>EWS: Event ID
+    EWS->>API: Подтверждение
     API->>FE: Jitsi URL встречи
     FE->>U: Показать встречу в календаре
 ```
@@ -363,4 +363,4 @@ sequenceDiagram
 
 - [Jitsi Documentation](https://jitsi.github.io/handbook/)
 - [Keycloak Documentation](https://www.keycloak.org/documentation)
-- [Microsoft Graph API](https://learn.microsoft.com/en-us/graph/api/overview)
+- [Exchange Web Services](https://learn.microsoft.com/en-us/exchange/client-developer/exchange-web-services/start-using-web-services-in-exchange)

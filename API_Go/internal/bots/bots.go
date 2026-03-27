@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -72,6 +74,7 @@ type BotEngine struct {
 	messageRepo       BotMessageRepository
 	roomChecker       BotRoomAccessChecker
 	roomRepo          BotRoomRepository
+	userRepo          BotUserRepository
 	broadcaster       BotBroadcaster
 	calendarScheduler BotCalendarScheduler
 	eventStore        BotCommandEventStore
@@ -81,6 +84,7 @@ type BotEngine struct {
 	lastCommandAt     map[string]time.Time
 	mu                sync.Mutex
 	now               func() time.Time
+	startedAt         time.Time
 }
 
 // BotHandler обработчик команд бота
@@ -106,6 +110,15 @@ type BotRoomRepository interface {
 	Create(ctx context.Context, room *models.Room) error
 	AddParticipant(ctx context.Context, roomID, userID uuid.UUID, role models.ParticipantRole) error
 	List(ctx context.Context, limit, offset int) ([]*models.Room, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*models.Room, error)
+	CountParticipants(ctx context.Context, roomID uuid.UUID) (int64, error)
+	Search(ctx context.Context, query string, limit int) ([]*models.Room, error)
+	ListParticipantsWithUsers(ctx context.Context, roomID uuid.UUID) ([]models.RoomParticipant, error)
+}
+
+// BotUserRepository retrieves user information for bot commands.
+type BotUserRepository interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*models.User, error)
 }
 
 // BotCalendarScheduler schedules bot meetings in calendar provider.
@@ -126,9 +139,9 @@ func NewBotEngine() *BotEngine {
 		rateLimitWindow: 2 * time.Second,
 		lastCommandAt:   make(map[string]time.Time),
 		now:             time.Now,
+		startedAt:       time.Now(),
 	}
 
-	// Регистрируем встроенных ботов
 	engine.registerBuiltinBots()
 
 	return engine
@@ -152,6 +165,11 @@ func NewBotEngineWithDelivery(
 // SetRoomRepository injects room repo for create/schedule/status commands.
 func (e *BotEngine) SetRoomRepository(roomRepo BotRoomRepository) {
 	e.roomRepo = roomRepo
+}
+
+// SetUserRepository injects user repo for user-related commands.
+func (e *BotEngine) SetUserRepository(userRepo BotUserRepository) {
+	e.userRepo = userRepo
 }
 
 // SetCalendarScheduler injects calendar scheduler for /schedule integration.
@@ -181,15 +199,14 @@ func (e *BotEngine) SetRateLimitWindow(window time.Duration) {
 }
 
 func (e *BotEngine) registerBuiltinBots() {
-	// Meeting Bot
 	e.handlers["create"] = e.handleMeetingCreate
 	e.handlers["schedule"] = e.handleMeetingSchedule
-
-	// Help Bot
 	e.handlers["help"] = e.handleHelp
-
-	// Status Bot
 	e.handlers["status"] = e.handleStatus
+	e.handlers["members"] = e.handleMembers
+	e.handlers["whoami"] = e.handleWhoami
+	e.handlers["dice"] = e.handleDice
+	e.handlers["find"] = e.handleFind
 }
 
 // HandleMessage обрабатывает сообщение и проверяет на наличие команд бота
@@ -366,23 +383,36 @@ func (e *BotEngine) handleHelp(ctx context.Context, roomID, userID, command, arg
 
 📅 Встречи:
   /create meeting [название] — Создать встречу
-  /schedule meeting "название" <дата> <время> — Запланировать встречу
+  /schedule meeting "название" at <YYYY-MM-DD HH:MM> — Запланировать встречу
 
-ℹ️ Информация:
+👥 Комната:
+  /members — Список участников этой комнаты
+  /find <запрос> — Найти комнаты по названию
+
+👤 Пользователь:
+  /whoami — Информация о вашем профиле
+
+ℹ️ Система:
+  /status — Статус комнат и аптайм бота
   /help — Показать эту справку
-  /status — Показать статус комнат
+
+🎲 Развлечения:
+  /dice [грани] — Бросить кубик (по умолчанию 6 граней)
 
 Примеры:
   /create meeting Планёрка
-  /schedule meeting "Обзор спринта" tomorrow 15:00`
+  /schedule meeting Обзор спринта at 2026-04-01 15:00
+  /find планёрка
+  /dice 20`
 
 	return helpText, nil
 }
 
 // handleStatus обработчик команды /status
 func (e *BotEngine) handleStatus(ctx context.Context, roomID, userID, command, args string) (string, error) {
+	uptime := e.now().Sub(e.startedAt).Truncate(time.Second)
 	if e.roomRepo == nil {
-		return "📊 Статус комнат:\n\nАктивных встреч: 0", nil
+		return fmt.Sprintf("📊 Статус системы:\n\nАктивных встреч: 0\n⏱ Аптайм бота: %s", uptime), nil
 	}
 	rooms, err := e.roomRepo.List(ctx, 500, 0)
 	if err != nil {
@@ -399,7 +429,118 @@ func (e *BotEngine) handleStatus(ctx context.Context, roomID, userID, command, a
 			activeMeetings++
 		}
 	}
-	return fmt.Sprintf("📊 Статус комнат:\n\nВсего комнат: %d\nАктивных встреч: %d", totalRooms, activeMeetings), nil
+	return fmt.Sprintf("📊 Статус системы:\n\nВсего комнат: %d\nАктивных встреч: %d\n⏱ Аптайм бота: %s", totalRooms, activeMeetings, uptime), nil
+}
+
+// handleMembers обработчик команды /members
+func (e *BotEngine) handleMembers(ctx context.Context, roomID, userID, command, args string) (string, error) {
+	if e.roomRepo == nil {
+		return "⚠️ Информация о комнате недоступна", nil
+	}
+	roomUUID, err := uuid.Parse(roomID)
+	if err != nil {
+		return "⚠️ Некорректный ID комнаты", nil
+	}
+	room, err := e.roomRepo.GetByID(ctx, roomUUID)
+	if err != nil {
+		return "⚠️ Комната не найдена", nil
+	}
+	participants, err := e.roomRepo.ListParticipantsWithUsers(ctx, roomUUID)
+	if err != nil {
+		return "⚠️ Не удалось получить участников", nil
+	}
+	if len(participants) == 0 {
+		return fmt.Sprintf("👥 Комната «%s»\n\nНет участников", room.Name), nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("👥 Комната «%s» — %d участник(ов):\n\n", room.Name, len(participants)))
+	roleIcons := map[models.ParticipantRole]string{
+		models.ParticipantRoleAdmin:     "👑",
+		models.ParticipantRoleModerator: "⭐",
+		models.ParticipantRoleMember:    "👤",
+	}
+	for _, p := range participants {
+		icon := roleIcons[p.Role]
+		if icon == "" {
+			icon = "👤"
+		}
+		name := "—"
+		if p.User != nil {
+			name = p.User.Name
+			if p.User.Email != "" {
+				name += " (" + p.User.Email + ")"
+			}
+		}
+		sb.WriteString(fmt.Sprintf("  %s %s — %s\n", icon, name, p.Role))
+	}
+	return sb.String(), nil
+}
+
+// handleWhoami обработчик команды /whoami
+func (e *BotEngine) handleWhoami(ctx context.Context, roomID, userID, command, args string) (string, error) {
+	if e.userRepo == nil {
+		return fmt.Sprintf("👤 Ваш ID: %s", userID), nil
+	}
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Sprintf("👤 Ваш ID: %s", userID), nil
+	}
+	user, err := e.userRepo.GetByID(ctx, userUUID)
+	if err != nil {
+		return fmt.Sprintf("👤 Ваш ID: %s", userID), nil
+	}
+	roles := "—"
+	if len(user.Roles) > 0 {
+		roles = strings.Join(user.Roles, ", ")
+	}
+	return fmt.Sprintf("👤 Профиль:\n\n  Имя: %s\n  Email: %s\n  Роли: %s\n  Регистрация: %s",
+		user.Name, user.Email, roles, user.CreatedAt.Format("02.01.2006 15:04")), nil
+}
+
+// handleDice обработчик команды /dice
+func (e *BotEngine) handleDice(ctx context.Context, roomID, userID, command, args string) (string, error) {
+	sides := 6
+	if s := strings.TrimSpace(args); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 2 && n <= 1000 {
+			sides = n
+		}
+	}
+	result := rand.Intn(sides) + 1
+	return fmt.Sprintf("🎲 Бросок кубика (d%d): **%d**", sides, result), nil
+}
+
+// handleFind обработчик команды /find
+func (e *BotEngine) handleFind(ctx context.Context, roomID, userID, command, args string) (string, error) {
+	query := strings.TrimSpace(args)
+	if query == "" {
+		return "Использование: `/find <запрос>`\nПример: `/find планёрка`", nil
+	}
+	if e.roomRepo == nil {
+		return "⚠️ Поиск недоступен", nil
+	}
+	rooms, err := e.roomRepo.Search(ctx, query, 10)
+	if err != nil {
+		return "", err
+	}
+	if len(rooms) == 0 {
+		return fmt.Sprintf("🔍 По запросу «%s» ничего не найдено", query), nil
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("🔍 Найдено комнат: %d\n\n", len(rooms)))
+	typeIcons := map[models.RoomType]string{
+		models.RoomTypePublic:  "💬",
+		models.RoomTypePrivate: "🔒",
+		models.RoomTypeMeeting: "📹",
+	}
+	for _, room := range rooms {
+		icon := typeIcons[room.Type]
+		if icon == "" {
+			icon = "💬"
+		}
+		sb.WriteString(fmt.Sprintf("  %s %s (%s)\n", icon, room.Name, room.Type))
+	}
+	return sb.String(), nil
 }
 
 // CreateBot создаёт нового бота

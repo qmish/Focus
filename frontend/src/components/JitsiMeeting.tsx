@@ -48,7 +48,7 @@ export function JitsiMeeting({
   return (
     <div className="jitsi-meeting-container">
       <JitsiReactMeeting
-        domain={domain || 'meet.company.com'}
+        domain={domain || 'meet.focus.local:30443'}
         roomName={roomName}
         jwt={jwt}
         configOverwrite={{

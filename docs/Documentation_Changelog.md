@@ -1,5 +1,29 @@
 # Documentation Changelog
 
+## 2026-03-27
+
+- Добавлена спецификация OpenAPI и встроенный Swagger UI:
+  - `API_Go/docs/openapi.yaml`,
+  - backend маршруты `GET /openapi.yaml`, `GET /swagger/*` в `API_Go/cmd/server/main.go`.
+- Обновлен runtime образ API:
+  - `API_Go/Dockerfile` теперь включает `docs/openapi.yaml` в финальный image.
+- Созданы недостающие документы:
+  - `docs/LLD.md` (детализация backend/frontend/integration модулей),
+  - `docs/Frontend.md`,
+  - `docs/Bots.md`,
+  - `docs/Webhooks.md`,
+  - `docs/Swagger.md`,
+  - `docs/Exchange_OnPrem_EWS.md`.
+- Обновлены документы верхнего уровня и архитектурные материалы:
+  - `README.md`,
+  - `docs/README.md`,
+  - `docs/Architecture.md`,
+  - `docs/DataFlow.md`,
+  - `docs/Database.md`,
+  - `docs/Integration.md`.
+- В документации зафиксирован фактический контур Exchange как on-prem EWS/OWA
+  с учетом sync worker, Kerberos auth mode и идемпотентности календарных запросов.
+
 ## 2026-03-25
 
 - Усилено покрытие WebSocket flow в CI через backend unit/integration tests:

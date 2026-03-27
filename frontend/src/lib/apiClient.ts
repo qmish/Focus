@@ -6,11 +6,11 @@ function getToken(): string | null {
 }
 
 export const apiClient = {
-  get<T>(url: string, retry = 1): Promise<T> {
-    return apiRequest<T>(url, { method: 'GET', token: getToken(), retry })
+  get<T>(url: string, retry = 1, headers?: Record<string, string>): Promise<T> {
+    return apiRequest<T>(url, { method: 'GET', token: getToken(), retry, headers })
   },
-  post<T>(url: string, body: unknown): Promise<T> {
-    return apiRequest<T>(url, { method: 'POST', token: getToken(), body, retry: 0 })
+  post<T>(url: string, body: unknown, headers?: Record<string, string>): Promise<T> {
+    return apiRequest<T>(url, { method: 'POST', token: getToken(), body, retry: 0, headers })
   },
   put<T>(url: string, body: unknown): Promise<T> {
     return apiRequest<T>(url, { method: 'PUT', token: getToken(), body, retry: 0 })

@@ -25,10 +25,14 @@ import (
 	"github.com/qmish/focus-api/internal/webhooks"
 	"github.com/qmish/focus-api/internal/websocket"
 	"github.com/qmish/focus-api/pkg/logger"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.uber.org/zap"
 )
 
 func main() {
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+
 	// Загрузка конфигурации
 	cfg := config.Load()
 
@@ -69,6 +73,8 @@ func main() {
 		&models.MessageReaction{},
 		&models.AuthAuditEvent{},
 		&models.CalendarAuditEvent{},
+		&models.MeetingLink{},
+		&models.CalendarIdempotencyKey{},
 		&models.RevokedSession{},
 		&bots.BotCommandEvent{},
 		&webhooks.IncomingEvent{},
@@ -87,20 +93,32 @@ func main() {
 	botRepo := repository.NewBotRepository(db.DB)
 	authAuditRepo := repository.NewAuthAuditRepository(db.DB)
 	calendarAuditRepo := repository.NewCalendarAuditRepository(db.DB)
+	meetingLinkRepo := repository.NewMeetingLinkRepository(db.DB)
+	calendarIdempotencyRepo := repository.NewCalendarIdempotencyRepository(db.DB)
 	sessionRevocationRepo := repository.NewSessionRevocationRepository(db.DB)
 
-	// Инициализация Graph API клиента (Exchange)
-	var graphClient *exchange.GraphClient
-	if cfg.Exchange.TenantID != "" && cfg.Exchange.ClientID != "" {
-		graphClient, err = exchange.NewGraphClient(exchange.GraphConfig{
-			TenantID:     cfg.Exchange.TenantID,
-			ClientID:     cfg.Exchange.ClientID,
-			ClientSecret: cfg.Exchange.ClientSecret,
+	// Инициализация Exchange EWS клиента (on-prem)
+	var calendarService exchange.CalendarService
+	if cfg.Exchange.Provider == "ews" && cfg.Exchange.EWSURL != "" {
+		calendarService, err = exchange.NewEWSClient(exchange.EWSConfig{
+			URL:            cfg.Exchange.EWSURL,
+			Username:       cfg.Exchange.Username,
+			Password:       cfg.Exchange.Password,
+			Domain:         cfg.Exchange.Domain,
+			AuthMode:       cfg.Exchange.AuthMode,
+			CACertPath:     cfg.Exchange.CACertPath,
+			InsecureTLS:    cfg.Exchange.InsecureTLS,
+			Krb5ConfigPath: cfg.Exchange.Krb5ConfigPath,
+			Krb5KeytabPath: cfg.Exchange.Krb5KeytabPath,
+			Krb5Realm:      cfg.Exchange.Krb5Realm,
+			Krb5SPN:        cfg.Exchange.Krb5SPN,
+			Impersonation:  cfg.Exchange.Impersonation,
+			Timeout:        cfg.Exchange.Timeout,
 		})
 		if err != nil {
-			logger.Warn("Failed to create Graph client, calendar features disabled", zap.Error(err))
+			logger.Warn("Failed to create Exchange EWS client, calendar features disabled", zap.Error(err))
 		} else {
-			logger.Info("Graph API client initialized")
+			logger.Info("Exchange EWS client initialized")
 		}
 	}
 
@@ -149,14 +167,16 @@ func main() {
 	go wsHub.Run()
 
 	botUserID := uuid.NewSHA1(uuid.NameSpaceDNS, []byte("focus-system-bot"))
+	ensureBotUser(db, botUserID)
 	botEngine := bots.NewBotEngineWithDelivery(messageRepo, roomRepo, wsHub, botUserID)
 	botEngine.SetRoomRepository(roomRepo)
+	botEngine.SetUserRepository(userRepo)
 	botEngine.SetJitsiBaseURL(cfg.Jitsi.BaseURL)
 	botEngine.SetRateLimitWindow(2 * time.Second)
 	botEngine.SetCommandEventStore(botRepo)
 	botEngine.SetCalendarScheduler(&botMeetingScheduler{
-		graphClient: graphClient,
-		userRepo:    userRepo,
+		calendarService: calendarService,
+		userRepo:        userRepo,
 	})
 
 	// Создание handlers
@@ -166,8 +186,10 @@ func main() {
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
 	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub, botEngine)
 	fileHandler := handlers.NewFileHandler("/data/uploads")
-	calendarHandler := handlers.NewCalendarHandler(graphClient, roomRepo, jitsiGen)
+	calendarHandler := handlers.NewCalendarHandler(calendarService, roomRepo, jitsiGen)
 	calendarHandler.SetCalendarAuditRepository(calendarAuditRepo)
+	calendarHandler.SetMeetingLinkRepository(meetingLinkRepo)
+	calendarHandler.SetCalendarIdempotencyRepository(calendarIdempotencyRepo)
 	adminHandler := handlers.NewAdminHandler(userRepo, roomRepo)
 	adminHandler.SetMessageRepository(messageRepo)
 	adminHandler.SetWebhookRepository(webhookRepo)
@@ -195,6 +217,25 @@ func main() {
 	inboundWebhookService.SetRoomLifecycleRepository(roomRepo)
 	inboundWebhookHandler := handlers.NewInboundWebhookHandler(inboundWebhookService)
 
+	if cfg.Exchange.SyncEnabled && calendarService != nil {
+		syncWorker := exchange.NewSyncWorker(
+			calendarService,
+			userRepo,
+			roomRepo,
+			meetingLinkRepo,
+			cfg.Exchange.SyncInterval,
+			cfg.Exchange.SyncLookback,
+			cfg.Exchange.SyncLookahead,
+		)
+		go syncWorker.Start(appCtx)
+		logger.Info(
+			"Exchange sync worker started",
+			zap.Duration("interval", cfg.Exchange.SyncInterval),
+			zap.Duration("lookback", cfg.Exchange.SyncLookback),
+			zap.Duration("lookahead", cfg.Exchange.SyncLookahead),
+		)
+	}
+
 	// Создание auth middleware
 	authMiddleware := auth.NewAuthMiddlewareWithPolicies(
 		[]byte(cfg.Auth.SessionSecret),
@@ -218,6 +259,15 @@ func main() {
 	// Health check endpoints
 	r.Get("/health", healthCheck)
 	r.Get("/ready", readinessCheck(db))
+	r.Get("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		http.ServeFile(w, r, "docs/openapi.yaml")
+	})
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("/openapi.yaml"),
+		httpSwagger.DocExpansion("list"),
+		httpSwagger.DefaultModelsExpandDepth(-1),
+	))
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -297,7 +347,7 @@ func main() {
 			r.Get("/files/{fileId}", fileHandler.Download)
 
 			// Calendar
-			if graphClient != nil {
+			if calendarService != nil {
 				r.Route("/calendar", func(r chi.Router) {
 					r.Use(auth.RequireAccess(auth.AccessRule{
 						AnyRoles: []string{"user", "moderator", "admin", "service"},
@@ -364,6 +414,7 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down server...")
+	appCancel()
 
 	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -401,8 +452,8 @@ func readinessCheck(db *database.Database) http.HandlerFunc {
 }
 
 type botMeetingScheduler struct {
-	graphClient *exchange.GraphClient
-	userRepo    *repository.UserRepository
+	calendarService exchange.CalendarService
+	userRepo        *repository.UserRepository
 }
 
 func resolveSessionSecret(cfg *config.Config) []byte {
@@ -419,6 +470,25 @@ func resolveSessionLifetimeDuration(cfg *config.Config) time.Duration {
 	return cfg.Auth.SessionTokenLifetime
 }
 
+func ensureBotUser(db *database.Database, botID uuid.UUID) {
+	var count int64
+	db.DB.Model(&models.User{}).Where("id = ?", botID).Count(&count)
+	if count > 0 {
+		return
+	}
+	now := time.Now()
+	botUser := &models.User{
+		ID:        botID,
+		Email:     "bot@focus.local",
+		Name:      "Focus Bot",
+		Roles:     models.StringArray{"bot"},
+		IsActive:  true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	db.DB.Create(botUser)
+}
+
 func (s *botMeetingScheduler) ScheduleMeeting(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -426,14 +496,14 @@ func (s *botMeetingScheduler) ScheduleMeeting(
 	start, end time.Time,
 	roomURL string,
 ) error {
-	if s.graphClient == nil || s.userRepo == nil {
+	if s.calendarService == nil || s.userRepo == nil {
 		return nil
 	}
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return err
 	}
-	_, err = s.graphClient.CreateEvent(ctx, user.Email, exchange.CalendarEvent{
+	_, err = s.calendarService.CreateEvent(ctx, user.Email, exchange.CalendarEvent{
 		Subject:     title,
 		Description: "Создано через BotEngine /schedule",
 		StartTime:   start,

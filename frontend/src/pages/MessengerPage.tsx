@@ -6,6 +6,19 @@ import { apiClient } from '../lib/apiClient'
 import { buildWebSocketURL, mergeMessageList } from '../lib/roomRealtime'
 import { JitsiMeeting } from '../components/JitsiMeeting'
 
+interface ScheduledMeeting {
+  id: string
+  subject: string
+  description?: string
+  start_time: string
+  end_time: string
+  location?: string
+  jitsi_url?: string
+  room_id?: string
+  sync_status?: string
+  exchange_event_id?: string
+}
+
 export default function MessengerPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
@@ -25,6 +38,16 @@ export default function MessengerPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newRoomName, setNewRoomName] = useState('')
   const [newRoomType, setNewRoomType] = useState<'public' | 'private' | 'meeting'>('public')
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [scheduledMeetings, setScheduledMeetings] = useState<ScheduledMeeting[]>([])
+  const [isLoadingScheduled, setIsLoadingScheduled] = useState(false)
+  const [scheduleForm, setScheduleForm] = useState({
+    subject: '',
+    description: '',
+    start: '',
+    end: '',
+    attendees: '',
+  })
 
   const [showRoomSettings, setShowRoomSettings] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
@@ -38,10 +61,11 @@ export default function MessengerPage() {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const reconnectAttemptsRef = useRef(0)
-  const jitsiDomain = import.meta.env.VITE_JITSI_DOMAIN || 'meet.focus.local'
+  const jitsiDomain = import.meta.env.VITE_JITSI_DOMAIN || 'meet.focus.local:30443'
 
   useEffect(() => {
     fetchRooms()
+    fetchScheduledMeetings()
   }, [])
 
   useEffect(() => {
@@ -130,6 +154,54 @@ export default function MessengerPage() {
     }
   }
 
+  const fetchScheduledMeetings = async () => {
+    setIsLoadingScheduled(true)
+    try {
+      const now = new Date()
+      const from = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString()
+      const to = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString()
+      const data = await apiClient.get<{ data?: ScheduledMeeting[] }>(`/api/v1/calendar/events?start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`)
+      const meetings = (data.data || []).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      setScheduledMeetings(meetings)
+    } catch {
+      // optional panel; do not break chat if calendar unavailable
+      setScheduledMeetings([])
+    } finally {
+      setIsLoadingScheduled(false)
+    }
+  }
+
+  const scheduleMeeting = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!scheduleForm.subject.trim() || !scheduleForm.start || !scheduleForm.end) return
+    try {
+      const attendeeEmails = scheduleForm.attendees
+        .split(/[,\n;]/)
+        .map(v => v.trim())
+        .filter(Boolean)
+      const payload = {
+        subject: scheduleForm.subject.trim(),
+        description: scheduleForm.description.trim(),
+        start_time: new Date(scheduleForm.start).toISOString(),
+        end_time: new Date(scheduleForm.end).toISOString(),
+        attendee_emails: attendeeEmails,
+        create_jitsi_room: true,
+      }
+      const idempotencyKey = `calendar-${crypto.randomUUID()}`
+      const created = await apiClient.post<{ room_id?: string }>('/api/v1/calendar/events', payload, {
+        'Idempotency-Key': idempotencyKey,
+      })
+      setShowScheduleModal(false)
+      setScheduleForm({ subject: '', description: '', start: '', end: '', attendees: '' })
+      await Promise.all([fetchRooms(), fetchScheduledMeetings()])
+      if (created.room_id) {
+        navigate(`/rooms/${created.room_id}`)
+      }
+    } catch {
+      setError('Не удалось запланировать встречу в Exchange')
+    }
+  }
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!roomId) return
@@ -200,6 +272,16 @@ export default function MessengerPage() {
       setShowCreateModal(false)
       navigate(`/rooms/${room.id}`)
     } catch { /* ignore */ }
+  }
+
+  const openScheduledMeeting = (meeting: ScheduledMeeting) => {
+    if (meeting.room_id) {
+      navigate(`/rooms/${meeting.room_id}`)
+      return
+    }
+    if (meeting.jitsi_url) {
+      window.open(meeting.jitsi_url, '_blank', 'noopener,noreferrer')
+    }
   }
 
   const handleDeleteRoom = async (id: string) => {
@@ -363,9 +445,14 @@ export default function MessengerPage() {
         <div className="sidebar-top">
           <div className="sidebar-brand">
             <h1>Focus</h1>
-            <button className="icon-btn" onClick={() => setShowCreateModal(true)} title="Новый чат">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            </button>
+            <div className="sidebar-actions">
+              <button className="icon-btn" onClick={() => setShowScheduleModal(true)} title="Запланировать встречу">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </button>
+              <button className="icon-btn" onClick={() => setShowCreateModal(true)} title="Новый чат">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </div>
           </div>
           <div className="sidebar-search">
             <input
@@ -378,6 +465,26 @@ export default function MessengerPage() {
         </div>
 
         <div className="rooms-list">
+          <div className="scheduled-panel">
+            <div className="scheduled-panel-header">
+              <span>Запланированные</span>
+              <button type="button" className="scheduled-refresh" onClick={fetchScheduledMeetings} title="Обновить">↻</button>
+            </div>
+            {isLoadingScheduled ? (
+              <div className="scheduled-loading">Загрузка...</div>
+            ) : scheduledMeetings.length === 0 ? (
+              <div className="scheduled-empty">Нет встреч</div>
+            ) : (
+              scheduledMeetings.slice(0, 6).map(item => (
+                <div key={item.id} className="scheduled-item" onClick={() => openScheduledMeeting(item)}>
+                  <div className="scheduled-item-title">{item.subject}</div>
+                  <div className="scheduled-item-time">
+                    {new Date(item.start_time).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
           {filteredRooms.length === 0 ? (
             <div className="rooms-empty">
               <p>Нет комнат</p>
@@ -424,6 +531,7 @@ export default function MessengerPage() {
             <h2>Выберите чат</h2>
             <p>Выберите комнату из списка слева или создайте новую</p>
             <button onClick={() => setShowCreateModal(true)} className="btn-primary">Создать комнату</button>
+            <button onClick={() => setShowScheduleModal(true)} className="btn-secondary">Запланировать встречу</button>
           </div>
         ) : (
           <>
@@ -518,6 +626,7 @@ export default function MessengerPage() {
       </main>
 
       {showCreateModal && renderCreateModal()}
+      {showScheduleModal && renderScheduleModal()}
       {showRoomSettings && currentRoom && renderSettingsModal()}
 
       <Outlet />
@@ -548,6 +657,72 @@ export default function MessengerPage() {
             <div className="modal-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowCreateModal(false)}>Отмена</button>
               <button type="submit" className="btn-primary" disabled={!newRoomName.trim()}>Создать</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  function renderScheduleModal() {
+    return (
+      <div className="modal-overlay" onClick={() => setShowScheduleModal(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Запланировать встречу</h3>
+            <button className="icon-btn" onClick={() => setShowScheduleModal(false)}>✕</button>
+          </div>
+          <form onSubmit={scheduleMeeting}>
+            <div className="form-group">
+              <label>Тема</label>
+              <input
+                type="text"
+                value={scheduleForm.subject}
+                onChange={e => setScheduleForm(prev => ({ ...prev, subject: e.target.value }))}
+                placeholder="Планёрка команды"
+                required
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label>Описание</label>
+              <input
+                type="text"
+                value={scheduleForm.description}
+                onChange={e => setScheduleForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Повестка встречи"
+              />
+            </div>
+            <div className="form-group">
+              <label>Начало</label>
+              <input
+                type="datetime-local"
+                value={scheduleForm.start}
+                onChange={e => setScheduleForm(prev => ({ ...prev, start: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Окончание</label>
+              <input
+                type="datetime-local"
+                value={scheduleForm.end}
+                onChange={e => setScheduleForm(prev => ({ ...prev, end: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Участники (email через запятую)</label>
+              <input
+                type="text"
+                value={scheduleForm.attendees}
+                onChange={e => setScheduleForm(prev => ({ ...prev, attendees: e.target.value }))}
+                placeholder="user1@company.ru, user2@company.ru"
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={() => setShowScheduleModal(false)}>Отмена</button>
+              <button type="submit" className="btn-primary">Создать в Exchange</button>
             </div>
           </form>
         </div>

@@ -16,7 +16,7 @@
 ```
 ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
 │   Frontend      │      │   Go Backend    │      │  Jitsi Stack    │
-│  (React/Vue)    │◄────►│  (REST/WS)      │      │  (Prosody,      │
+│  (React/TS)     │◄────►│  (REST/WS)      │      │  (Prosody,      │
 │  - Мессенджер   │      │   API_GO        │      │   JVB, Jicofo)  │
 │  - Админка      │      │  - Keycloak     │      │                 │
 └─────────────────┘      │  - Exchange     │      └────────┬────────┘
@@ -40,7 +40,11 @@
 | [Roadmap](./docs/Roadmap.md) | План реализации по этапам |
 | [Architecture](./docs/Architecture.md) | Общая архитектура системы |
 | [HLD](./docs/HLD.md) | High-Level Design |
+| [LLD](./docs/LLD.md) | Low-Level Design |
+| [Frontend](./docs/Frontend.md) | Архитектура frontend |
 | [Infrastructure](./docs/Infrastructure.md) | Развёртывание в Kubernetes |
+| [Exchange On-Prem EWS](./docs/Exchange_OnPrem_EWS.md) | EWS-only интеграция, sync, Kerberos |
+| [Swagger](./docs/Swagger.md) | OpenAPI и Swagger UI |
 | [API](./docs/API.md) | Спецификация REST API |
 | [Database](./docs/Database.md) | Проектирование БД |
 | [Integration](./docs/Integration.md) | Интеграции с внешними системами |
@@ -58,6 +62,9 @@
 | [SSO Resource Catalog](./docs/Corp_Resources_SSO_Catalog.md) | Каталог корпоративных ресурсов и модель доступа через Keycloak |
 
 Stage smoke check script: `tests/smoke/stage-smoke.sh` (manual run via GitHub Action `Stage Smoke`).
+
+Swagger UI: `/swagger/index.html`  
+OpenAPI spec: `/openapi.yaml`
 
 ## 🚀 Быстрый старт
 

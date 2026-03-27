@@ -1,5 +1,49 @@
 # Release Notes
 
+## v0.6.0 — Документация + Swagger + EWS hardening (27 марта 2026)
+
+**Последний релиз** ✅
+
+### 🎯 Цель
+Привести документацию к фактической кодовой базе (EWS-only, sync worker, Kerberos, идемпотентность) и добавить встроенный Swagger/OpenAPI для API.
+
+### ✨ Новое
+- **Swagger/OpenAPI**
+  - `API_Go/docs/openapi.yaml` — базовая OpenAPI 3.0 спецификация.
+  - `GET /openapi.yaml` — отдача спецификации из backend.
+  - `GET /swagger/index.html` — Swagger UI.
+  - `API_Go/cmd/server/main.go` — подключение swagger endpoints.
+  - `API_Go/Dockerfile` — включение `docs/openapi.yaml` в runtime image.
+
+- **Документация проекта**
+  - Добавлены новые документы:
+    - `docs/LLD.md`
+    - `docs/Frontend.md`
+    - `docs/Bots.md`
+    - `docs/Webhooks.md`
+    - `docs/Swagger.md`
+    - `docs/Exchange_OnPrem_EWS.md`
+  - Обновлены:
+    - `README.md`
+    - `docs/README.md`
+    - `docs/Architecture.md`
+    - `docs/DataFlow.md`
+    - `docs/Database.md`
+    - `docs/Integration.md`
+
+### 🔐 Технические акценты
+- Зафиксирован контур Exchange как **on-prem EWS/OWA**.
+- Документированы:
+  - `meeting_links` и `calendar_idempotency_keys`
+  - sync worker polling-процесс
+  - Kerberos mode и k8s-манифест `k8s/exchange-kerberos-example.yaml`.
+
+### 📊 Проверка
+- `go test ./...` — успешно.
+- `npm run build` (frontend) — успешно.
+
+---
+
 ## v0.5.0 — Интеграция с MS Exchange Calendar (24 марта 2026)
 
 **Последний релиз** ✅

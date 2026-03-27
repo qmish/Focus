@@ -167,6 +167,17 @@ func (r *RoomRepository) CountParticipants(ctx context.Context, roomID uuid.UUID
 	return count, err
 }
 
+// ListParticipantsWithUsers returns room participants with preloaded user data.
+func (r *RoomRepository) ListParticipantsWithUsers(ctx context.Context, roomID uuid.UUID) ([]models.RoomParticipant, error) {
+	var participants []models.RoomParticipant
+	err := r.db.WithContext(ctx).
+		Preload("User").
+		Where("room_id = ?", roomID).
+		Order("joined_at ASC").
+		Find(&participants).Error
+	return participants, err
+}
+
 // Search ищет комнаты по названию
 func (r *RoomRepository) Search(ctx context.Context, query string, limit int) ([]*models.Room, error) {
 	var rooms []*models.Room

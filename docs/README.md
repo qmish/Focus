@@ -1,7 +1,7 @@
 # Документация проекта: Корпоративный мессенджер на базе Jitsi Meet
 
-**Версия:** 1.0  
-**Дата последнего обновления:** 24 марта 2026 г.
+**Версия:** 1.1  
+**Дата последнего обновления:** 27 марта 2026 г.
 
 ---
 
@@ -19,6 +19,12 @@
 | [NetworkTopology.md](./NetworkTopology.md) | 🌐 Сетевая топология и конфигурация | ✅ Готов |
 | [Security.md](./Security.md) | 🔒 Безопасность и модель угроз | ✅ Готов |
 | [API.md](./API.md) | 📡 Спецификация REST API | ✅ Готов |
+| [LLD.md](./LLD.md) | 🧩 Low-Level Design по backend/frontend и интеграциям | ✅ Готов |
+| [Frontend.md](./Frontend.md) | 🖥️ Архитектура frontend-приложения | ✅ Готов |
+| [Bots.md](./Bots.md) | 🤖 Архитектура BotEngine и команды | ✅ Готов |
+| [Webhooks.md](./Webhooks.md) | 🔗 Входящие/исходящие вебхуки, безопасность, ретраи | ✅ Готов |
+| [Swagger.md](./Swagger.md) | 📘 OpenAPI/Swagger, точки доступа и процесс обновления | ✅ Готов |
+| [Exchange_OnPrem_EWS.md](./Exchange_OnPrem_EWS.md) | 📅 On-prem Exchange/OWA (EWS), sync worker, Kerberos | ✅ Готов |
 | [Database.md](./Database.md) | 🗄️ Проектирование базы данных | ✅ Готов |
 | [Integration.md](./Integration.md) | 🔌 Интеграции с внешними системами | ✅ Готов |
 
@@ -26,8 +32,6 @@
 
 | Документ | Описание | Статус |
 |----------|----------|--------|
-| LLD.md | Low-Level Design — детальное проектирование модулей | ⏳ В плане |
-| Frontend.md | Архитектура фронтенд-приложения | ⏳ В плане |
 | JitsiConfig.md | Детальная конфигурация Jitsi | ⏳ В плане |
 | Runbook.md | Инструкции по эксплуатации | ⏳ В плане |
 | Troubleshooting.md | Решение типовых проблем | ⏳ В плане |
@@ -133,8 +137,8 @@ graph LR
 
 | Интеграция | Протокол | Документ |
 |------------|----------|----------|
-| Keycloak | OIDC/OAuth 2.0 | [Integration.md](./Integration.md#keycloak-интеграция) |
-| MS Exchange | Graph API | [Integration.md](./Integration.md#ms-exchange-интеграция) |
+| Keycloak | OIDC/OAuth 2.0 | [Integration.md](./Integration.md#2-keycloak-интеграция) |
+| MS Exchange (on-prem) | EWS SOAP | [Exchange_OnPrem_EWS.md](./Exchange_OnPrem_EWS.md) |
 | Jitsi | JWT + iframe | [Integration.md](./Integration.md#jitsi-meet-интеграция) |
 | Azure AD | SAML/OIDC | [Integration.md](./Integration.md#интеграция-с-azure-ad-опционально) |
 
@@ -157,8 +161,12 @@ graph LR
 
 ### Следующие приоритеты
 
-- [ ] **LLD.md** — Low-Level Design (детальное проектирование)
-- [ ] **Frontend.md** — Архитектура фронтенда
+- [x] **LLD.md** — Low-Level Design (детальное проектирование)
+- [x] **Frontend.md** — Архитектура фронтенда
+- [x] **Bots.md** — Детализация BotEngine и команд
+- [x] **Webhooks.md** — Webhook поток, подпись, ретраи, идемпотентность
+- [x] **Swagger.md** — OpenAPI и встроенный Swagger UI
+- [x] **Exchange_OnPrem_EWS.md** — Exchange EWS-only, sync worker, Kerberos
 - [ ] **JitsiConfig.md** — Конфигурация Jitsi
 - [ ] **Runbook.md** — Инструкции по эксплуатации
 

@@ -23,7 +23,8 @@ stringData:
   keycloak-client-secret: CHANGE_ME_PROD_KEYCLOAK_CLIENT_SECRET
   session-secret: CHANGE_ME_PROD_SESSION_SECRET
   jitsi-app-secret: CHANGE_ME_PROD_JITSI_SECRET
-  exchange-client-secret: CHANGE_ME_PROD_EXCHANGE_CLIENT_SECRET
+  exchange-username: CHANGE_ME_PROD_EXCHANGE_USERNAME
+  exchange-password: CHANGE_ME_PROD_EXCHANGE_PASSWORD
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -102,6 +103,46 @@ spec:
             secretKeyRef:
               name: focus-secrets
               key: session-secret
+        - name: EXCHANGE_PROVIDER
+          value: ews
+        - name: EXCHANGE_EWS_URL
+          value: https://exchange.company.local/EWS/Exchange.asmx
+        - name: EXCHANGE_DOMAIN
+          value: COMPANY
+        - name: EXCHANGE_AUTH_MODE
+          value: basic
+        - name: EXCHANGE_CA_CERT_PATH
+          value: ""
+        - name: EXCHANGE_INSECURE_TLS
+          value: "false"
+        - name: EXCHANGE_KRB5_CONFIG_PATH
+          value: ""
+        - name: EXCHANGE_KRB5_KEYTAB_PATH
+          value: ""
+        - name: EXCHANGE_KRB5_REALM
+          value: ""
+        - name: EXCHANGE_KRB5_SERVICE_PRINCIPAL
+          value: ""
+        - name: EXCHANGE_IMPERSONATION
+          value: "true"
+        - name: EXCHANGE_SYNC_ENABLED
+          value: "true"
+        - name: EXCHANGE_SYNC_INTERVAL
+          value: 2m
+        - name: EXCHANGE_SYNC_LOOKBACK
+          value: 12h
+        - name: EXCHANGE_SYNC_LOOKAHEAD
+          value: 336h
+        - name: EXCHANGE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: focus-secrets
+              key: exchange-username
+        - name: EXCHANGE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: focus-secrets
+              key: exchange-password
         livenessProbe:
           httpGet:
             path: /health
@@ -395,3 +436,13 @@ spec:
       port: 53
     - protocol: TCP
       port: 53
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    - ipBlock:
+        cidr: 172.16.0.0/12
+    - ipBlock:
+        cidr: 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 443

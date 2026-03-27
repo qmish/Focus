@@ -3,6 +3,7 @@ package bots
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -199,6 +200,10 @@ func TestHandleHelp(t *testing.T) {
 	assert.Contains(t, response, "/create")
 	assert.Contains(t, response, "/help")
 	assert.Contains(t, response, "/status")
+	assert.Contains(t, response, "/members")
+	assert.Contains(t, response, "/whoami")
+	assert.Contains(t, response, "/dice")
+	assert.Contains(t, response, "/find")
 }
 
 func TestHandleStatus(t *testing.T) {
@@ -208,7 +213,7 @@ func TestHandleStatus(t *testing.T) {
 	response, err := engine.handleStatus(ctx, "room-123", "user-456", "status", "")
 
 	require.NoError(t, err)
-	assert.Contains(t, response, "Статус комнат")
+	assert.Contains(t, response, "Статус системы")
 }
 
 func TestBotConfig(t *testing.T) {
@@ -389,6 +394,118 @@ func TestHandleMessageRecordsRateLimitedEvent(t *testing.T) {
 	assert.Equal(t, "rate_limited", eventStore.events[1].Status)
 }
 
+func TestHandleDiceDefault(t *testing.T) {
+	engine := NewBotEngine()
+	response, err := engine.handleDice(context.Background(), "room-123", "user-456", "dice", "")
+	require.NoError(t, err)
+	assert.Contains(t, response, "d6")
+	assert.Contains(t, response, "🎲")
+}
+
+func TestHandleDiceCustomSides(t *testing.T) {
+	engine := NewBotEngine()
+	response, err := engine.handleDice(context.Background(), "room-123", "user-456", "dice", "20")
+	require.NoError(t, err)
+	assert.Contains(t, response, "d20")
+}
+
+func TestHandleDiceInvalidSides(t *testing.T) {
+	engine := NewBotEngine()
+	response, err := engine.handleDice(context.Background(), "room-123", "user-456", "dice", "abc")
+	require.NoError(t, err)
+	assert.Contains(t, response, "d6")
+}
+
+func TestHandleFindEmptyQuery(t *testing.T) {
+	engine := NewBotEngine()
+	response, err := engine.handleFind(context.Background(), "room-123", "user-456", "find", "")
+	require.NoError(t, err)
+	assert.Contains(t, response, "Использование")
+}
+
+func TestHandleFindWithResults(t *testing.T) {
+	roomRepo := &fakeBotRoomRepo{
+		searchResults: []*models.Room{
+			{ID: uuid.New(), Name: "Планёрка", Type: models.RoomTypePublic},
+			{ID: uuid.New(), Name: "Планёрка-2", Type: models.RoomTypeMeeting},
+		},
+	}
+	engine := NewBotEngine()
+	engine.SetRoomRepository(roomRepo)
+	response, err := engine.handleFind(context.Background(), uuid.New().String(), uuid.New().String(), "find", "планёрка")
+	require.NoError(t, err)
+	assert.Contains(t, response, "Найдено комнат: 2")
+	assert.Contains(t, response, "Планёрка")
+}
+
+func TestHandleFindNoResults(t *testing.T) {
+	roomRepo := &fakeBotRoomRepo{searchResults: []*models.Room{}}
+	engine := NewBotEngine()
+	engine.SetRoomRepository(roomRepo)
+	response, err := engine.handleFind(context.Background(), uuid.New().String(), uuid.New().String(), "find", "несуществующая")
+	require.NoError(t, err)
+	assert.Contains(t, response, "ничего не найдено")
+}
+
+func TestHandleMembersNoRepo(t *testing.T) {
+	engine := NewBotEngine()
+	response, err := engine.handleMembers(context.Background(), uuid.New().String(), uuid.New().String(), "members", "")
+	require.NoError(t, err)
+	assert.Contains(t, response, "недоступна")
+}
+
+func TestHandleMembersWithParticipants(t *testing.T) {
+	roomID := uuid.New()
+	userID := uuid.New()
+	roomRepo := &fakeBotRoomRepo{
+		rooms: map[uuid.UUID]*models.Room{
+			roomID: {ID: roomID, Name: "Тестовая", Type: models.RoomTypePublic},
+		},
+		participants: []models.RoomParticipant{
+			{RoomID: roomID, UserID: userID, Role: models.ParticipantRoleModerator, User: &models.User{Name: "Иванов", Email: "ivanov@test.com"}},
+		},
+	}
+	engine := NewBotEngine()
+	engine.SetRoomRepository(roomRepo)
+	response, err := engine.handleMembers(context.Background(), roomID.String(), userID.String(), "members", "")
+	require.NoError(t, err)
+	assert.Contains(t, response, "Тестовая")
+	assert.Contains(t, response, "Иванов")
+	assert.Contains(t, response, "1 участник")
+}
+
+func TestHandleWhoamiNoRepo(t *testing.T) {
+	engine := NewBotEngine()
+	response, err := engine.handleWhoami(context.Background(), "room-123", "user-456", "whoami", "")
+	require.NoError(t, err)
+	assert.Contains(t, response, "user-456")
+}
+
+func TestHandleWhoamiWithRepo(t *testing.T) {
+	userID := uuid.New()
+	userRepo := &fakeBotUserRepo{
+		users: map[uuid.UUID]*models.User{
+			userID: {ID: userID, Name: "Петров", Email: "petrov@test.com", Roles: models.StringArray{"admin", "user"}, CreatedAt: time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)},
+		},
+	}
+	engine := NewBotEngine()
+	engine.SetUserRepository(userRepo)
+	response, err := engine.handleWhoami(context.Background(), uuid.New().String(), userID.String(), "whoami", "")
+	require.NoError(t, err)
+	assert.Contains(t, response, "Петров")
+	assert.Contains(t, response, "petrov@test.com")
+	assert.Contains(t, response, "admin, user")
+}
+
+func TestHandleStatusShowsUptime(t *testing.T) {
+	engine := NewBotEngine()
+	engine.startedAt = time.Now().Add(-5 * time.Minute)
+	response, err := engine.handleStatus(context.Background(), "room-123", "user-456", "status", "")
+	require.NoError(t, err)
+	assert.Contains(t, response, "Аптайм бота")
+	assert.Contains(t, response, "5m")
+}
+
 type fakeBotMessageRepo struct {
 	messages []*models.Message
 }
@@ -423,8 +540,11 @@ func (f *fakeBotBroadcaster) BroadcastToRoom(roomID string, message websocket.WS
 }
 
 type fakeBotRoomRepo struct {
-	created   []*models.Room
-	listRooms []*models.Room
+	created       []*models.Room
+	listRooms     []*models.Room
+	rooms         map[uuid.UUID]*models.Room
+	participants  []models.RoomParticipant
+	searchResults []*models.Room
 }
 
 func (f *fakeBotRoomRepo) Create(ctx context.Context, room *models.Room) error {
@@ -441,6 +561,40 @@ func (f *fakeBotRoomRepo) List(ctx context.Context, limit, offset int) ([]*model
 		return f.created, nil
 	}
 	return f.listRooms, nil
+}
+
+func (f *fakeBotRoomRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Room, error) {
+	if f.rooms != nil {
+		if r, ok := f.rooms[id]; ok {
+			return r, nil
+		}
+	}
+	return nil, fmt.Errorf("not found")
+}
+
+func (f *fakeBotRoomRepo) CountParticipants(ctx context.Context, roomID uuid.UUID) (int64, error) {
+	return int64(len(f.participants)), nil
+}
+
+func (f *fakeBotRoomRepo) Search(ctx context.Context, query string, limit int) ([]*models.Room, error) {
+	return f.searchResults, nil
+}
+
+func (f *fakeBotRoomRepo) ListParticipantsWithUsers(ctx context.Context, roomID uuid.UUID) ([]models.RoomParticipant, error) {
+	return f.participants, nil
+}
+
+type fakeBotUserRepo struct {
+	users map[uuid.UUID]*models.User
+}
+
+func (f *fakeBotUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	if f.users != nil {
+		if u, ok := f.users[id]; ok {
+			return u, nil
+		}
+	}
+	return nil, fmt.Errorf("not found")
 }
 
 type fakeBotScheduleCall struct {
