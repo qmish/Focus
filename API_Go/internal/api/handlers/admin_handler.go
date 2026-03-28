@@ -227,33 +227,6 @@ func (h *AdminHandler) recordAudit(ctx context.Context, email, action, resourceT
 		CreatedAt:    time.Now().UTC(),
 	})
 }
-
-// requireAdmin middleware для проверки роли администратора
-func requireAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		claims := auth.GetUserClaimsFromContext(r.Context())
-		if claims == nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		isAdmin := false
-		for _, role := range claims.Roles {
-			if role == "admin" {
-				isAdmin = true
-				break
-			}
-		}
-
-		if !isAdmin {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-
-		next(w, r)
-	}
-}
-
 // ListUsers GET /api/v1/admin/users
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора

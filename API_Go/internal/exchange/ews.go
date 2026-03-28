@@ -554,13 +554,6 @@ func buildHTTPClient(timeout time.Duration, authMode string, cfg EWSConfig) (soa
 	return krb5spnego.NewClient(krbClient, baseClient, strings.TrimSpace(cfg.Krb5SPN)), nil
 }
 
-func ptrToString(v *string) string {
-	if v == nil {
-		return ""
-	}
-	return *v
-}
-
 func (e CalendarEvent) MarshalJSON() ([]byte, error) {
 	type alias CalendarEvent
 	return json.Marshal(alias(e))

@@ -1,12 +1,48 @@
 import { useEffect, useState } from 'react'
 import { useAdminStore } from '../store/adminStore'
+import { adminApi } from '../lib/adminApi'
+
+type AuditEntry = { id: string; actor: string; action: string; created_at: string }
+type HealthStatus = { name: string; status: 'ok' | 'error' }
 
 export default function DashboardPage() {
   const { stats, error, fetchStats } = useAdminStore()
   const [loading, setLoading] = useState(true)
+  const [recentActivity, setRecentActivity] = useState<AuditEntry[]>([])
+  const [health, setHealth] = useState<HealthStatus[]>([])
 
   useEffect(() => {
-    fetchStats().finally(() => setLoading(false))
+    const loadAll = async () => {
+      try {
+        await fetchStats()
+      } catch { /* handled by store */ }
+
+      try {
+        const audit = await adminApi.listAuditLogs('limit=5&page=1')
+        setRecentActivity(audit.data as AuditEntry[])
+      } catch {
+        setRecentActivity([])
+      }
+
+      try {
+        const res = await fetch('/api/v1/health')
+        if (res.ok) {
+          const data = await res.json()
+          const services = ['api', 'database', 'jitsi']
+          setHealth(services.map(s => ({
+            name: s.charAt(0).toUpperCase() + s.slice(1),
+            status: (data[s] === 'ok' || data.status === 'ok') ? 'ok' as const : 'error' as const,
+          })))
+        } else {
+          setHealth([{ name: 'API', status: 'error' }])
+        }
+      } catch {
+        setHealth([{ name: 'API', status: 'error' }])
+      }
+
+      setLoading(false)
+    }
+    loadAll()
   }, [])
 
   if (loading) {
@@ -43,27 +79,34 @@ export default function DashboardPage() {
       <div className="dashboard-content">
         <div className="recent-activity">
           <h2>Последняя активность</h2>
-          <p>Нет данных</p>
+          {recentActivity.length === 0 ? (
+            <p>Нет данных</p>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {recentActivity.map(a => (
+                <li key={a.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                  <strong>{a.actor}</strong> — {a.action}
+                  <span style={{ float: 'right', color: '#888', fontSize: '0.85em' }}>
+                    {new Date(a.created_at).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="system-health">
           <h2>Состояние системы</h2>
-          <div className="health-item">
-            <span className="health-status ok">●</span>
-            <span>API Server</span>
-          </div>
-          <div className="health-item">
-            <span className="health-status ok">●</span>
-            <span>Database</span>
-          </div>
-          <div className="health-item">
-            <span className="health-status ok">●</span>
-            <span>Redis</span>
-          </div>
-          <div className="health-item">
-            <span className="health-status ok">●</span>
-            <span>Jitsi</span>
-          </div>
+          {health.length === 0 ? (
+            <p>Проверка...</p>
+          ) : (
+            health.map(h => (
+              <div className="health-item" key={h.name}>
+                <span className={`health-status ${h.status}`}>●</span>
+                <span>{h.name}</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

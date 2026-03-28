@@ -319,7 +319,6 @@ func (e *BotEngine) registerBuiltinBots() {
 	e.handlers["find"] = e.handleFind
 	e.handlers["remind"] = e.handleRemind
 	e.handlers["poll"] = e.handlePoll
-	e.handlers["pin"] = e.handlePin
 }
 
 // HandleMessage обрабатывает сообщение и проверяет на наличие команд бота
@@ -739,11 +738,6 @@ func (e *BotEngine) handlePoll(ctx context.Context, roomID, userID, command, arg
 	}
 	sb.WriteString("\nОтветьте номером варианта в чат.")
 	return sb.String(), nil
-}
-
-// handlePin /pin
-func (e *BotEngine) handlePin(ctx context.Context, roomID, userID, command, args string) (string, error) {
-	return "📌 Закрепление сообщений пока реализуется. Следите за обновлениями!", nil
 }
 
 func parseDuration(s string) (time.Duration, error) {

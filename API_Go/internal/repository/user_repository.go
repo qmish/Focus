@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -149,18 +150,6 @@ func (r *UserRepository) GetOrCreate(ctx context.Context, keycloakID uuid.UUID, 
 
 func isUniqueViolation(err error) bool {
 	// Проверка на уникальность (PostgreSQL error code 23505)
-	return err != nil && contains(err.Error(), "duplicate key")
+	return err != nil && strings.Contains(err.Error(), "duplicate key")
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

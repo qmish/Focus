@@ -53,7 +53,14 @@ func Error(msg string, fields ...zap.Field) {
 
 // WithContext возвращает logger с контекстом
 func WithContext(ctx context.Context) *zap.Logger {
-	return log
+	l := log
+	if reqID, ok := ctx.Value("request_id").(string); ok && reqID != "" {
+		l = l.With(zap.String("request_id", reqID))
+	}
+	if userID, ok := ctx.Value("user_id").(string); ok && userID != "" {
+		l = l.With(zap.String("user_id", userID))
+	}
+	return l
 }
 
 // Sync синхронизирует буферы

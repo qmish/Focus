@@ -12,7 +12,6 @@ type Config struct {
 	Env       string
 	Server    ServerConfig
 	Database  DatabaseConfig
-	Redis     RedisConfig
 	Auth      AuthConfig
 	WebSocket WebSocketConfig
 	Keycloak  KeycloakConfig
@@ -59,14 +58,6 @@ type DatabaseConfig struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
-}
-
-// RedisConfig конфигурация Redis
-type RedisConfig struct {
-	Host     string
-	Port     string
-	Password string
-	DB       int
 }
 
 // KeycloakConfig конфигурация Keycloak OIDC
@@ -155,12 +146,6 @@ func Load() *Config {
 			MaxOpenConns:    getIntEnv("DB_MAX_OPEN_CONNS", 25),
 			MaxIdleConns:    getIntEnv("DB_MAX_IDLE_CONNS", 5),
 			ConnMaxLifetime: getDurationEnv("DB_CONN_MAX_LIFETIME", 5*time.Minute),
-		},
-		Redis: RedisConfig{
-			Host:     getEnv("REDIS_HOST", "localhost"),
-			Port:     getEnv("REDIS_PORT", "6379"),
-			Password: getEnv("REDIS_PASSWORD", ""),
-			DB:       getIntEnv("REDIS_DB", 0),
 		},
 		Auth: AuthConfig{
 			SessionSecret:            getEnv("SESSION_SECRET", ""),

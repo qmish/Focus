@@ -37,11 +37,7 @@ function App() {
               <MessengerPage />
             </ProtectedRoute>
           }
-        >
-          <Route index element={<Navigate to="/rooms" replace />} />
-          <Route path="rooms" element={null} />
-          <Route path="rooms/:roomId" element={null} />
-        </Route>
+        />
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

@@ -30,54 +30,6 @@ func TestHasRole(t *testing.T) {
 	assert.False(t, hasRole(claims, "admin"))
 }
 
-func TestRequireAdmin(t *testing.T) {
-	t.Run("user with admin role", func(t *testing.T) {
-		claims := &auth.SessionClaims{
-			Roles: []string{"admin"},
-		}
-
-		ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
-		req := httptest.NewRequest("GET", "/test", nil).WithContext(ctx)
-		rr := httptest.NewRecorder()
-
-		handler := requireAdmin(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
-
-		handler.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusOK, rr.Code)
-	})
-
-	t.Run("user without admin role", func(t *testing.T) {
-		claims := &auth.SessionClaims{
-			Roles: []string{"user"},
-		}
-
-		ctx := context.WithValue(context.Background(), auth.ContextKeyUserClaims, claims)
-		req := httptest.NewRequest("GET", "/test", nil).WithContext(ctx)
-		rr := httptest.NewRecorder()
-
-		handler := requireAdmin(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
-
-		handler.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusForbidden, rr.Code)
-	})
-
-	t.Run("no claims in context", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		rr := httptest.NewRecorder()
-
-		handler := requireAdmin(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
-
-		handler.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	})
-}
-
 func TestAdminHandler(t *testing.T) {
 	handler := NewAdminHandler(nil, nil)
 
