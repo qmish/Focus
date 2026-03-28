@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
+import ErrorBoundary from './components/ErrorBoundary'
 import LoginPage from './pages/LoginPage'
 import MessengerPage from './pages/MessengerPage'
 import ProfilePage from './pages/ProfilePage'
@@ -26,6 +27,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ErrorBoundary>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
@@ -43,6 +45,7 @@ function App() {
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   )
 }

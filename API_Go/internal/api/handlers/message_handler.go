@@ -229,6 +229,16 @@ func (h *MessageHandler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if message.UserID.String() != claims.UserID {
+		http.Error(w, "forbidden: not message owner", http.StatusForbidden)
+		return
+	}
+
 	// Обновляем содержимое
 	message.Content = req.Content
 	edited := true
@@ -249,6 +259,26 @@ func (h *MessageHandler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	messageID, err := uuid.Parse(id)
 	if err != nil {
 		http.Error(w, "invalid message id", http.StatusBadRequest)
+		return
+	}
+
+	message, err := h.msgRepo.GetByID(r.Context(), messageID)
+	if err != nil {
+		if err == repository.ErrMessageNotFound {
+			http.Error(w, "message not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to get message", http.StatusInternalServerError)
+		return
+	}
+
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if message.UserID.String() != claims.UserID {
+		http.Error(w, "forbidden: not message owner", http.StatusForbidden)
 		return
 	}
 

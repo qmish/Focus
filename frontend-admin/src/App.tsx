@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAdminAuthStore } from './store/adminAuthStore'
+import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import DashboardPage from './pages/DashboardPage'
 import UsersPage from './pages/UsersPage'
@@ -21,6 +22,7 @@ function AdminApp() {
 
   return (
     <BrowserRouter>
+      <ErrorBoundary>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         
@@ -39,6 +41,7 @@ function AdminApp() {
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   )
 }

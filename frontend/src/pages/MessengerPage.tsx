@@ -89,12 +89,13 @@ export default function MessengerPage() {
 
     const connect = () => {
       try {
-        const ws = new WebSocket(buildWebSocketURL(window.location.href, token))
+        const ws = new WebSocket(buildWebSocketURL(window.location.href))
         wsRef.current = ws
 
         ws.onopen = () => {
           reconnectAttemptsRef.current = 0
           setWsConnected(true)
+          ws.send(JSON.stringify({ type: 'auth', payload: { token } }))
           ws.send(JSON.stringify({ type: 'subscribe', payload: { room_id: roomId } }))
         }
 

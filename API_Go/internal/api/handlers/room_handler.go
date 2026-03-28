@@ -210,6 +210,17 @@ func (h *RoomHandler) UpdateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	claimsUID, _ := uuid.Parse(claims.UserID)
+	if room.CreatorID != claimsUID {
+		http.Error(w, "forbidden: not room creator", http.StatusForbidden)
+		return
+	}
+
 	// Обновляем поля
 	if req.Name != "" {
 		room.Name = req.Name
@@ -236,6 +247,27 @@ func (h *RoomHandler) DeleteRoom(w http.ResponseWriter, r *http.Request) {
 	roomID, err := uuid.Parse(id)
 	if err != nil {
 		http.Error(w, "invalid room id", http.StatusBadRequest)
+		return
+	}
+
+	room, err := h.roomRepo.GetByID(r.Context(), roomID)
+	if err != nil {
+		if err == repository.ErrRoomNotFound {
+			http.Error(w, "room not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to get room", http.StatusInternalServerError)
+		return
+	}
+
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	claimsUID, _ := uuid.Parse(claims.UserID)
+	if room.CreatorID != claimsUID {
+		http.Error(w, "forbidden: not room creator", http.StatusForbidden)
 		return
 	}
 

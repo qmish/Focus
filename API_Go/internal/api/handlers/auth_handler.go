@@ -66,8 +66,8 @@ func NewAuthHandler(
 		jitsiGen:                 jitsiGen,
 		config:                   cfg,
 		logger:                   logger,
-		sessionSecret:            resolveSessionSecret(cfg),
-		sessionTokenLifetime:     resolveSessionLifetime(cfg),
+		sessionSecret:            cfg.ResolveSessionSecret(),
+		sessionTokenLifetime:     cfg.ResolveSessionLifetime(),
 		sessionValidationSecrets: resolveValidationSecrets(cfg),
 		groupPolicyMapper:        groupPolicyMapper,
 	}
@@ -484,20 +484,6 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func resolveSessionLifetime(cfg *config.Config) time.Duration {
-	if cfg == nil || cfg.Auth.SessionTokenLifetime <= 0 {
-		return 24 * time.Hour
-	}
-	return cfg.Auth.SessionTokenLifetime
-}
-
-func resolveSessionSecret(cfg *config.Config) []byte {
-	if cfg == nil || strings.TrimSpace(cfg.Auth.SessionSecret) == "" {
-		return []byte("dev-session-secret-change-me")
-	}
-	return []byte(cfg.Auth.SessionSecret)
 }
 
 func resolveValidationSecrets(cfg *config.Config) [][]byte {

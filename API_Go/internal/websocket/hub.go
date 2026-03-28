@@ -3,14 +3,17 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/qmish/focus-api/internal/auth"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +21,7 @@ import (
 type MessageType string
 
 const (
+	MessageTypeAuth        MessageType = "auth"
 	MessageTypeSubscribe   MessageType = "subscribe"
 	MessageTypeUnsubscribe MessageType = "unsubscribe"
 	MessageTypeMessage     MessageType = "message"
@@ -196,20 +200,24 @@ func (h *Hub) unregisterClient(client *Client) {
 
 func (h *Hub) broadcastToRoom(roomID string, message []byte) {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
 	clients, ok := h.Rooms[roomID]
 	if !ok {
+		h.mu.RUnlock()
 		return
 	}
 
+	var toUnregister []*Client
 	for _, client := range clients {
 		select {
 		case client.Send <- message:
 		default:
-			// Клиент не готов, закрываем
-			h.unregisterClient(client)
+			toUnregister = append(toUnregister, client)
 		}
+	}
+	h.mu.RUnlock()
+
+	for _, client := range toUnregister {
+		h.unregisterClient(client)
 	}
 }
 
@@ -296,6 +304,92 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request, userID str
 	h.Register <- client
 
 	// Запускаем обработчики
+	go client.writePump()
+	go client.readPump()
+}
+
+// AuthTokenPayload represents the payload of an "auth" WebSocket message.
+type AuthTokenPayload struct {
+	Token string `json:"token"`
+}
+
+// HandleWebSocketDeferredAuth upgrades the connection first, then expects the
+// client to send an { type: "auth", payload: { token: "..." } } message within
+// 5 seconds. This avoids leaking the token in the query string.
+func (h *Hub) HandleWebSocketDeferredAuth(w http.ResponseWriter, r *http.Request, secret []byte) {
+	upgrader := baseUpgrader
+	upgrader.CheckOrigin = func(r *http.Request) bool {
+		return h.isOriginAllowed(r)
+	}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		h.logger.Error("websocket upgrade failed", zap.Error(err))
+		return
+	}
+
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, raw, err := conn.ReadMessage()
+	if err != nil {
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "auth_timeout"))
+		conn.Close()
+		return
+	}
+
+	var msg WSMessage
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Type != MessageTypeAuth {
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "auth_required"))
+		conn.Close()
+		return
+	}
+
+	var authPayload AuthTokenPayload
+	if err := json.Unmarshal(msg.Payload, &authPayload); err != nil || authPayload.Token == "" {
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid_auth"))
+		conn.Close()
+		return
+	}
+
+	claims, err := auth.ValidateSessionJWT(authPayload.Token, secret)
+	if err != nil {
+		code := "invalid_token"
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			code = "token_expired"
+		}
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, code))
+		conn.Close()
+		return
+	}
+	if auth.IsSessionRevoked(claims.SessionID) {
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "session_revoked"))
+		conn.Close()
+		return
+	}
+
+	expiresAt := time.Time{}
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time
+	}
+
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+
+	client := &Client{
+		ID:        uuid.New().String(),
+		UserID:    claims.UserID,
+		ExpiresAt: expiresAt,
+		Conn:      conn,
+		Hub:       h,
+		Rooms:     make(map[string]bool),
+		Send:      make(chan []byte, 256),
+		closed:    false,
+	}
+
+	h.Register <- client
+
 	go client.writePump()
 	go client.readPump()
 }

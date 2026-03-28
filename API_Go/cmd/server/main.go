@@ -151,8 +151,11 @@ func main() {
 	}
 	oidcProvider, err := auth.NewOIDCProvider(oidcCfg)
 	if err != nil {
-		logger.Error("Failed to create OIDC provider", zap.Error(err))
-		// Продолжаем без OIDC для разработки
+		if cfg.Env != "development" {
+			logger.Error("Failed to create OIDC provider (required in non-development)", zap.Error(err))
+			os.Exit(1)
+		}
+		logger.Warn("Failed to create OIDC provider, continuing without OIDC (development mode)", zap.Error(err))
 	}
 
 	// Инициализация Jitsi генератора токенов
@@ -246,8 +249,8 @@ func main() {
 	brandingHandler.SetAppSettingsGetter(appSettingsRepo)
 	localAuthHandler := handlers.NewLocalAuthHandler(
 		userRepo,
-		resolveSessionSecret(cfg),
-		resolveSessionLifetimeDuration(cfg),
+		cfg.ResolveSessionSecret(),
+		cfg.ResolveSessionLifetime(),
 		logger.WithContext(context.Background()),
 	)
 	// Warm in-memory revocation blacklist from persistent storage for API/WS checks.
@@ -332,10 +335,15 @@ func main() {
 			r.Post("/accept", adminHandler.AcceptInvite)
 		})
 
-		// WebSocket endpoint
+		// WebSocket endpoint — supports auth via first message (preferred) or query-string (legacy)
 		r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
-			claims, err := websocket.AuthenticateRequest(r, []byte(cfg.Auth.SessionSecret))
+			secret := cfg.ResolveSessionSecret()
+			claims, err := websocket.AuthenticateRequest(r, secret)
 			if err != nil {
+				if errors.Is(err, websocket.ErrMissingWebSocketToken) {
+					wsHub.HandleWebSocketDeferredAuth(w, r, secret)
+					return
+				}
 				if errors.Is(err, websocket.ErrExpiredWebSocketToken) {
 					http.Error(w, "token_expired", http.StatusUnauthorized)
 					return
@@ -561,20 +569,6 @@ func readinessCheck(db *database.Database) http.HandlerFunc {
 type botMeetingScheduler struct {
 	calendarService exchange.CalendarService
 	userRepo        *repository.UserRepository
-}
-
-func resolveSessionSecret(cfg *config.Config) []byte {
-	if cfg == nil || cfg.Auth.SessionSecret == "" {
-		return []byte("dev-session-secret-change-me")
-	}
-	return []byte(cfg.Auth.SessionSecret)
-}
-
-func resolveSessionLifetimeDuration(cfg *config.Config) time.Duration {
-	if cfg == nil || cfg.Auth.SessionTokenLifetime <= 0 {
-		return 24 * time.Hour
-	}
-	return cfg.Auth.SessionTokenLifetime
 }
 
 func ensureBotUser(db *database.Database, botID uuid.UUID) {

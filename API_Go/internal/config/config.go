@@ -163,7 +163,7 @@ func Load() *Config {
 			DB:       getIntEnv("REDIS_DB", 0),
 		},
 		Auth: AuthConfig{
-			SessionSecret:            getEnv("SESSION_SECRET", "dev-session-secret-change-me"),
+			SessionSecret:            getEnv("SESSION_SECRET", ""),
 			SessionTokenLifetime:     getDurationEnv("AUTH_SESSION_TOKEN_LIFETIME", 24*time.Hour),
 			SessionValidationSecrets: getListEnv("AUTH_SESSION_VALIDATION_SECRETS", nil),
 			RequiredAudience:         getEnv("AUTH_REQUIRED_AUDIENCE", "focus-frontend"),
@@ -191,7 +191,7 @@ func Load() *Config {
 		Jitsi: JitsiConfig{
 			BaseURL:       getEnv("JITSI_BASE_URL", "https://meet.company.com"),
 			AppID:         getEnv("JITSI_APP_ID", "jitsi"),
-			AppSecret:     getEnv("JITSI_APP_SECRET", "secret"),
+			AppSecret:     getEnv("JITSI_APP_SECRET", ""),
 			Issuer:        getEnv("JITSI_ISSUER", "jitsi"),
 			Audience:      getEnv("JITSI_AUDIENCE", "jitsi"),
 			TokenLifetime: getDurationEnv("JITSI_TOKEN_LIFETIME", 8*time.Hour),
@@ -270,6 +270,25 @@ func (c *Config) ValidateSecurity() error {
 	}
 
 	return nil
+}
+
+// ResolveSessionSecret returns session secret bytes from config, with a dev-only fallback.
+func (c *Config) ResolveSessionSecret() []byte {
+	if c.Auth.SessionSecret != "" {
+		return []byte(c.Auth.SessionSecret)
+	}
+	if c.Env == "development" {
+		return []byte("dev-session-secret-change-me")
+	}
+	panic("SESSION_SECRET must be set in non-development environments")
+}
+
+// ResolveSessionLifetime returns session token lifetime from config.
+func (c *Config) ResolveSessionLifetime() time.Duration {
+	if c.Auth.SessionTokenLifetime > 0 {
+		return c.Auth.SessionTokenLifetime
+	}
+	return 24 * time.Hour
 }
 
 func getEnv(key, defaultValue string) string {
