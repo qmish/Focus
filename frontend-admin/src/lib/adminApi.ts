@@ -38,9 +38,14 @@ export type AdminInvite = {
 export type AdminBot = {
   id: string
   name: string
+  description: string
   enabled: boolean
-  commands_json?: string
-  schedule_json?: string
+  is_enabled: boolean
+  rate_limit_ms: number
+  allowed_rooms: string[]
+  commands_json: string
+  schedule_json: string
+  avatar_url: string
   created_at: string
 }
 
@@ -57,6 +62,7 @@ export type AdminBotError = {
 
 export type AdminAuditEntry = {
   id: string
+  actor: string
   actor_email: string
   action: string
   resource_type: string

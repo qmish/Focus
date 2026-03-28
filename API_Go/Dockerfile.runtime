@@ -1,11 +1,14 @@
 FROM alpine:3.20
 
-WORKDIR /root/
+RUN adduser -D -u 10001 appuser
+WORKDIR /home/appuser
 
 RUN apk --no-cache add ca-certificates
 
 COPY dist/api-go ./api-go
-RUN chmod +x ./api-go
+RUN chmod 755 ./api-go
+
+USER 10001
 
 EXPOSE 8080
 
