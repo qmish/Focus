@@ -532,3 +532,36 @@ spec:
     ports:
     - protocol: TCP
       port: 443
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-go-pdb
+  namespace: messenger-stage
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: api-go
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: messenger-stage
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: frontend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-admin-pdb
+  namespace: messenger-stage
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: frontend-admin

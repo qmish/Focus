@@ -52,7 +52,7 @@ export default function Layout() {
               to={item.path}
               className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
             >
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon" aria-hidden="true">{item.icon}</span>
               {sidebarOpen && <span>{item.label}</span>}
             </Link>
           ))}
@@ -61,7 +61,7 @@ export default function Layout() {
             onClick={() => { logout(); navigate('/login') }}
             className="nav-item logout-nav-btn"
           >
-            <span className="nav-icon">🚪</span>
+            <span className="nav-icon" aria-hidden="true">🚪</span>
             {sidebarOpen && <span>Выйти</span>}
           </button>
         </nav>

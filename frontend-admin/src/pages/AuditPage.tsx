@@ -65,18 +65,18 @@ export default function AuditPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div className="page-header">
         <h1>Аудит-лог</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--muted-color, #888)' }}>Всего: {total}</span>
+        <div className="flex-row">
+          <span className="text-muted-sm">Всего: {total}</span>
           <button onClick={exportCSV}>Экспорт CSV</button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <input placeholder="Фильтр по актору" value={actor} onChange={(e) => setActor(e.target.value)} style={{ flex: 1, minWidth: 150 }} />
-        <input placeholder="Фильтр по действию" value={action} onChange={(e) => setAction(e.target.value)} style={{ flex: 1, minWidth: 150 }} />
-        <input placeholder="Фильтр по типу ресурса" value={resourceType} onChange={(e) => setResourceType(e.target.value)} style={{ flex: 1, minWidth: 150 }} />
+      <div className="flex-row-wrap">
+        <input placeholder="Фильтр по актору" value={actor} onChange={(e) => setActor(e.target.value)} aria-label="Фильтр по актору" style={{ flex: 1, minWidth: 150 }} />
+        <input placeholder="Фильтр по действию" value={action} onChange={(e) => setAction(e.target.value)} aria-label="Фильтр по действию" style={{ flex: 1, minWidth: 150 }} />
+        <input placeholder="Фильтр по типу ресурса" value={resourceType} onChange={(e) => setResourceType(e.target.value)} aria-label="Фильтр по типу ресурса" style={{ flex: 1, minWidth: 150 }} />
         <button className="primary" onClick={() => void load()}>Применить</button>
       </div>
 
@@ -97,15 +97,15 @@ export default function AuditPage() {
             </thead>
             <tbody>
               {entries.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted-color, #888)' }}>Нет записей</td></tr>
+                <tr><td colSpan={6} className="cell-empty">Нет записей</td></tr>
               ) : entries.map((e) => (
                 <tr key={e.id}>
                   <td style={{ whiteSpace: 'nowrap', fontSize: '0.85rem' }}>{new Date(e.created_at).toLocaleString('ru')}</td>
                   <td>{e.actor_email}</td>
                   <td><code>{e.action}</code></td>
                   <td>{e.resource_type}</td>
-                  <td style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>{e.resource_id?.substring(0, 12)}{e.resource_id?.length > 12 ? '...' : ''}</td>
-                  <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.details || '—'}</td>
+                  <td className="cell-mono-sm">{e.resource_id?.substring(0, 12)}{e.resource_id?.length > 12 ? '...' : ''}</td>
+                  <td className="cell-truncate">{e.details || '—'}</td>
                 </tr>
               ))}
             </tbody>

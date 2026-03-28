@@ -649,7 +649,7 @@ export default function MessengerPage() {
   function renderCreateModal() {
     return (
       <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-        <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
             <h3>Создать комнату</h3>
             <button className="icon-btn" onClick={() => setShowCreateModal(false)}>✕</button>
@@ -680,7 +680,7 @@ export default function MessengerPage() {
   function renderScheduleModal() {
     return (
       <div className="modal-overlay" onClick={() => setShowScheduleModal(false)}>
-        <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
             <h3>Запланировать встречу</h3>
             <button className="icon-btn" onClick={() => setShowScheduleModal(false)}>✕</button>
@@ -747,7 +747,7 @@ export default function MessengerPage() {
     if (!currentRoom) return null
     return (
       <div className="modal-overlay" onClick={() => setShowRoomSettings(false)}>
-        <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
             <h3>Настройки комнаты</h3>
             <button className="icon-btn" onClick={() => setShowRoomSettings(false)}>✕</button>

@@ -24,7 +24,7 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'OK
   if (!open) return null
 
   return (
-    <dialog ref={dialogRef} onClose={onCancel} style={{ border: 'none', borderRadius: 12, padding: '1.5rem', maxWidth: 400, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+    <dialog ref={dialogRef} onClose={onCancel} role="dialog" aria-modal="true" style={{ border: 'none', borderRadius: 12, padding: '1.5rem', maxWidth: 400, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
       <h3 style={{ margin: '0 0 0.75rem' }}>{title}</h3>
       <p style={{ margin: '0 0 1rem', color: '#555' }}>{message}</p>
       {inputMode && (

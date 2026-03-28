@@ -174,15 +174,15 @@ export default function UsersPage() {
         <h2>Создать пользователя</h2>
         <div className="form-group">
           <label>Имя</label>
-          <input value={newName} onChange={(e) => setNewName(e.target.value)} />
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} aria-label="Имя" />
         </div>
         <div className="form-group">
           <label>Email</label>
-          <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+          <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} aria-label="Email" />
         </div>
         <div className="form-group">
           <label>Пароль (опционально)</label>
-          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} aria-label="Пароль" />
         </div>
         <button className="primary" onClick={handleCreateUser}>Создать</button>
       </div>
@@ -258,7 +258,7 @@ export default function UsersPage() {
         <h2>Инвайты</h2>
         <div className="form-group">
           <label>Email для инвайта</label>
-          <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+          <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} aria-label="Email для инвайта" />
         </div>
         <button className="primary" onClick={() => void handleCreateInvite()}>
           Отправить инвайт

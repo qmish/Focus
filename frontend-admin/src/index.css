@@ -537,6 +537,61 @@ button:hover {
   color: var(--danger-color);
 }
 
+/* Utility: page header with title + actions */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+/* Utility: horizontal flex row with gap */
+.flex-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Utility: wrapping flex row with bottom margin (filter bars, tab rows) */
+.flex-row-wrap {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Utility: muted helper text */
+.text-muted-sm {
+  font-size: 0.85rem;
+  color: var(--muted-color);
+}
+
+/* Utility: truncated table cell */
+.cell-truncate {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Utility: empty-state centered table cell */
+.cell-empty {
+  text-align: center;
+  color: var(--muted-color);
+}
+
+/* Utility: small monospace text for IDs / codes */
+.cell-mono-sm {
+  font-size: 0.8rem;
+  font-family: monospace;
+}
+
+/* Utility: extra-small monospace (UUID fragments) */
+.cell-mono-xs {
+  font-size: 0.75rem;
+  font-family: monospace;
+}
+
 /* Loading */
 .loading {
   text-align: center;

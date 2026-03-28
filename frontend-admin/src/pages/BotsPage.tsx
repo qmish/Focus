@@ -245,11 +245,11 @@ export default function BotsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div className="page-header">
         <h1>Боты</h1>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="flex-row">
           {stats && (
-            <span style={{ fontSize: '0.85rem', color: 'var(--muted-color, #888)' }}>
+            <span className="text-muted-sm">
               За 24ч: {stats.total_events_24h} вызовов, {stats.errors_24h} ошибок
             </span>
           )}
@@ -262,7 +262,7 @@ export default function BotsPage() {
       {success && <p style={{ color: 'var(--success-color, #4ade80)', marginBottom: 12 }}>{success}</p>}
       {testResult && <div style={{ padding: 12, borderRadius: 8, background: 'var(--card-bg, #313244)', marginBottom: 12, fontFamily: 'monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>Результат теста: {testResult}</div>}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="flex-row-wrap">
         {(['list', 'errors', 'analytics', 'history', 'templates'] as const).map(t => (
           <button key={t} className={tab === t ? 'primary' : ''} onClick={() => setTab(t)}>
             {{ list: 'Список ботов', errors: 'Ошибки', analytics: 'Аналитика', history: 'История', templates: 'Шаблоны' }[t]}
@@ -350,8 +350,8 @@ export default function BotsPage() {
                                 </div>
                                 {editCommands.map((cmd, idx) => (
                                   <div key={idx} style={{ display: 'grid', gridTemplateColumns: '120px 160px 1fr auto auto auto', gap: 8, marginBottom: 8, alignItems: 'start', padding: 10, borderRadius: 8, background: 'var(--input-bg, #1e1e2e)', border: '1px solid var(--border-color, #444)' }}>
-                                    <input value={cmd.command} onChange={(e) => updateCommand(idx, 'command', e.target.value)} placeholder="/cmd" style={{ fontFamily: 'monospace', fontSize: '0.85rem' }} />
-                                    <select value={cmd.handler} onChange={(e) => updateCommand(idx, 'handler', e.target.value)} style={{ fontSize: '0.85rem' }}>
+                                    <input value={cmd.command} onChange={(e) => updateCommand(idx, 'command', e.target.value)} placeholder="/cmd" aria-label="Команда" style={{ fontFamily: 'monospace', fontSize: '0.85rem' }} />
+                                    <select value={cmd.handler} onChange={(e) => updateCommand(idx, 'handler', e.target.value)} aria-label="Тип обработчика" style={{ fontSize: '0.85rem' }}>
                                       {HANDLER_TYPES.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
                                     </select>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -359,16 +359,17 @@ export default function BotsPage() {
                                         value={cmd.description}
                                         onChange={(e) => updateCommand(idx, 'description', e.target.value)}
                                         rows={2}
+                                        aria-label="Описание команды"
                                         placeholder={cmd.handler === 'template' ? 'Привет, {{user_name}}!' : cmd.handler === 'random' ? 'ответ1||ответ2||ответ3' : cmd.handler === 'alias' ? 'help' : cmd.handler === 'webhook' ? 'URL или описание' : 'Текст ответа'}
                                         style={{ fontFamily: 'monospace', fontSize: '0.8rem', padding: 6, borderRadius: 4, border: '1px solid var(--border-color, #555)', background: 'var(--card-bg, #313244)', color: 'var(--text-color, #cdd6f4)', resize: 'vertical' }}
                                       />
                                       {cmd.handler === 'webhook' && (
-                                        <input value={cmd.webhook_url || ''} onChange={(e) => updateCommand(idx, 'webhook_url', e.target.value)} placeholder="https://example.com/hook" style={{ fontSize: '0.8rem' }} />
+                                        <input value={cmd.webhook_url || ''} onChange={(e) => updateCommand(idx, 'webhook_url', e.target.value)} placeholder="https://example.com/hook" aria-label="URL вебхука" style={{ fontSize: '0.8rem' }} />
                                       )}
                                       {cmd.rate_limit_ms !== undefined && cmd.rate_limit_ms > 0 ? (
                                         <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: '0.8rem' }}>
                                           <span>Rate limit:</span>
-                                          <input type="number" value={cmd.rate_limit_ms} onChange={(e) => updateCommand(idx, 'rate_limit_ms', parseInt(e.target.value) || 0)} style={{ width: 80, fontSize: '0.8rem' }} /> ms
+                                          <input type="number" value={cmd.rate_limit_ms} onChange={(e) => updateCommand(idx, 'rate_limit_ms', parseInt(e.target.value) || 0)} aria-label="Rate limit (мс)" style={{ width: 80, fontSize: '0.8rem' }} /> ms
                                         </div>
                                       ) : (
                                         <button style={{ fontSize: '0.75rem', padding: '2px 6px', opacity: 0.6 }} onClick={() => updateCommand(idx, 'rate_limit_ms', 2000)}>+ Rate limit</button>
@@ -419,14 +420,14 @@ export default function BotsPage() {
             <thead><tr><th>Время</th><th>Команда</th><th>Статус</th><th>Ошибка</th><th>Room ID</th></tr></thead>
             <tbody>
               {errors.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted-color, #888)' }}>Нет ошибок</td></tr>
+                <tr><td colSpan={5} className="cell-empty">Нет ошибок</td></tr>
               ) : errors.map((e) => (
                 <tr key={e.id}>
                   <td>{new Date(e.created_at).toLocaleString('ru')}</td>
                   <td>/{e.command}</td>
                   <td>{e.status}</td>
-                  <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.error || '—'}</td>
-                  <td style={{ fontSize: '0.8rem' }}>{e.room_id?.substring(0, 8)}...</td>
+                  <td className="cell-truncate">{e.error || '—'}</td>
+                  <td className="cell-mono-sm">{e.room_id?.substring(0, 8)}...</td>
                 </tr>
               ))}
             </tbody>
@@ -438,7 +439,7 @@ export default function BotsPage() {
         <div className="settings-section">
           <h2>Аналитика по командам (7 дней)</h2>
           {Object.keys(groupedStats).length === 0 ? (
-            <p style={{ color: 'var(--muted-color, #888)' }}>Нет данных</p>
+            <p className="text-muted-sm">Нет данных</p>
           ) : (
             <div className="users-table">
               <table>
@@ -448,7 +449,7 @@ export default function BotsPage() {
                     const total = Object.values(statuses).reduce((a, b) => a + b, 0)
                     return (
                       <tr key={cmd}>
-                        <td style={{ fontFamily: 'monospace' }}>/{cmd}</td>
+                        <td className="cell-mono-sm">/{cmd}</td>
                         <td style={{ color: 'var(--success-color, #4ade80)' }}>{statuses['sent'] || 0}</td>
                         <td style={{ color: 'var(--error-color, #f38ba8)' }}>{statuses['failed'] || 0}</td>
                         <td>{statuses['rate_limited'] || 0}</td>
@@ -468,7 +469,7 @@ export default function BotsPage() {
       {tab === 'history' && (
         <div>
           <div className="settings-section" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="flex-row-wrap" style={{ alignItems: 'flex-end' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Команда</label>
                 <input value={historyFilter.command} onChange={e => setHistoryFilter({ ...historyFilter, command: e.target.value })} placeholder="help" style={{ width: 120 }} />
@@ -486,7 +487,7 @@ export default function BotsPage() {
               </div>
               <button className="primary" onClick={() => void loadHistory()}>Найти</button>
               <button onClick={exportCSV}>Экспорт CSV</button>
-              <span style={{ fontSize: '0.85rem', color: 'var(--muted-color, #888)' }}>Найдено: {historyTotal}</span>
+              <span className="text-muted-sm">Найдено: {historyTotal}</span>
             </div>
           </div>
           <div className="users-table">
@@ -494,16 +495,16 @@ export default function BotsPage() {
               <thead><tr><th>Время</th><th>Команда</th><th>Аргументы</th><th>Статус</th><th>Ошибка</th><th>Room ID</th><th>User ID</th></tr></thead>
               <tbody>
                 {history.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted-color, #888)' }}>Нет записей</td></tr>
+                  <tr><td colSpan={7} className="cell-empty">Нет записей</td></tr>
                 ) : history.map((e) => (
                   <tr key={e.id}>
-                    <td style={{ fontSize: '0.8rem' }}>{new Date(e.created_at).toLocaleString('ru')}</td>
-                    <td style={{ fontFamily: 'monospace' }}>/{e.command}</td>
-                    <td style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.args || '—'}</td>
+                    <td className="cell-mono-sm">{new Date(e.created_at).toLocaleString('ru')}</td>
+                    <td className="cell-mono-sm">/{e.command}</td>
+                    <td className="cell-truncate">{e.args || '—'}</td>
                     <td><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: '0.8rem', background: e.status === 'sent' ? 'rgba(74,222,128,0.2)' : e.status === 'failed' ? 'rgba(243,139,168,0.2)' : 'rgba(136,136,136,0.2)' }}>{e.status}</span></td>
-                    <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{e.error || '—'}</td>
-                    <td style={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>{e.room_id?.substring(0, 8)}</td>
-                    <td style={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>{e.user_id?.substring(0, 8)}</td>
+                    <td className="cell-truncate cell-mono-sm">{e.error || '—'}</td>
+                    <td className="cell-mono-xs">{e.room_id?.substring(0, 8)}</td>
+                    <td className="cell-mono-xs">{e.user_id?.substring(0, 8)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -515,7 +516,7 @@ export default function BotsPage() {
       {tab === 'templates' && (
         <div className="settings-section">
           <h2>Библиотека шаблонов</h2>
-          <p style={{ color: 'var(--muted-color, #888)', marginBottom: 16 }}>Создайте бота из готового шаблона — настройте под себя после создания.</p>
+          <p className="text-muted-sm" style={{ marginBottom: 16 }}>Создайте бота из готового шаблона — настройте под себя после создания.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
             {templates.map((tmpl) => (
               <div key={tmpl.name} style={{ padding: 16, borderRadius: 12, background: 'var(--card-bg, #313244)', border: '1px solid var(--border-color, #444)' }}>

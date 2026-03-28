@@ -67,33 +67,35 @@ func main() {
 	logger.Info("Connected to database")
 
 	// Миграция моделей
-	if err := db.AutoMigrate(
-		&models.User{},
-		&models.Room{},
-		&models.RoomParticipant{},
-		&models.Message{},
-		&models.MessageReaction{},
-		&models.AuthAuditEvent{},
-		&models.CalendarAuditEvent{},
-		&models.MeetingLink{},
-		&models.CalendarIdempotencyKey{},
-		&models.AdminInvite{},
-		&models.BotSetting{},
-		&models.ExchangeSetting{},
-		&models.AppSetting{},
-		&models.AuditLog{},
-		&models.ConferencePolicy{},
-		&models.RevokedSession{},
-		&bots.BotCommandEvent{},
-		&models.BotReminder{},
-		&models.BotDialogState{},
-		&webhooks.IncomingEvent{},
-		&webhooks.WebhookDelivery{},
-	); err != nil {
-		logger.Error("Database migration failed", zap.Error(err))
-		os.Exit(1)
+	if cfg.Env == "development" || os.Getenv("AUTO_MIGRATE") == "true" {
+		if err := db.AutoMigrate(
+			&models.User{},
+			&models.Room{},
+			&models.RoomParticipant{},
+			&models.Message{},
+			&models.MessageReaction{},
+			&models.AuthAuditEvent{},
+			&models.CalendarAuditEvent{},
+			&models.MeetingLink{},
+			&models.CalendarIdempotencyKey{},
+			&models.AdminInvite{},
+			&models.BotSetting{},
+			&models.ExchangeSetting{},
+			&models.AppSetting{},
+			&models.AuditLog{},
+			&models.ConferencePolicy{},
+			&models.RevokedSession{},
+			&bots.BotCommandEvent{},
+			&models.BotReminder{},
+			&models.BotDialogState{},
+			&webhooks.IncomingEvent{},
+			&webhooks.WebhookDelivery{},
+		); err != nil {
+			logger.Error("Database migration failed", zap.Error(err))
+			os.Exit(1)
+		}
+		logger.Info("Database migrations completed")
 	}
-	logger.Info("Database migrations completed")
 
 	// Инициализация репозиториев
 	userRepo := repository.NewUserRepository(db.DB)
