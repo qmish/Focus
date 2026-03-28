@@ -36,6 +36,8 @@ interface AuthState {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
+let initPromise: Promise<void> | null = null
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   keycloak: null,
   isAuthenticated: false,
@@ -45,6 +47,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   keycloakAvailable: !!KEYCLOAK_URL,
 
   init: async () => {
+    if (initPromise) return initPromise
+    initPromise = (async () => {
     const saved = localStorage.getItem(ACCESS_TOKEN_KEY)
     if (saved) {
       try {
@@ -68,9 +72,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (keycloak) {
       try {
         const authenticated = await keycloak.init({
-          onLoad: 'check-sso',
-          silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
           pkceMethod: 'S256',
+          checkLoginIframe: false,
         })
 
         if (authenticated && keycloak.idToken) {
@@ -105,6 +108,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     set({ isLoading: false })
+    })()
+    return initPromise!
   },
 
   loginLocal: async (email: string, password: string) => {

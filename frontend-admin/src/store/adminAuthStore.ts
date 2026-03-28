@@ -36,6 +36,8 @@ interface AdminAuthState {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
+let initPromise: Promise<void> | null = null
+
 export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
   keycloak: null,
   isAuthenticated: false,
@@ -45,6 +47,8 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
   keycloakAvailable: !!KEYCLOAK_URL,
 
   init: async () => {
+    if (initPromise) return initPromise
+    initPromise = (async () => {
     const saved = localStorage.getItem(ADMIN_TOKEN_KEY)
     if (saved) {
       try {
@@ -66,9 +70,8 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
     if (keycloak) {
       try {
         const authenticated = await keycloak.init({
-          onLoad: 'check-sso',
-          silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
           pkceMethod: 'S256',
+          checkLoginIframe: false,
         })
 
         if (authenticated && keycloak.idToken) {
@@ -98,18 +101,20 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
               return
             }
           } catch (err) {
-            console.error('Token exchange failed:', err)
+            console.error('Ошибка обмена токена:', err)
           }
         }
 
         set({ keycloak, isAuthenticated: false, isLoading: false, user: null, token: null })
         return
       } catch (err) {
-        console.error('Keycloak init failed:', err)
+        console.error('Ошибка инициализации Keycloak:', err)
       }
     }
 
     set({ isLoading: false })
+    })()
+    return initPromise!
   },
 
   loginLocal: async (email: string, password: string) => {

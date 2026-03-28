@@ -71,7 +71,7 @@ spec:
               name: focus-secrets
               key: redis-password
         - name: KEYCLOAK_URL
-          value: https://keycloak-stage.company.com
+          value: https://auth.focus.local:30443
         - name: KEYCLOAK_CLIENT_ID
           value: messenger-api
         - name: KEYCLOAK_CLIENT_SECRET
@@ -192,7 +192,7 @@ spec:
           name: frontend-nginx-conf
       containers:
       - name: frontend
-        image: docker.io/qmishnik/focus-frontend:phase3-20260328-094957
+        image: docker.io/qmishnik/focus-frontend:authfix-20260328-130404
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -258,7 +258,7 @@ spec:
           name: frontend-admin-sso
       containers:
       - name: frontend-admin
-        image: docker.io/qmishnik/focus-frontend-admin:phase3-20260328-094957
+        image: docker.io/qmishnik/focus-frontend-admin:authfix-20260328-130404
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
