@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund --force
 
 COPY . .
 RUN chmod +x node_modules/.bin/* node_modules/@esbuild/*/bin/* 2>/dev/null; node node_modules/vite/bin/vite.js build

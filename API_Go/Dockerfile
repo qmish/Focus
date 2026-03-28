@@ -19,14 +19,18 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/api-go ./cmd/serv
 # Final stage
 FROM alpine:latest
 
-WORKDIR /root/
+RUN adduser -D -u 10001 appuser
+WORKDIR /home/appuser
 
 # Install CA certificates
 RUN apk --no-cache add ca-certificates
 
 # Copy binary from builder
 COPY --from=builder /app/api-go .
+RUN chmod 755 ./api-go
 COPY --from=builder /app/docs ./docs
+
+USER 10001
 
 # Expose port
 EXPOSE 8080
