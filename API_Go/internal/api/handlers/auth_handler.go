@@ -418,16 +418,114 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := map[string]interface{}{
-		"id":          claims.UserID,
-		"email":       claims.Email,
-		"name":        claims.Name,
-		"roles":       claims.Roles,
-		"keycloak_id": claims.KeycloakID,
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		response := map[string]interface{}{
+			"id":          claims.UserID,
+			"email":       claims.Email,
+			"name":        claims.Name,
+			"roles":       claims.Roles,
+			"keycloak_id": claims.KeycloakID,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	user, err := h.userRepo.GetByID(r.Context(), userID)
+	if err != nil {
+		response := map[string]interface{}{
+			"id":          claims.UserID,
+			"email":       claims.Email,
+			"name":        claims.Name,
+			"roles":       claims.Roles,
+			"keycloak_id": claims.KeycloakID,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(user)
+}
+
+// UpdateProfile PUT /api/v1/auth/profile
+func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Name                     *string `json:"name"`
+		Department               *string `json:"department"`
+		Directorate              *string `json:"directorate"`
+		Position                 *string `json:"position"`
+		Phone                    *string `json:"phone"`
+		AboutMe                  *string `json:"about_me"`
+		VideoStartWithAudioMuted *bool   `json:"video_start_with_audio_muted"`
+		VideoStartWithVideoMuted *bool   `json:"video_start_with_video_muted"`
+		VideoDisplayName         *string `json:"video_display_name"`
+		VideoDefaultLanguage     *string `json:"video_default_language"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.userRepo.GetByID(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	if req.Name != nil {
+		user.Name = *req.Name
+	}
+	if req.Department != nil {
+		user.Department = *req.Department
+	}
+	if req.Directorate != nil {
+		user.Directorate = *req.Directorate
+	}
+	if req.Position != nil {
+		user.Position = *req.Position
+	}
+	if req.Phone != nil {
+		user.Phone = *req.Phone
+	}
+	if req.AboutMe != nil {
+		user.AboutMe = *req.AboutMe
+	}
+	if req.VideoStartWithAudioMuted != nil {
+		user.VideoStartWithAudioMuted = *req.VideoStartWithAudioMuted
+	}
+	if req.VideoStartWithVideoMuted != nil {
+		user.VideoStartWithVideoMuted = *req.VideoStartWithVideoMuted
+	}
+	if req.VideoDisplayName != nil {
+		user.VideoDisplayName = *req.VideoDisplayName
+	}
+	if req.VideoDefaultLanguage != nil {
+		user.VideoDefaultLanguage = *req.VideoDefaultLanguage
+	}
+
+	if err := h.userRepo.Update(r.Context(), user); err != nil {
+		http.Error(w, "failed to update profile", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(user)
 }
 
 // Вспомогательные функции

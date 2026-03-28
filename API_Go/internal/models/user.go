@@ -52,6 +52,18 @@ type User struct {
 	Name         string      `gorm:"type:varchar(255);not null" json:"name"`
 	PasswordHash string      `gorm:"type:varchar(255)" json:"-"`
 	AvatarURL    string      `gorm:"type:varchar(512)" json:"avatar_url"`
+	Department   string      `gorm:"type:varchar(255)" json:"department"`
+	Directorate  string      `gorm:"type:varchar(255)" json:"directorate"`
+	Position     string      `gorm:"type:varchar(255)" json:"position"`
+	Phone        string      `gorm:"type:varchar(50)" json:"phone"`
+	AboutMe      string      `gorm:"type:text" json:"about_me"`
+
+	// Video conference preferences
+	VideoStartWithAudioMuted bool   `gorm:"default:false" json:"video_start_with_audio_muted"`
+	VideoStartWithVideoMuted bool   `gorm:"default:false" json:"video_start_with_video_muted"`
+	VideoDisplayName         string `gorm:"type:varchar(255)" json:"video_display_name"`
+	VideoDefaultLanguage     string `gorm:"type:varchar(10);default:'ru'" json:"video_default_language"`
+
 	Roles        StringArray `gorm:"type:text[]" json:"roles"`
 	IsActive     bool        `gorm:"not null;default:true" json:"is_active"`
 	BannedUntil  *time.Time  `json:"banned_until,omitempty"`

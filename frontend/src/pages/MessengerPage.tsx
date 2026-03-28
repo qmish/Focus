@@ -5,6 +5,7 @@ import { useRoomsStore, type Room, type Message } from '../store/roomsStore'
 import { apiClient } from '../lib/apiClient'
 import { buildWebSocketURL, mergeMessageList } from '../lib/roomRealtime'
 import { JitsiMeeting } from '../components/JitsiMeeting'
+import ProfileModal from '../components/ProfileModal'
 import { JITSI_DOMAIN } from '../lib/config'
 
 interface ScheduledMeeting {
@@ -51,6 +52,7 @@ export default function MessengerPage() {
   })
 
   const [showRoomSettings, setShowRoomSettings] = useState(false)
+  const [showProfileModal, setShowProfileModal] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
   const [showVideoChat, setShowVideoChat] = useState(false)
   const [jitsiJWT, setJitsiJWT] = useState('')
@@ -523,7 +525,7 @@ export default function MessengerPage() {
         </div>
 
         <div className="sidebar-bottom">
-          <div className="sidebar-user" onClick={() => navigate('/profile')}>
+          <div className="sidebar-user" onClick={() => setShowProfileModal(true)} style={{ cursor: 'pointer' }}>
             <div className="sidebar-user-avatar">{getInitials(user?.name)}</div>
             <div className="sidebar-user-info">
               <span className="sidebar-user-name">{user?.name}</span>
@@ -641,6 +643,33 @@ export default function MessengerPage() {
       {showCreateModal && renderCreateModal()}
       {showScheduleModal && renderScheduleModal()}
       {showRoomSettings && currentRoom && renderSettingsModal()}
+
+      <ProfileModal
+        open={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        user={user}
+        token={token}
+        onSave={(updated) => {
+          useAuthStore.setState({
+            user: {
+              ...user,
+              id: updated.id,
+              email: updated.email,
+              name: updated.name,
+              roles: updated.roles || user?.roles || [],
+              department: updated.department,
+              directorate: updated.directorate,
+              position: updated.position,
+              phone: updated.phone,
+              about_me: updated.about_me,
+              video_start_with_audio_muted: updated.video_start_with_audio_muted,
+              video_start_with_video_muted: updated.video_start_with_video_muted,
+              video_display_name: updated.video_display_name,
+              video_default_language: updated.video_default_language,
+            },
+          })
+        }}
+      />
 
       <Outlet />
     </div>

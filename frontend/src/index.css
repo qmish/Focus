@@ -825,7 +825,21 @@ body { margin: 0; min-height: 100vh; }
   outline: none;
 }
 .form-group input:focus,
-.form-group select:focus { border-color: var(--accent); }
+.form-group select:focus,
+.form-group textarea:focus { border-color: var(--accent); }
+.form-group textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  font-family: inherit;
+}
+.profile-modal { width: 520px; }
+.profile-modal-section + .profile-modal-section { border-top: 1px solid var(--border); }
 .form-group p {
   color: var(--text-secondary);
   font-size: 0.9rem;

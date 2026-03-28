@@ -375,6 +375,7 @@ func main() {
 
 			// User info
 			r.Get("/auth/me", authHandler.Me)
+			r.Put("/auth/profile", authHandler.UpdateProfile)
 
 			// Rooms
 			r.Route("/rooms", func(r chi.Router) {

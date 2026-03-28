@@ -18,6 +18,15 @@ interface AuthUser {
   email: string
   name: string
   roles: string[]
+  department?: string
+  directorate?: string
+  position?: string
+  phone?: string
+  about_me?: string
+  video_start_with_audio_muted?: boolean
+  video_start_with_video_muted?: boolean
+  video_display_name?: string
+  video_default_language?: string
 }
 
 interface AuthState {
