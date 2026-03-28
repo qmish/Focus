@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -284,12 +286,16 @@ func getEnv(key, defaultValue string) string {
 }
 
 func getIntEnv(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		var result int
-		fmt.Sscanf(value, "%d", &result)
-		return result
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultValue
 	}
-	return defaultValue
+	intVal, err := strconv.Atoi(val)
+	if err != nil {
+		log.Printf("WARNING: invalid integer for %s=%q, using default %d: %v", key, val, defaultValue, err)
+		return defaultValue
+	}
+	return intVal
 }
 
 func getDurationEnv(key string, defaultValue time.Duration) time.Duration {

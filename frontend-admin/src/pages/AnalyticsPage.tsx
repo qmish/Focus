@@ -21,7 +21,7 @@ export default function AnalyticsPage() {
       const data = await adminApi.getAnalytics(days)
       setMessagesByDay(data.messages_by_day || [])
       setSummary(data.summary || null)
-    } catch { /* ignore */ } finally {
+    } catch (err) { console.error('AnalyticsPage:', err) } finally {
       setLoading(false)
     }
   }

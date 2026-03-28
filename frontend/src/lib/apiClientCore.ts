@@ -43,11 +43,11 @@ export async function apiRequest<T>(url: string, options: RequestOptions = {}): 
       }
 
       if (response.status === 204) {
-        return undefined as T
+        return undefined as unknown as T
       }
 
       if (typeof response.json !== 'function') {
-        return undefined as T
+        return undefined as unknown as T
       }
 
       return await response.json() as T

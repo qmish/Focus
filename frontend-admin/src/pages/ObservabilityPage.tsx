@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAdminAccessToken } from '../lib/authToken'
+import { adminApi } from '../lib/adminApi'
 import {
   authAuditStatusLabel,
   botStatusLabel,
@@ -62,31 +62,18 @@ export default function ObservabilityPage() {
   async function load() {
     setLoading(true)
     try {
-      const token = getAdminAccessToken()
-      const [webhookRes, botRes, authAuditRes, calendarAuditRes] = await Promise.all([
-        fetch('/api/v1/admin/webhooks/errors?limit=50', {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch('/api/v1/admin/bots/errors?limit=50', {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch('/api/v1/admin/auth/audit?limit=50&failed=true', {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch('/api/v1/admin/calendar/audit?limit=50&failed=true', {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+      const [webhookData, botData, authAuditData, calendarAuditData] = await Promise.all([
+        adminApi.listWebhookErrors(50).catch(() => ({ data: [] as unknown[], total: 0 })),
+        adminApi.getBotErrors(50).catch(() => ({ data: [] as unknown[], total: 0 })),
+        adminApi.listAuthAudit('limit=50&failed=true').catch(() => ({ data: [] as unknown[] })),
+        adminApi.listCalendarAudit('limit=50&failed=true').catch(() => ({ data: [] as unknown[] })),
       ])
-      const webhookData = webhookRes.ok ? await webhookRes.json() : { data: [] }
-      const botData = botRes.ok ? await botRes.json() : { data: [] }
-      const authAuditData = authAuditRes.ok ? await authAuditRes.json() : { data: [] }
-      const calendarAuditData = calendarAuditRes.ok ? await calendarAuditRes.json() : { data: [] }
-      setWebhookErrors((webhookData.data || []).filter((d: WebhookDelivery) => isDeliveryFailed(d.success)))
-      setBotErrors(botData.data || [])
-      setAuthAuditErrors(authAuditData.data || [])
-      setCalendarAuditErrors(calendarAuditData.data || [])
-    } catch (error) {
-      console.error('Failed to load observability data:', error)
+      setWebhookErrors(((webhookData.data || []) as WebhookDelivery[]).filter((d) => isDeliveryFailed(d.success)))
+      setBotErrors((botData.data || []) as BotErrorEvent[])
+      setAuthAuditErrors((authAuditData.data || []) as AuthAuditEvent[])
+      setCalendarAuditErrors((calendarAuditData.data || []) as CalendarAuditEvent[])
+    } catch (err) {
+      console.error('ObservabilityPage:', err)
       setWebhookErrors([])
       setBotErrors([])
       setAuthAuditErrors([])

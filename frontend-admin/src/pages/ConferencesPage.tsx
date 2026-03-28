@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAdminAccessToken } from '../lib/authToken'
+import { adminApi } from '../lib/adminApi'
 
 interface Conference {
   id: string
@@ -20,15 +20,10 @@ export default function ConferencesPage() {
 
   const fetchConferences = async () => {
     try {
-      const response = await fetch('/api/v1/admin/conferences', {
-        headers: {
-          'Authorization': `Bearer ${getAdminAccessToken()}`,
-        },
-      })
-      const data = await response.json()
-      setConferences(data.data || [])
-    } catch (error) {
-      console.error('Failed to fetch conferences:', error)
+      const data = await adminApi.listConferences()
+      setConferences((data.data || []) as Conference[])
+    } catch (err) {
+      console.error('ConferencesPage:', err)
     } finally {
       setLoading(false)
     }
@@ -38,15 +33,10 @@ export default function ConferencesPage() {
     if (!confirm('Завершить конференцию?')) return
 
     try {
-      await fetch(`/api/v1/admin/conferences/${id}/end`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${getAdminAccessToken()}`,
-        },
-      })
+      await adminApi.endConference(id)
       fetchConferences()
-    } catch (error) {
-      console.error('Failed to end conference:', error)
+    } catch (err) {
+      console.error('ConferencesPage:', err)
     }
   }
 

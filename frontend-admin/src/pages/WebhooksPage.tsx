@@ -22,7 +22,7 @@ export default function WebhooksPage() {
     try {
       const data = await adminApi.listWebhookDeliveries(100)
       setDeliveries((data.data || []) as Delivery[])
-    } catch { /* ignore */ } finally {
+    } catch (err) { console.error('WebhooksPage:', err) } finally {
       setLoading(false)
     }
   }
@@ -32,7 +32,7 @@ export default function WebhooksPage() {
     try {
       const data = await adminApi.listWebhookErrors(100)
       setErrors((data.data || []) as Delivery[])
-    } catch { /* ignore */ } finally {
+    } catch (err) { console.error('WebhooksPage:', err) } finally {
       setLoading(false)
     }
   }

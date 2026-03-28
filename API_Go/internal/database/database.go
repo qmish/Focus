@@ -2,11 +2,12 @@ package database
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/qmish/focus-api/internal/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // Database обёртка над GORM
@@ -21,8 +22,13 @@ func NewDatabase(cfg *config.DatabaseConfig) (*Database, error) {
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode,
 	)
 
+	gormLogLevel := gormlogger.Warn
+	if os.Getenv("ENV") == "development" || os.Getenv("GORM_LOG_LEVEL") == "info" {
+		gormLogLevel = gormlogger.Info
+	}
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: gormlogger.Default.LogMode(gormLogLevel),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)

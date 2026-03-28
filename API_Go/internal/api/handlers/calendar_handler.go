@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -303,7 +304,9 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 				link.RoomID = roomUUID
 			}
 		}
-		_ = h.meetingLinkRepo.Create(r.Context(), link)
+		if err := h.meetingLinkRepo.Create(r.Context(), link); err != nil {
+			log.Printf("WARNING: failed to create meeting link for event %s: %v", createdEvent.ID, err)
+		}
 	}
 
 	// Формируем ответ

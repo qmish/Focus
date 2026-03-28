@@ -134,7 +134,10 @@ func (w *SyncWorker) syncUserWindow(ctx context.Context, user *models.User, emai
 		link.Status = "cancelled"
 		ts := time.Now().UTC()
 		link.LastSyncAt = &ts
-		_ = w.meetingLinks.Update(ctx, link)
+		if err := w.meetingLinks.Update(ctx, link); err != nil {
+			logger.Warn("Exchange sync: failed to update cancelled meeting link",
+				zap.String("event_id", strings.TrimSpace(link.ExchangeEventID)), zap.Error(err))
+		}
 	}
 	return nil
 }

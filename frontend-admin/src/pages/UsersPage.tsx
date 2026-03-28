@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAdminStore, type User } from '../store/adminStore'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function UsersPage() {
   const {
@@ -28,6 +29,16 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean
+    title: string
+    message: string
+    confirmLabel?: string
+    inputMode?: boolean
+    inputValue: string
+    action: string
+    userId: string
+  }>({ open: false, title: '', message: '', inputValue: '', action: '', userId: '' })
 
   useEffect(() => {
     void fetchUsers(page)
@@ -40,10 +51,16 @@ export default function UsersPage() {
   }
 
   const handleBan = (userId: string) => {
-    if (confirm('Заблокировать пользователя?')) {
-      const reason = prompt('Причина блокировки', 'Нарушение правил') || 'Нарушение правил'
-      void banUser(userId, reason, 0)
-    }
+    setConfirmDialog({
+      open: true,
+      title: 'Блокировка',
+      message: 'Заблокировать пользователя?',
+      confirmLabel: 'Далее',
+      action: 'ban-confirm',
+      userId,
+      inputMode: false,
+      inputValue: '',
+    })
   }
 
   const handleUnban = (userId: string) => {
@@ -77,15 +94,59 @@ export default function UsersPage() {
   }
 
   const handleEditUser = (user: User) => {
-    const name = prompt('Новое имя пользователя', user.name)
-    if (!name || !name.trim()) return
-    void patchUser(user.id, { name: name.trim() })
+    setConfirmDialog({
+      open: true,
+      title: 'Изменить имя',
+      message: 'Введите новое имя пользователя:',
+      confirmLabel: 'Сохранить',
+      action: 'edit',
+      userId: user.id,
+      inputMode: true,
+      inputValue: user.name,
+    })
   }
 
   const handleDeleteUser = (userId: string) => {
-    if (confirm('Деактивировать пользователя?')) {
+    setConfirmDialog({
+      open: true,
+      title: 'Деактивация',
+      message: 'Деактивировать пользователя?',
+      confirmLabel: 'Деактивировать',
+      action: 'delete',
+      userId,
+      inputMode: false,
+      inputValue: '',
+    })
+  }
+
+  const handleDialogConfirm = () => {
+    const { action, userId, inputValue } = confirmDialog
+    setConfirmDialog(prev => ({ ...prev, open: false }))
+
+    if (action === 'ban-confirm') {
+      setConfirmDialog({
+        open: true,
+        title: 'Причина блокировки',
+        message: 'Укажите причину блокировки:',
+        confirmLabel: 'Заблокировать',
+        action: 'ban-reason',
+        userId,
+        inputMode: true,
+        inputValue: 'Нарушение правил',
+      })
+    } else if (action === 'ban-reason') {
+      void banUser(userId, inputValue || 'Нарушение правил', 0)
+    } else if (action === 'edit') {
+      if (inputValue.trim()) {
+        void patchUser(userId, { name: inputValue.trim() })
+      }
+    } else if (action === 'delete') {
       void deleteUser(userId)
     }
+  }
+
+  const handleDialogCancel = () => {
+    setConfirmDialog(prev => ({ ...prev, open: false }))
   }
 
   const handleCreateInvite = async () => {
@@ -217,6 +278,18 @@ export default function UsersPage() {
           ))}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        onConfirm={handleDialogConfirm}
+        onCancel={handleDialogCancel}
+        inputMode={confirmDialog.inputMode}
+        inputValue={confirmDialog.inputValue}
+        onInputChange={(val) => setConfirmDialog(prev => ({ ...prev, inputValue: val }))}
+      />
 
       {showModal && selectedUser && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>

@@ -1,4 +1,5 @@
 import { JitsiMeeting as JitsiReactMeeting } from '@jitsi/react-sdk'
+import { JITSI_DOMAIN } from '../lib/config'
 
 type BrandingConfig = {
   appName?: string
@@ -48,7 +49,7 @@ export function JitsiMeeting({
   return (
     <div className="jitsi-meeting-container">
       <JitsiReactMeeting
-        domain={domain || 'meet.focus.local:30443'}
+        domain={domain || JITSI_DOMAIN}
         roomName={roomName}
         jwt={jwt}
         configOverwrite={{

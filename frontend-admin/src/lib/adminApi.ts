@@ -13,7 +13,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const text = await response.text()
     throw new Error(text || `Request failed: ${response.status}`)
   }
-  if (response.status === 204) return undefined as T
+  if (response.status === 204) return undefined as unknown as T
   return response.json() as Promise<T>
 }
 
@@ -33,6 +33,43 @@ export type AdminInvite = {
   status: string
   expires_at: string
   invited_by: string
+}
+
+export type AdminBot = {
+  id: string
+  name: string
+  enabled: boolean
+  commands_json?: string
+  schedule_json?: string
+  created_at: string
+}
+
+export type AdminBotError = {
+  id: string
+  room_id: string
+  user_id: string
+  command: string
+  args: string
+  status: string
+  error: string
+  created_at: string
+}
+
+export type AdminAuditEntry = {
+  id: string
+  actor_email: string
+  action: string
+  resource_type: string
+  resource_id: string
+  details: string
+  created_at: string
+}
+
+export type AnalyticsSummary = {
+  total_users: number
+  total_rooms: number
+  active_meetings: number
+  messages_today: number
 }
 
 export const adminApi = {
@@ -61,7 +98,7 @@ export const adminApi = {
     }),
   resendInvite: (inviteId: string) =>
     request<{ invite: AdminInvite; inviteUrl: string; mailSent: boolean }>(`/api/v1/admin/invites/${inviteId}/resend`, { method: 'POST' }),
-  listBots: () => request<{ data: any[] }>('/api/v1/admin/bots'),
+  listBots: () => request<{ data: AdminBot[] }>('/api/v1/admin/bots'),
   createBot: (payload: Record<string, unknown>) => request('/api/v1/admin/bots', { method: 'POST', body: JSON.stringify(payload) }),
   patchBot: (botId: string, payload: Record<string, unknown>) =>
     request(`/api/v1/admin/bots/${botId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
@@ -74,13 +111,13 @@ export const adminApi = {
   getBotStats: (botId: string) =>
     request<{ total_events_24h: number; errors_24h: number; total_events: number }>(`/api/v1/admin/bots/${botId}/stats`),
   getBotErrors: (limit = 50) =>
-    request<{ data: any[]; total: number }>(`/api/v1/admin/bots/errors?limit=${limit}`),
+    request<{ data: AdminBotError[]; total: number }>(`/api/v1/admin/bots/errors?limit=${limit}`),
   testBotCommand: (payload: { handler: string; description: string; webhook_url?: string; args?: string }) =>
     request<{ result: string }>('/api/v1/admin/bots/test-command', { method: 'POST', body: JSON.stringify(payload) }),
   getCommandStats: (days = 7) =>
     request<{ data: CommandStat[]; days: number }>(`/api/v1/admin/bots/command-stats?days=${days}`),
   getCommandHistory: (params: string) =>
-    request<{ data: any[]; total: number }>(`/api/v1/admin/bots/command-history?${params}`),
+    request<{ data: AdminBotError[]; total: number }>(`/api/v1/admin/bots/command-history?${params}`),
   exportBot: (botId: string) =>
     request<Record<string, unknown>>(`/api/v1/admin/bots/${botId}/export`),
   importBot: (payload: Record<string, unknown>) =>
@@ -93,21 +130,29 @@ export const adminApi = {
   testExchangeConnection: (payload: { test_email?: string }) =>
     request('/api/v1/admin/exchange/test-connection', { method: 'POST', body: JSON.stringify(payload) }),
   listWebhookDeliveries: (limit = 50) =>
-    request<{ data: any[] }>(`/api/v1/admin/webhooks/deliveries?limit=${limit}`),
+    request<{ data: unknown[] }>(`/api/v1/admin/webhooks/deliveries?limit=${limit}`),
   listWebhookErrors: (limit = 50) =>
-    request<{ data: any[]; total: number }>(`/api/v1/admin/webhooks/errors?limit=${limit}`),
+    request<{ data: unknown[]; total: number }>(`/api/v1/admin/webhooks/errors?limit=${limit}`),
   getAnalytics: (days = 7) =>
-    request<{ summary: any; messages_by_day: { date: string; messages: number }[] }>(`/api/v1/admin/analytics?days=${days}`),
+    request<{ summary: AnalyticsSummary; messages_by_day: { date: string; messages: number }[] }>(`/api/v1/admin/analytics?days=${days}`),
   getConferencePolicies: () =>
-    request<{ configured: boolean; policies: any }>('/api/v1/admin/conference/policies'),
+    request<{ configured: boolean; policies: unknown }>('/api/v1/admin/conference/policies'),
   putConferencePolicies: (payload: Record<string, unknown>) =>
     request<{ updated: boolean }>('/api/v1/admin/conference/policies', { method: 'PUT', body: JSON.stringify(payload) }),
   listAuditLogs: (queryString = '') =>
-    request<{ data: any[]; total: number }>(`/api/v1/admin/audit?${queryString}`),
+    request<{ data: AdminAuditEntry[]; total: number }>(`/api/v1/admin/audit?${queryString}`),
   getAppearanceSettings: () =>
     request<{ configured: boolean; settings: AppearanceSettings }>('/api/v1/settings/appearance'),
   putAppearanceSettings: (payload: Partial<AppearanceSettings>) =>
     request<{ updated: boolean }>('/api/v1/admin/settings/appearance', { method: 'PUT', body: JSON.stringify(payload) }),
+  listConferences: () =>
+    request<{ data: unknown[] }>('/api/v1/admin/conferences'),
+  endConference: (id: string) =>
+    request<void>(`/api/v1/admin/conferences/${id}/end`, { method: 'POST' }),
+  listAuthAudit: (params: string) =>
+    request<{ data: unknown[] }>(`/api/v1/admin/auth/audit?${params}`),
+  listCalendarAudit: (params: string) =>
+    request<{ data: unknown[] }>(`/api/v1/admin/calendar/audit?${params}`),
 }
 
 export type AppearanceSettings = {

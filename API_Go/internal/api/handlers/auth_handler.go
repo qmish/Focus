@@ -214,7 +214,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"access_token": sessionJWT,
 		"token_type":   "Bearer",
-		"expires_in":   86400, // 24 часа
+		"expires_in":   int(h.sessionTokenLifetime.Seconds()),
 		"user": map[string]interface{}{
 			"id":        user.ID.String(),
 			"email":     user.Email,
@@ -367,7 +367,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"access_token": sessionJWT,
 		"token_type":   "Bearer",
-		"expires_in":   86400,
+		"expires_in":   int(h.sessionTokenLifetime.Seconds()),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -401,7 +401,9 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.RevokeSession(claims.SessionID, expiresAt)
 	if h.sessionRevocationRepo != nil {
-		_ = h.sessionRevocationRepo.UpsertRevokedSession(r.Context(), claims.SessionID, expiresAt)
+		if err := h.sessionRevocationRepo.UpsertRevokedSession(r.Context(), claims.SessionID, expiresAt); err != nil {
+			h.logger.Warn("failed to persist session revocation", zap.String("session_id", claims.SessionID), zap.Error(err))
+		}
 	}
 	h.recordAudit(r, "logout", "success", claims.UserID, claims.Email, "")
 
@@ -464,7 +466,7 @@ func (h *AuthHandler) recordAudit(r *http.Request, action, status, userID, userE
 	if h.authAuditRepo == nil || r == nil {
 		return
 	}
-	_ = h.authAuditRepo.CreateAuthAuditEvent(r.Context(), &models.AuthAuditEvent{
+	if err := h.authAuditRepo.CreateAuthAuditEvent(r.Context(), &models.AuthAuditEvent{
 		ID:        uuid.New(),
 		Action:    action,
 		Status:    status,
@@ -474,7 +476,9 @@ func (h *AuthHandler) recordAudit(r *http.Request, action, status, userID, userE
 		UserAgent: strings.TrimSpace(r.UserAgent()),
 		Error:     reason,
 		CreatedAt: time.Now().UTC(),
-	})
+	}); err != nil {
+		h.logger.Warn("failed to record auth audit event", zap.String("action", action), zap.Error(err))
+	}
 }
 
 func firstNonEmpty(values ...string) string {

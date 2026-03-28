@@ -5,6 +5,7 @@ import { useRoomsStore, type Room, type Message } from '../store/roomsStore'
 import { apiClient } from '../lib/apiClient'
 import { buildWebSocketURL, mergeMessageList } from '../lib/roomRealtime'
 import { JitsiMeeting } from '../components/JitsiMeeting'
+import { JITSI_DOMAIN } from '../lib/config'
 
 interface ScheduledMeeting {
   id: string
@@ -61,7 +62,7 @@ export default function MessengerPage() {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const reconnectAttemptsRef = useRef(0)
-  const jitsiDomain = import.meta.env.VITE_JITSI_DOMAIN || 'meet.focus.local:30443'
+  const jitsiDomain = JITSI_DOMAIN
 
   const pendingFileUrl = useMemo(
     () => (pendingFile && pendingFile.type.startsWith('image/') ? URL.createObjectURL(pendingFile) : ''),
@@ -113,7 +114,7 @@ export default function MessengerPage() {
             if (data.type === 'message' && data.payload?.room_id === roomId) {
               setMessages(prev => mergeMessageList(prev, data.payload))
             }
-          } catch { /* ignore parse errors */ }
+          } catch (err) { console.error('MessengerPage:', err) }
         }
 
         ws.onclose = () => {
@@ -123,7 +124,7 @@ export default function MessengerPage() {
           const delay = Math.min(5000, 500 * reconnectAttemptsRef.current)
           reconnectTimerRef.current = window.setTimeout(connect, delay)
         }
-      } catch { /* ignore */ }
+      } catch (err) { console.error('MessengerPage:', err) }
     }
 
     connect()
@@ -145,7 +146,7 @@ export default function MessengerPage() {
       try {
         const branding = await apiClient.get<Record<string, unknown>>('/api/v1/branding/jitsi')
         setJitsiBranding(branding)
-      } catch { /* ignore */ }
+      } catch (err) { console.error('MessengerPage:', err) }
     } catch {
       setError('Не удалось загрузить комнату')
     }
@@ -280,7 +281,7 @@ export default function MessengerPage() {
       setNewRoomType('public')
       setShowCreateModal(false)
       navigate(`/rooms/${room.id}`)
-    } catch { /* ignore */ }
+    } catch (err) { console.error('MessengerPage:', err) }
   }, [newRoomName, newRoomType, createRoom, navigate])
 
   const openScheduledMeeting = (meeting: ScheduledMeeting) => {
@@ -298,7 +299,7 @@ export default function MessengerPage() {
     try {
       await deleteRoom(id)
       if (roomId === id) navigate('/rooms')
-    } catch { /* ignore */ }
+    } catch (err) { console.error('MessengerPage:', err) }
   }
 
   const selectRoom = useCallback((room: Room) => {

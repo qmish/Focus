@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,11 +20,13 @@ import (
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/repository"
 	"github.com/qmish/focus-api/internal/webhooks"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // AdminHandler обработчики для админ-панели
 type AdminHandler struct {
+	logger               *zap.Logger
 	userRepo             adminUserRepository
 	roomRepo             adminRoomRepository
 	messageRepo          adminMessageRepository
@@ -142,6 +143,11 @@ func NewAdminHandler(userRepo adminUserRepository, roomRepo adminRoomRepository)
 	}
 }
 
+// SetLogger sets optional structured logger.
+func (h *AdminHandler) SetLogger(l *zap.Logger) {
+	h.logger = l
+}
+
 // SetWebhookRepository sets optional webhook repository for admin visibility endpoints.
 func (h *AdminHandler) SetWebhookRepository(webhookRepo adminWebhookRepository) {
 	h.webhookRepo = webhookRepo
@@ -198,7 +204,9 @@ func (h *AdminHandler) reloadBotEngineInMemory(ctx context.Context) {
 		return
 	}
 	if err := h.botConfigReloader.ReloadSettings(ctx); err != nil {
-		log.Printf("admin: bot engine reload after settings change: %v", err)
+		if h.logger != nil {
+			h.logger.Error("bot engine reload after settings change failed", zap.Error(err))
+		}
 	}
 }
 
@@ -221,7 +229,7 @@ func (h *AdminHandler) recordAudit(ctx context.Context, email, action, resourceT
 	if h.auditLogRepo == nil {
 		return
 	}
-	_ = h.auditLogRepo.Create(ctx, &models.AuditLog{
+	if err := h.auditLogRepo.Create(ctx, &models.AuditLog{
 		ID:           uuid.New(),
 		ActorEmail:   email,
 		Action:       action,
@@ -229,7 +237,9 @@ func (h *AdminHandler) recordAudit(ctx context.Context, email, action, resourceT
 		ResourceID:   resourceID,
 		Details:      details,
 		CreatedAt:    time.Now().UTC(),
-	})
+	}); err != nil && h.logger != nil {
+		h.logger.Warn("failed to record admin audit log", zap.String("action", action), zap.Error(err))
+	}
 }
 // ListUsers GET /api/v1/admin/users
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {

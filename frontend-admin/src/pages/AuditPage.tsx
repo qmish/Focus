@@ -42,7 +42,7 @@ export default function AuditPage() {
       const data = await adminApi.listAuditLogs(params.toString())
       setEntries((data.data || []) as AuditEntry[])
       setTotal(data.total || 0)
-    } catch { /* ignore */ } finally {
+    } catch (err) { console.error('AuditPage:', err) } finally {
       setLoading(false)
     }
   }

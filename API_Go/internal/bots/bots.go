@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -407,7 +408,7 @@ func (e *BotEngine) recordCommandEvent(ctx context.Context, roomID, userID, comm
 	if e.eventStore == nil {
 		return
 	}
-	_ = e.eventStore.CreateCommandEvent(ctx, &BotCommandEvent{
+	if err := e.eventStore.CreateCommandEvent(ctx, &BotCommandEvent{
 		ID:        uuid.New(),
 		RoomID:    roomID,
 		UserID:    userID,
@@ -416,7 +417,9 @@ func (e *BotEngine) recordCommandEvent(ctx context.Context, roomID, userID, comm
 		Status:    status,
 		Error:     errText,
 		CreatedAt: e.now().UTC(),
-	})
+	}); err != nil {
+		log.Printf("WARNING: failed to record bot command event command=%s: %v", command, err)
+	}
 }
 
 func (e *BotEngine) sendResponse(ctx context.Context, roomID, content string) error {

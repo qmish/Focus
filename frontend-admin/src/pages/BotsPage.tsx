@@ -89,18 +89,18 @@ export default function BotsPage() {
     try {
       const data = await adminApi.listBots()
       setBots((data.data || []) as BotRow[])
-    } catch (err: any) { setError(err.message || 'Не удалось загрузить ботов') }
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось загрузить ботов') }
     finally { setLoading(false) }
   }, [])
 
   const loadErrors = async () => {
-    try { const data = await adminApi.getBotErrors(50); setErrors((data.data || []) as BotError[]) } catch { /* ignore */ }
+    try { const data = await adminApi.getBotErrors(50); setErrors((data.data || []) as BotError[]) } catch (err) { console.error('BotsPage:', err) }
   }
   const loadStats = async () => {
-    try { const data = await adminApi.getBotStats('all'); setStats(data) } catch { /* ignore */ }
+    try { const data = await adminApi.getBotStats('all'); setStats(data) } catch (err) { console.error('BotsPage:', err) }
   }
   const loadCommandStats = async () => {
-    try { const data = await adminApi.getCommandStats(7); setCommandStats(data.data || []) } catch { /* ignore */ }
+    try { const data = await adminApi.getCommandStats(7); setCommandStats(data.data || []) } catch (err) { console.error('BotsPage:', err) }
   }
   const loadHistory = async () => {
     try {
@@ -109,10 +109,10 @@ export default function BotsPage() {
       if (historyFilter.status) params.set('status', historyFilter.status)
       const data = await adminApi.getCommandHistory(params.toString())
       setHistory((data.data || []) as BotError[]); setHistoryTotal(data.total || 0)
-    } catch { /* ignore */ }
+    } catch (err) { console.error('BotsPage:', err) }
   }
   const loadTemplates = async () => {
-    try { const data = await adminApi.listBotTemplates(); setTemplates(data.data || []) } catch { /* ignore */ }
+    try { const data = await adminApi.listBotTemplates(); setTemplates(data.data || []) } catch (err) { console.error('BotsPage:', err) }
   }
 
   useEffect(() => { void load(); void loadStats() }, [load])
@@ -128,18 +128,18 @@ export default function BotsPage() {
     try {
       await adminApi.createBot({ name: name.trim(), description: description.trim(), is_enabled: true, rate_limit_ms: 2000, allowed_rooms: [], commands_json: '[]', schedule_json: '[]' })
       setName(''); setDescription(''); await load(); showSuccess('Бот создан')
-    } catch (err: any) { setError(err.message || 'Не удалось создать бота') }
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось создать бота') }
   }
 
   const toggle = async (bot: BotRow) => {
     try { await adminApi.toggleBot(bot.id, !bot.is_enabled); await load() }
-    catch (err: any) { setError(err.message || 'Не удалось обновить бота') }
+    catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось обновить бота') }
   }
 
   const deleteBot = async (bot: BotRow) => {
     if (!confirm(`Удалить бота "${bot.name}"?`)) return
     try { await adminApi.deleteBot(bot.id); setExpandedId(null); await load(); showSuccess('Бот удалён') }
-    catch (err: any) { setError(err.message || 'Не удалось удалить бота') }
+    catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось удалить бота') }
   }
 
   const saveEdit = async (botId: string) => {
@@ -154,12 +154,12 @@ export default function BotsPage() {
       payload.commands_json = JSON.stringify(editCommands)
       await adminApi.patchBot(botId, payload)
       setExpandedId(null); setEditData({}); setEditCommands([]); await load(); showSuccess('Бот обновлён')
-    } catch (err: any) { setError(err.message || 'Не удалось обновить бота') }
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось обновить бота') }
   }
 
   const reloadConfig = async () => {
     try { await adminApi.reloadBotConfig(); showSuccess('Конфигурация перезагружена') }
-    catch (err: any) { setError(err.message || 'Не удалось перезагрузить конфигурацию') }
+    catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось перезагрузить конфигурацию') }
   }
 
   const expand = (bot: BotRow) => {
@@ -190,7 +190,7 @@ export default function BotsPage() {
       const data = await adminApi.testBotCommand({ handler: cmd.handler, description: cmd.description, webhook_url: cmd.webhook_url, args: 'test' })
       setTestResult(data.result)
       setTimeout(() => setTestResult(null), 5000)
-    } catch (err: any) { setError(err.message || 'Не удалось протестировать') }
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось протестировать') }
   }
 
   const exportBot = async (bot: BotRow) => {
@@ -200,7 +200,7 @@ export default function BotsPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = `bot-${bot.name}.json`; a.click()
       URL.revokeObjectURL(url)
-    } catch (err: any) { setError(err.message || 'Не удалось экспортировать') }
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось экспортировать') }
   }
 
   const importBot = async () => {
@@ -212,7 +212,7 @@ export default function BotsPage() {
         const text = await file.text()
         const data = JSON.parse(text)
         await adminApi.importBot(data); await load(); showSuccess('Бот импортирован')
-      } catch (err: any) { setError(err.message || 'Не удалось импортировать') }
+      } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось импортировать') }
     }
     input.click()
   }
@@ -225,7 +225,7 @@ export default function BotsPage() {
         allowed_rooms: [], commands_json: tmpl.commands_json, schedule_json: tmpl.schedule_json || '[]',
       })
       await load(); setTab('list'); showSuccess(`Бот "${tmpl.name}" создан из шаблона`)
-    } catch (err: any) { setError(err.message || 'Не удалось создать из шаблона') }
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Не удалось создать из шаблона') }
   }
 
   const exportCSV = () => {
