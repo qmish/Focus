@@ -49,6 +49,19 @@ function parseCommands(json: string): BotCommand[] {
   }
 }
 
+function escapeCSV(value: string): string {
+  if (value == null) return ''
+  const str = String(value)
+  const escaped = str.replace(/"/g, '""')
+  if (/[,"\n\r]/.test(escaped) || /^[=+\-@\t\r]/.test(escaped)) {
+    return `"\t${escaped}"`
+  }
+  if (/[,"\n]/.test(str)) {
+    return `"${escaped}"`
+  }
+  return escaped
+}
+
 export default function BotsPage() {
   const [bots, setBots] = useState<BotRow[]>([])
   const [errors, setErrors] = useState<BotError[]>([])
@@ -217,7 +230,7 @@ export default function BotsPage() {
 
   const exportCSV = () => {
     const header = 'Время,Команда,Аргументы,Статус,Ошибка,Room ID,User ID\n'
-    const rows = history.map(e => `"${new Date(e.created_at).toLocaleString('ru')}","/${e.command}","${e.args || ''}","${e.status}","${e.error || ''}","${e.room_id}","${e.user_id}"`).join('\n')
+    const rows = history.map(e => [new Date(e.created_at).toLocaleString('ru'), '/' + e.command, e.args || '', e.status, e.error || '', e.room_id, e.user_id].map(v => escapeCSV(v)).join(',')).join('\n')
     const blob = new Blob([header + rows], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'bot-history.csv'; a.click()

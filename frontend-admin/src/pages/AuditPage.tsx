@@ -11,6 +11,19 @@ type AuditEntry = {
   created_at: string
 }
 
+function escapeCSV(value: string): string {
+  if (value == null) return ''
+  const str = String(value)
+  const escaped = str.replace(/"/g, '""')
+  if (/[,"\n\r]/.test(escaped) || /^[=+\-@\t\r]/.test(escaped)) {
+    return `"\t${escaped}"`
+  }
+  if (/[,"\n]/.test(str)) {
+    return `"${escaped}"`
+  }
+  return escaped
+}
+
 export default function AuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [total, setTotal] = useState(0)
@@ -39,7 +52,7 @@ export default function AuditPage() {
   const exportCSV = () => {
     const header = 'Время,Актор,Действие,Тип ресурса,ID ресурса,Детали\n'
     const rows = entries.map(e =>
-      `"${new Date(e.created_at).toLocaleString('ru')}","${e.actor_email}","${e.action}","${e.resource_type}","${e.resource_id}","${e.details}"`
+      [new Date(e.created_at).toLocaleString('ru'), e.actor_email, e.action, e.resource_type, e.resource_id, e.details].map(v => escapeCSV(v)).join(',')
     ).join('\n')
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)

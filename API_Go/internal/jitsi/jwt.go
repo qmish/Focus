@@ -106,6 +106,9 @@ func (g *TokenGenerator) GenerateRoomURL(roomName string, user UserContext) (str
 // ValidateToken проверяет JWT токен
 func (g *TokenGenerator) ValidateToken(tokenString string) (*JitsiClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JitsiClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return []byte(g.config.AppSecret), nil
 	})
 	if err != nil {

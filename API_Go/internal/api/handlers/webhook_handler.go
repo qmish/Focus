@@ -28,7 +28,7 @@ func (h *InboundWebhookHandler) JitsiWebhook(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	payload, err := io.ReadAll(r.Body)
+	payload, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		http.Error(w, "failed to read payload", http.StatusBadRequest)
 		return

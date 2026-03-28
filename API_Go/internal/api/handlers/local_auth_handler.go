@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +14,34 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var (
+	regLimiterMu sync.Mutex
+	regLimiter   = make(map[string][]time.Time)
+)
+
+func isRegistrationRateLimited(ip string) bool {
+	regLimiterMu.Lock()
+	defer regLimiterMu.Unlock()
+
+	now := time.Now()
+	window := now.Add(-1 * time.Minute)
+
+	timestamps := regLimiter[ip]
+	valid := timestamps[:0]
+	for _, t := range timestamps {
+		if t.After(window) {
+			valid = append(valid, t)
+		}
+	}
+	regLimiter[ip] = valid
+
+	if len(valid) >= 5 {
+		return true
+	}
+	regLimiter[ip] = append(valid, now)
+	return false
+}
 
 type LocalAuthHandler struct {
 	userRepo      *repository.UserRepository
@@ -36,6 +65,15 @@ func NewLocalAuthHandler(
 }
 
 func (h *LocalAuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	ip := r.RemoteAddr
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = strings.Split(fwd, ",")[0]
+	}
+	if isRegistrationRateLimited(strings.TrimSpace(ip)) {
+		http.Error(w, "too many registration attempts, try again later", http.StatusTooManyRequests)
+		return
+	}
+
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`

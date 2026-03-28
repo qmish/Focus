@@ -121,7 +121,7 @@ export default function UsersPage() {
         </div>
         <div className="form-group">
           <label>Пароль (опционально)</label>
-          <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
         </div>
         <button className="primary" onClick={handleCreateUser}>Создать</button>
       </div>

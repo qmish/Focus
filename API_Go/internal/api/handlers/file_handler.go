@@ -7,12 +7,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/auth"
 )
+
+var validExtRe = regexp.MustCompile(`^\.[a-zA-Z0-9]{1,10}$`)
 
 const maxUploadSize = 50 << 20 // 50 MB
 
@@ -50,6 +53,10 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	fileID := uuid.New().String()
 	ext := filepath.Ext(header.Filename)
+	if !validExtRe.MatchString(ext) {
+		http.Error(w, "invalid file extension", http.StatusBadRequest)
+		return
+	}
 	storedName := fileID + ext
 
 	dstPath := filepath.Join(h.uploadDir, storedName)
