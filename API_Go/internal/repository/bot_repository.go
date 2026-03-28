@@ -134,6 +134,45 @@ type CommandStat struct {
 	Count   int64  `json:"count"`
 }
 
+// BotEventCounts holds aggregated event counts for the bot stats endpoint.
+type BotEventCounts struct {
+	Total  int64
+	Errors int64
+}
+
+// CountCommandEventsSince returns total and error counts since the given time.
+func (r *BotRepository) CountCommandEventsSince(ctx context.Context, since time.Time) (BotEventCounts, error) {
+	type row struct {
+		Status string
+		Count  int64
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).
+		Model(&bots.BotCommandEvent{}).
+		Select("status, count(*) as count").
+		Where("created_at >= ?", since).
+		Group("status").
+		Find(&rows).Error
+	if err != nil {
+		return BotEventCounts{}, err
+	}
+	var counts BotEventCounts
+	for _, r := range rows {
+		counts.Total += r.Count
+		if r.Status == "failed" || r.Status == "permission_denied" || r.Status == "rate_limited" {
+			counts.Errors += r.Count
+		}
+	}
+	return counts, nil
+}
+
+// CountCommandEventsAll returns total event count (all time).
+func (r *BotRepository) CountCommandEventsAll(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&bots.BotCommandEvent{}).Count(&count).Error
+	return count, err
+}
+
 // CreateReminder creates a new bot reminder.
 func (r *BotRepository) CreateReminder(ctx context.Context, reminder *models.BotReminder) error {
 	return r.db.WithContext(ctx).Create(reminder).Error

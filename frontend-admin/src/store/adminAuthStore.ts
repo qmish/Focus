@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import Keycloak from 'keycloak-js'
+import { initKeycloak } from '../lib/keycloakInit'
 
 const ADMIN_TOKEN_KEY = 'admin_token'
 const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || ''
@@ -36,7 +37,7 @@ interface AdminAuthState {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
-let initPromise: Promise<void> | null = null
+let storeInitPromise: Promise<void> | null = null
 
 export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
   keycloak: null,
@@ -47,8 +48,8 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
   keycloakAvailable: !!KEYCLOAK_URL,
 
   init: async () => {
-    if (initPromise) return initPromise
-    initPromise = (async () => {
+    if (storeInitPromise) return storeInitPromise
+    storeInitPromise = (async () => {
     const saved = localStorage.getItem(ADMIN_TOKEN_KEY)
     if (saved) {
       try {
@@ -69,10 +70,7 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
 
     if (keycloak) {
       try {
-        const authenticated = await keycloak.init({
-          pkceMethod: 'S256',
-          checkLoginIframe: false,
-        })
+        const authenticated = await initKeycloak(keycloak)
 
         if (authenticated && keycloak.idToken) {
           try {
@@ -114,7 +112,7 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
 
     set({ isLoading: false })
     })()
-    return initPromise!
+    return storeInitPromise!
   },
 
   loginLocal: async (email: string, password: string) => {

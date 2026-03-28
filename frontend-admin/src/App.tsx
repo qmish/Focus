@@ -1,20 +1,21 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAdminAuthStore } from './store/adminAuthStore'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
-import DashboardPage from './pages/DashboardPage'
-import UsersPage from './pages/UsersPage'
-import ConferencesPage from './pages/ConferencesPage'
-import SettingsPage from './pages/SettingsPage'
-import ObservabilityPage from './pages/ObservabilityPage'
-import LoginPage from './pages/LoginPage'
-import BotsPage from './pages/BotsPage'
-import IntegrationsPage from './pages/IntegrationsPage'
-import AuditPage from './pages/AuditPage'
-import WebhooksPage from './pages/WebhooksPage'
-import ConferencePoliciesPage from './pages/ConferencePoliciesPage'
-import AnalyticsPage from './pages/AnalyticsPage'
+
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const UsersPage = lazy(() => import('./pages/UsersPage'))
+const ConferencesPage = lazy(() => import('./pages/ConferencesPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'))
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const BotsPage = lazy(() => import('./pages/BotsPage'))
+const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'))
+const AuditPage = lazy(() => import('./pages/AuditPage'))
+const WebhooksPage = lazy(() => import('./pages/WebhooksPage'))
+const ConferencePoliciesPage = lazy(() => import('./pages/ConferencePoliciesPage'))
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
 
 function AdminApp() {
   const init = useAdminAuthStore(s => s.init)
@@ -23,6 +24,7 @@ function AdminApp() {
   return (
     <BrowserRouter>
       <ErrorBoundary>
+      <Suspense fallback={<div className="loading">Загрузка...</div>}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         
@@ -41,6 +43,7 @@ function AdminApp() {
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>
+      </Suspense>
       </ErrorBoundary>
     </BrowserRouter>
   )

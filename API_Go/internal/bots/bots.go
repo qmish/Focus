@@ -173,6 +173,14 @@ func NewBotEngine() *BotEngine {
 
 	engine.registerBuiltinBots()
 
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			engine.cleanupRateLimits()
+		}
+	}()
+
 	return engine
 }
 
@@ -933,6 +941,17 @@ func (e *BotEngine) isRateLimitedWithWindow(userID string, window time.Duration)
 	}
 	e.lastCommandAt[userID] = now
 	return false
+}
+
+func (e *BotEngine) cleanupRateLimits() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	cutoff := time.Now().Add(-e.rateLimitWindow)
+	for k, v := range e.lastCommandAt {
+		if v.Before(cutoff) {
+			delete(e.lastCommandAt, k)
+		}
+	}
 }
 
 func normalizeMeetingTitle(args string) string {

@@ -3,6 +3,7 @@ package exchange
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,6 +81,9 @@ func (w *SyncWorker) syncOnce(ctx context.Context) {
 	now := time.Now().UTC()
 	from := now.Add(-w.lookback)
 	to := now.Add(w.lookahead)
+
+	sem := make(chan struct{}, 5)
+	var wg sync.WaitGroup
 	for _, user := range users {
 		if user == nil || !user.IsActive {
 			continue
@@ -88,10 +92,16 @@ func (w *SyncWorker) syncOnce(ctx context.Context) {
 		if email == "" {
 			continue
 		}
-		if err := w.syncUserWindow(ctx, user, email, from, to); err != nil {
-			logger.Warn("Exchange sync: user sync failed", zap.String("email", email), zap.Error(err))
-		}
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(u *models.User, email string) {
+			defer func() { <-sem; wg.Done() }()
+			if err := w.syncUserWindow(ctx, u, email, from, to); err != nil {
+				logger.Warn("Exchange sync: user sync failed", zap.String("email", email), zap.Error(err))
+			}
+		}(user, email)
 	}
+	wg.Wait()
 }
 
 func (w *SyncWorker) syncUserWindow(ctx context.Context, user *models.User, email string, from, to time.Time) error {

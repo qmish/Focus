@@ -65,8 +65,8 @@ func (h *RoomHandler) ListRooms(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Получаем общее количество
-	total, err := h.roomRepo.Count(r.Context())
+	// Получаем общее количество комнат пользователя
+	total, err := h.roomRepo.CountByParticipant(r.Context(), userID)
 	if err != nil {
 		http.Error(w, "failed to count rooms", http.StatusInternalServerError)
 		return

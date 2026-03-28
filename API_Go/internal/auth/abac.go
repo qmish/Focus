@@ -86,6 +86,27 @@ func RequireABAC(engine ABACPolicyEngine, action string, resourceResolver func(*
 	}
 }
 
+// HasRole checks whether the session claims contain the given role.
+// For the "admin" role it also accepts the "focus.admin" scope.
+func HasRole(claims *SessionClaims, role string) bool {
+	if claims == nil {
+		return false
+	}
+	for _, r := range claims.Roles {
+		if r == role {
+			return true
+		}
+	}
+	if role == "admin" {
+		for _, scope := range claims.AllScopes() {
+			if scope == "focus.admin" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func hasRole(roles []string, required string) bool {
 	for _, role := range roles {
 		if role == required {

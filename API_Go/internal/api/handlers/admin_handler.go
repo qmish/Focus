@@ -60,10 +60,12 @@ type adminRoomRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Room, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 	CountParticipants(ctx context.Context, roomID uuid.UUID) (int64, error)
+	ListMeetingsWithParticipantCounts(ctx context.Context, limit, offset int) ([]repository.RoomWithParticipantCount, error)
 }
 
 type adminMessageRepository interface {
 	CountSince(ctx context.Context, since time.Time) (int64, error)
+	CountByDay(ctx context.Context, since time.Time) ([]repository.DayMessageCount, error)
 }
 
 type adminInviteRepository interface {
@@ -105,6 +107,8 @@ type adminBotRepository interface {
 	ListCommandEvents(ctx context.Context, limit int, onlyFailed bool) ([]*bots.BotCommandEvent, error)
 	ListCommandEventsFiltered(ctx context.Context, limit, offset int, command, userID, roomID, status string, since time.Time) ([]*bots.BotCommandEvent, int64, error)
 	ListCommandStatsGrouped(ctx context.Context, since time.Time) ([]repository.CommandStat, error)
+	CountCommandEventsSince(ctx context.Context, since time.Time) (repository.BotEventCounts, error)
+	CountCommandEventsAll(ctx context.Context) (int64, error)
 }
 
 type adminAuthAuditRepository interface {
@@ -231,7 +235,7 @@ func (h *AdminHandler) recordAudit(ctx context.Context, email, action, resourceT
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -281,7 +285,7 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -311,7 +315,7 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -355,7 +359,7 @@ func (h *AdminHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 // CreateUser POST /api/v1/admin/users
 func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -414,7 +418,7 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 // PatchUser PATCH /api/v1/admin/users/:id
 func (h *AdminHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -480,7 +484,7 @@ func (h *AdminHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 // DeleteUser DELETE /api/v1/admin/users/:id
 func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -501,7 +505,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 // CreateInvite POST /api/v1/admin/invites
 func (h *AdminHandler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -567,7 +571,7 @@ func (h *AdminHandler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 // ListInvites GET /api/v1/admin/invites
 func (h *AdminHandler) ListInvites(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -603,7 +607,7 @@ func (h *AdminHandler) ListInvites(w http.ResponseWriter, r *http.Request) {
 // ResendInvite POST /api/v1/admin/invites/:id/resend
 func (h *AdminHandler) ResendInvite(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -708,7 +712,7 @@ func (h *AdminHandler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -771,7 +775,7 @@ func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) UnbanUser(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -811,7 +815,7 @@ func (h *AdminHandler) UnbanUser(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) ListConferences(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -833,7 +837,7 @@ func (h *AdminHandler) ListConferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rooms, err := h.roomRepo.List(r.Context(), perPage, offset)
+	meetings, err := h.roomRepo.ListMeetingsWithParticipantCounts(r.Context(), perPage, offset)
 	if err != nil {
 		http.Error(w, "failed to list conferences", http.StatusInternalServerError)
 		return
@@ -850,24 +854,16 @@ func (h *AdminHandler) ListConferences(w http.ResponseWriter, r *http.Request) {
 		Status            string    `json:"status"`
 	}
 
-	conferences := make([]conferenceInfo, 0, len(rooms))
-	for _, room := range rooms {
-		if room == nil || room.Type != models.RoomTypeMeeting {
-			continue
-		}
-		participantsCount, err := h.roomRepo.CountParticipants(r.Context(), room.ID)
-		if err != nil {
-			participantsCount = 0
-		}
-
+	conferences := make([]conferenceInfo, 0, len(meetings))
+	for _, m := range meetings {
 		conferences = append(conferences, conferenceInfo{
-			ID:                room.ID.String(),
-			RoomID:            room.ID.String(),
-			RoomName:          room.Name,
-			JitsiRoom:         room.JitsiRoomName,
-			ParticipantsCount: participantsCount,
-			StartedAt:         room.CreatedAt,
-			LastActivityAt:    room.UpdatedAt,
+			ID:                m.ID.String(),
+			RoomID:            m.ID.String(),
+			RoomName:          m.Name,
+			JitsiRoom:         m.JitsiRoomName,
+			ParticipantsCount: m.ParticipantsCount,
+			StartedAt:         m.CreatedAt,
+			LastActivityAt:    m.UpdatedAt,
 			Status:            "active",
 		})
 	}
@@ -884,7 +880,7 @@ func (h *AdminHandler) ListConferences(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) EndConference(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -940,7 +936,7 @@ func (h *AdminHandler) EndConference(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -984,7 +980,7 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 // GetExchangeSettings GET /api/v1/admin/exchange/settings
 func (h *AdminHandler) GetExchangeSettings(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1033,7 +1029,7 @@ func (h *AdminHandler) GetExchangeSettings(w http.ResponseWriter, r *http.Reques
 // PutExchangeSettings PUT /api/v1/admin/exchange/settings
 func (h *AdminHandler) PutExchangeSettings(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1123,7 +1119,7 @@ func (h *AdminHandler) PutExchangeSettings(w http.ResponseWriter, r *http.Reques
 // TestExchangeConnection POST /api/v1/admin/exchange/test-connection
 func (h *AdminHandler) TestExchangeConnection(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1180,7 +1176,7 @@ func (h *AdminHandler) TestExchangeConnection(w http.ResponseWriter, r *http.Req
 // ListBots GET /api/v1/admin/bots
 func (h *AdminHandler) ListBots(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1201,7 +1197,7 @@ func (h *AdminHandler) ListBots(w http.ResponseWriter, r *http.Request) {
 // CreateBot POST /api/v1/admin/bots
 func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1265,7 +1261,7 @@ func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 // PatchBot PATCH /api/v1/admin/bots/:id
 func (h *AdminHandler) PatchBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1340,7 +1336,7 @@ func (h *AdminHandler) PatchBot(w http.ResponseWriter, r *http.Request) {
 // SetBotEnabled POST /api/v1/admin/bots/:id/enable|disable
 func (h *AdminHandler) SetBotEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1387,7 +1383,7 @@ func (h *AdminHandler) DisableBot(w http.ResponseWriter, r *http.Request) {
 // DeleteBot DELETE /api/v1/admin/bots/:id
 func (h *AdminHandler) DeleteBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1412,7 +1408,7 @@ func (h *AdminHandler) DeleteBot(w http.ResponseWriter, r *http.Request) {
 // ReloadBotConfig POST /api/v1/admin/bots/reload
 func (h *AdminHandler) ReloadBotConfig(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1433,7 +1429,7 @@ func (h *AdminHandler) ReloadBotConfig(w http.ResponseWriter, r *http.Request) {
 // GetBotStats GET /api/v1/admin/bots/:id/stats
 func (h *AdminHandler) GetBotStats(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1442,34 +1438,25 @@ func (h *AdminHandler) GetBotStats(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"total_events": 0, "errors": 0})
 		return
 	}
-	allEvents, err := h.botRepo.ListCommandEvents(r.Context(), 1000, false)
+	since24h := time.Now().Add(-24 * time.Hour)
+	counts, err := h.botRepo.CountCommandEventsSince(r.Context(), since24h)
 	if err != nil {
 		http.Error(w, "failed to get bot stats", http.StatusInternalServerError)
 		return
 	}
-	since24h := time.Now().Add(-24 * time.Hour)
-	totalLast24h := 0
-	errorsLast24h := 0
-	for _, e := range allEvents {
-		if e.CreatedAt.After(since24h) {
-			totalLast24h++
-			if e.Status == "failed" || e.Status == "permission_denied" || e.Status == "rate_limited" {
-				errorsLast24h++
-			}
-		}
-	}
+	totalAll, _ := h.botRepo.CountCommandEventsAll(r.Context())
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"total_events_24h": totalLast24h,
-		"errors_24h":       errorsLast24h,
-		"total_events":     len(allEvents),
+		"total_events_24h": counts.Total,
+		"errors_24h":       counts.Errors,
+		"total_events":     totalAll,
 	})
 }
 
 // ListWebhookDeliveries GET /api/v1/admin/webhooks/deliveries
 func (h *AdminHandler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1498,7 +1485,7 @@ func (h *AdminHandler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Requ
 // ListWebhookErrors GET /api/v1/admin/webhooks/errors
 func (h *AdminHandler) ListWebhookErrors(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1533,7 +1520,7 @@ func (h *AdminHandler) ListWebhookErrors(w http.ResponseWriter, r *http.Request)
 // ListBotErrors GET /api/v1/admin/bots/errors
 func (h *AdminHandler) ListBotErrors(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1568,7 +1555,7 @@ func (h *AdminHandler) ListBotErrors(w http.ResponseWriter, r *http.Request) {
 // TestBotCommand POST /api/v1/admin/bots/test-command
 func (h *AdminHandler) TestBotCommand(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1620,7 +1607,7 @@ func (h *AdminHandler) TestBotCommand(w http.ResponseWriter, r *http.Request) {
 // GetCommandStats GET /api/v1/admin/bots/command-stats
 func (h *AdminHandler) GetCommandStats(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1646,7 +1633,7 @@ func (h *AdminHandler) GetCommandStats(w http.ResponseWriter, r *http.Request) {
 // ListCommandHistory GET /api/v1/admin/bots/command-history
 func (h *AdminHandler) ListCommandHistory(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1680,7 +1667,7 @@ func (h *AdminHandler) ListCommandHistory(w http.ResponseWriter, r *http.Request
 // ExportBot GET /api/v1/admin/bots/:id/export
 func (h *AdminHandler) ExportBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1721,7 +1708,7 @@ func (h *AdminHandler) ExportBot(w http.ResponseWriter, r *http.Request) {
 // ImportBot POST /api/v1/admin/bots/import
 func (h *AdminHandler) ImportBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1785,7 +1772,7 @@ func (h *AdminHandler) ImportBot(w http.ResponseWriter, r *http.Request) {
 // ListBotTemplates GET /api/v1/admin/bots/templates
 func (h *AdminHandler) ListBotTemplates(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1844,7 +1831,7 @@ func (h *AdminHandler) ListBotTemplates(w http.ResponseWriter, r *http.Request) 
 // ListAuthAuditEvents GET /api/v1/admin/auth/audit
 func (h *AdminHandler) ListAuthAuditEvents(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1879,7 +1866,7 @@ func (h *AdminHandler) ListAuthAuditEvents(w http.ResponseWriter, r *http.Reques
 // ListCalendarAuditEvents GET /api/v1/admin/calendar/audit
 func (h *AdminHandler) ListCalendarAuditEvents(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1912,7 +1899,7 @@ func (h *AdminHandler) ListCalendarAuditEvents(w http.ResponseWriter, r *http.Re
 // GetAnalytics GET /api/v1/admin/analytics
 func (h *AdminHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1928,22 +1915,24 @@ func (h *AdminHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 		Date     string `json:"date"`
 		Messages int64  `json:"messages"`
 	}
+
+	since := time.Date(now.Year(), now.Month(), now.Day()-(days-1), 0, 0, 0, 0, now.Location())
+
+	dayCountMap := make(map[string]int64, days)
+	if h.messageRepo != nil {
+		dayCounts, _ := h.messageRepo.CountByDay(ctx, since)
+		for _, dc := range dayCounts {
+			dayCountMap[dc.Date] = dc.Count
+		}
+	}
+
 	messageDays := make([]DayStats, 0, days)
 	for i := days - 1; i >= 0; i-- {
 		dayStart := time.Date(now.Year(), now.Month(), now.Day()-i, 0, 0, 0, 0, now.Location())
-		dayEnd := dayStart.Add(24 * time.Hour)
-		var count int64
-		if h.messageRepo != nil {
-			startCount, _ := h.messageRepo.CountSince(ctx, dayStart)
-			endCount, _ := h.messageRepo.CountSince(ctx, dayEnd)
-			count = startCount - endCount
-			if count < 0 {
-				count = startCount
-			}
-		}
+		dateKey := dayStart.Format("2006-01-02")
 		messageDays = append(messageDays, DayStats{
-			Date:     dayStart.Format("2006-01-02"),
-			Messages: count,
+			Date:     dateKey,
+			Messages: dayCountMap[dateKey],
 		})
 	}
 
@@ -1955,10 +1944,8 @@ func (h *AdminHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 		totalRooms, _ = h.roomRepo.Count(ctx)
 		activeMeetings, _ = h.roomRepo.CountByType(ctx, models.RoomTypeMeeting)
 	}
-	if h.messageRepo != nil {
-		startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		messagesToday, _ = h.messageRepo.CountSince(ctx, startOfDay)
-	}
+	todayKey := now.Format("2006-01-02")
+	messagesToday = dayCountMap[todayKey]
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1975,7 +1962,7 @@ func (h *AdminHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 // GetConferencePolicies GET /api/v1/admin/conference/policies
 func (h *AdminHandler) GetConferencePolicies(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -2011,7 +1998,7 @@ func (h *AdminHandler) GetConferencePolicies(w http.ResponseWriter, r *http.Requ
 // PutConferencePolicies PUT /api/v1/admin/conference/policies
 func (h *AdminHandler) PutConferencePolicies(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -2043,7 +2030,7 @@ func (h *AdminHandler) PutConferencePolicies(w http.ResponseWriter, r *http.Requ
 // ListAuditLogs GET /api/v1/admin/audit
 func (h *AdminHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -2118,7 +2105,7 @@ func (h *AdminHandler) GetAppearanceSettings(w http.ResponseWriter, r *http.Requ
 // PutAppearanceSettings PUT /api/v1/admin/settings/appearance
 func (h *AdminHandler) PutAppearanceSettings(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil || !hasRole(claims, "admin") {
+	if claims == nil || !auth.HasRole(claims, "admin") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -2201,24 +2188,3 @@ func generateInviteToken() (string, string, error) {
 	return token, fmt.Sprintf("%x", hash[:]), nil
 }
 
-// hasRole проверяет наличие роли у пользователя
-func hasRole(claims *auth.SessionClaims, role string) bool {
-	if claims == nil {
-		return false
-	}
-	for _, r := range claims.Roles {
-		if r == role {
-			return true
-		}
-	}
-	// Admin endpoints use middleware with role-or-scope semantics.
-	// Keep handler-level checks consistent to avoid false 403 for scope-based admins.
-	if role == "admin" {
-		for _, scope := range claims.AllScopes() {
-			if scope == "focus.admin" {
-				return true
-			}
-		}
-	}
-	return false
-}

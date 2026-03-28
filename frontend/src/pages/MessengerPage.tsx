@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useRoomsStore, type Room, type Message } from '../store/roomsStore'
@@ -62,6 +62,14 @@ export default function MessengerPage() {
   const reconnectTimerRef = useRef<number | null>(null)
   const reconnectAttemptsRef = useRef(0)
   const jitsiDomain = import.meta.env.VITE_JITSI_DOMAIN || 'meet.focus.local:30443'
+
+  const pendingFileUrl = useMemo(
+    () => (pendingFile && pendingFile.type.startsWith('image/') ? URL.createObjectURL(pendingFile) : ''),
+    [pendingFile]
+  )
+  useEffect(() => {
+    return () => { if (pendingFileUrl) URL.revokeObjectURL(pendingFileUrl) }
+  }, [pendingFileUrl])
 
   useEffect(() => {
     fetchRooms()
@@ -127,7 +135,7 @@ export default function MessengerPage() {
     }
   }, [roomId, token])
 
-  const loadRoom = async (id: string) => {
+  const loadRoom = useCallback(async (id: string) => {
     try {
       setError(null)
       const room = await apiClient.get<Room>(`/api/v1/rooms/${id}`)
@@ -141,7 +149,7 @@ export default function MessengerPage() {
     } catch {
       setError('Не удалось загрузить комнату')
     }
-  }
+  }, [])
 
   const loadMessages = async (id: string) => {
     setIsLoadingMessages(true)
@@ -203,7 +211,7 @@ export default function MessengerPage() {
     }
   }
 
-  const sendMessage = async (e: React.FormEvent) => {
+  const sendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     if (!roomId) return
     if (!messageInput.trim() && !pendingFile) return
@@ -226,7 +234,7 @@ export default function MessengerPage() {
       setError('Не удалось отправить сообщение')
       setMessageInput(content)
     }
-  }
+  }, [roomId, messageInput, pendingFile])
 
   const sendFileMessage = async (file: File, caption: string) => {
     if (!roomId) return
@@ -263,7 +271,7 @@ export default function MessengerPage() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const handleCreateRoom = async (e: React.FormEvent) => {
+  const handleCreateRoom = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newRoomName.trim()) return
     try {
@@ -273,7 +281,7 @@ export default function MessengerPage() {
       setShowCreateModal(false)
       navigate(`/rooms/${room.id}`)
     } catch { /* ignore */ }
-  }
+  }, [newRoomName, newRoomType, createRoom, navigate])
 
   const openScheduledMeeting = (meeting: ScheduledMeeting) => {
     if (meeting.room_id) {
@@ -293,14 +301,17 @@ export default function MessengerPage() {
     } catch { /* ignore */ }
   }
 
-  const selectRoom = (room: Room) => {
+  const selectRoom = useCallback((room: Room) => {
     setShowVideo(false)
     navigate(`/rooms/${room.id}`)
-  }
+  }, [navigate])
 
-  const filteredRooms = searchQuery
-    ? rooms.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : rooms
+  const filteredRooms = useMemo(() =>
+    searchQuery
+      ? rooms.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      : rooms,
+    [rooms, searchQuery]
+  )
 
   const formatTime = (dateStr: string) => {
     return new Date(dateStr).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
@@ -584,8 +595,8 @@ export default function MessengerPage() {
 
             {pendingFile && (
               <div className="chat-file-preview">
-                {pendingFile.type.startsWith('image/')
-                  ? <img src={URL.createObjectURL(pendingFile)} alt="" className="file-preview-thumb" />
+                {pendingFileUrl
+                  ? <img src={pendingFileUrl} alt="" className="file-preview-thumb" />
                   : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 }
                 <span className="file-preview-name">{pendingFile.name}</span>

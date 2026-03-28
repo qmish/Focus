@@ -113,6 +113,17 @@ func (r *RoomRepository) Count(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+// CountByParticipant returns the number of rooms where the user is a participant.
+func (r *RoomRepository) CountByParticipant(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&models.Room{}).
+		Joins("JOIN room_participants ON room_participants.room_id = rooms.id").
+		Where("room_participants.user_id = ? AND rooms.deleted_at IS NULL", userID).
+		Count(&count).Error
+	return count, err
+}
+
 // CountByType returns number of rooms by room type.
 func (r *RoomRepository) CountByType(ctx context.Context, roomType models.RoomType) (int64, error) {
 	var count int64
@@ -176,6 +187,27 @@ func (r *RoomRepository) ListParticipantsWithUsers(ctx context.Context, roomID u
 		Order("joined_at ASC").
 		Find(&participants).Error
 	return participants, err
+}
+
+// RoomWithParticipantCount holds a room and its participant count from a JOIN query.
+type RoomWithParticipantCount struct {
+	models.Room
+	ParticipantsCount int64 `gorm:"column:participants_count"`
+}
+
+// ListMeetingsWithParticipantCounts returns meeting rooms with participant counts in one query.
+func (r *RoomRepository) ListMeetingsWithParticipantCounts(ctx context.Context, limit, offset int) ([]RoomWithParticipantCount, error) {
+	var results []RoomWithParticipantCount
+	err := r.db.WithContext(ctx).
+		Model(&models.Room{}).
+		Select("rooms.*, COALESCE(pc.cnt, 0) AS participants_count").
+		Joins("LEFT JOIN (SELECT room_id, COUNT(*) AS cnt FROM room_participants GROUP BY room_id) pc ON pc.room_id = rooms.id").
+		Where("rooms.deleted_at IS NULL AND rooms.type = ?", models.RoomTypeMeeting).
+		Limit(limit).
+		Offset(offset).
+		Order("rooms.created_at DESC").
+		Find(&results).Error
+	return results, err
 }
 
 // Search ищет комнаты по названию

@@ -1,11 +1,12 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import ErrorBoundary from './components/ErrorBoundary'
-import LoginPage from './pages/LoginPage'
-import MessengerPage from './pages/MessengerPage'
-import ProfilePage from './pages/ProfilePage'
-import NotFoundPage from './pages/NotFoundPage'
+
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const MessengerPage = lazy(() => import('./pages/MessengerPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
@@ -28,6 +29,7 @@ function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary>
+      <Suspense fallback={<div className="loading">Загрузка...</div>}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
@@ -41,6 +43,7 @@ function App() {
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </Suspense>
       </ErrorBoundary>
     </BrowserRouter>
   )

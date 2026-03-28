@@ -126,6 +126,25 @@ func (r *MessageRepository) CountSince(ctx context.Context, since time.Time) (in
 	return count, err
 }
 
+// DayMessageCount holds a date and its message count.
+type DayMessageCount struct {
+	Date  string `gorm:"column:date" json:"date"`
+	Count int64  `gorm:"column:count" json:"count"`
+}
+
+// CountByDay returns per-day message counts since the given time using a single GROUP BY query.
+func (r *MessageRepository) CountByDay(ctx context.Context, since time.Time) ([]DayMessageCount, error) {
+	var results []DayMessageCount
+	err := r.db.WithContext(ctx).
+		Model(&models.Message{}).
+		Select("DATE(created_at) AS date, COUNT(*) AS count").
+		Where("is_deleted = ? AND created_at >= ?", false, since).
+		Group("DATE(created_at)").
+		Order("date ASC").
+		Find(&results).Error
+	return results, err
+}
+
 // GetLastMessage получает последнее сообщение в комнате
 func (r *MessageRepository) GetLastMessage(ctx context.Context, roomID uuid.UUID) (*models.Message, error) {
 	var message models.Message
