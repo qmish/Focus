@@ -9,22 +9,8 @@ metadata:
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: focus-secrets
-  namespace: messenger-stage
-  annotations:
-    focus.dev/rotation-window: "30d"
-type: Opaque
-stringData:
-  db-password: CHANGE_ME_STAGE_DB_PASSWORD
-  redis-password: CHANGE_ME_STAGE_REDIS_PASSWORD
-  keycloak-client-secret: CHANGE_ME_STAGE_KEYCLOAK_CLIENT_SECRET
-  session-secret: CHANGE_ME_STAGE_SESSION_SECRET
-  jitsi-app-secret: CHANGE_ME_STAGE_JITSI_SECRET
-  exchange-username: CHANGE_ME_STAGE_EXCHANGE_USERNAME
-  exchange-password: CHANGE_ME_STAGE_EXCHANGE_PASSWORD
+# NOTE: focus-secrets Secret is managed separately (kubectl create secret).
+# Do NOT include it here to avoid overwriting real credentials with placeholders.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -517,6 +503,10 @@ spec:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: infra
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: keycloak
   - to:
     - namespaceSelector:
         matchLabels:
