@@ -1,10 +1,13 @@
 package bots
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -66,6 +69,8 @@ type BotCommand struct {
 	Handler     string `json:"handler"`
 	Description string `json:"description"`
 	IsActive    bool   `json:"is_active"`
+	WebhookURL  string `json:"webhook_url,omitempty"`
+	RateLimitMs int    `json:"rate_limit_ms,omitempty"`
 }
 
 // BotSettingsProvider reads bot settings from persistent storage.
@@ -76,7 +81,7 @@ type BotSettingsProvider interface {
 // BotEngine движок ботов
 type BotEngine struct {
 	handlers          map[string]BotHandler
-	customHandlers    map[string]string // command -> static reply text
+	customCommands    map[string]BotCommand // command -> full command definition
 	messageRepo       BotMessageRepository
 	roomChecker       BotRoomAccessChecker
 	roomRepo          BotRoomRepository
@@ -84,6 +89,7 @@ type BotEngine struct {
 	broadcaster       BotBroadcaster
 	calendarScheduler BotCalendarScheduler
 	eventStore        BotCommandEventStore
+	reminderStore     BotReminderStore
 	settingsProvider  BotSettingsProvider
 	botUserID         uuid.UUID
 	jitsiBaseURL      string
@@ -92,6 +98,7 @@ type BotEngine struct {
 	disabledCommands  map[string]bool
 	commandRooms      map[string]map[string]bool // command -> set of allowed room IDs
 	commandRateLimit  map[string]time.Duration   // command -> per-bot rate limit
+	httpClient        *http.Client
 	mu                sync.Mutex
 	now               func() time.Time
 	startedAt         time.Time
@@ -141,17 +148,25 @@ type BotCommandEventStore interface {
 	CreateCommandEvent(ctx context.Context, event *BotCommandEvent) error
 }
 
+// BotReminderStore persists user reminders.
+type BotReminderStore interface {
+	CreateReminder(ctx context.Context, reminder *models.BotReminder) error
+	ListPendingReminders(ctx context.Context, before time.Time) ([]*models.BotReminder, error)
+	MarkFired(ctx context.Context, id uuid.UUID) error
+}
+
 // NewBotEngine создаёт новый BotEngine
 func NewBotEngine() *BotEngine {
 	engine := &BotEngine{
 		handlers:         make(map[string]BotHandler),
-		customHandlers:   make(map[string]string),
+		customCommands:   make(map[string]BotCommand),
 		jitsiBaseURL:     "https://meet.company.com",
 		rateLimitWindow:  2 * time.Second,
 		lastCommandAt:    make(map[string]time.Time),
 		disabledCommands: make(map[string]bool),
 		commandRooms:     make(map[string]map[string]bool),
 		commandRateLimit: make(map[string]time.Duration),
+		httpClient:       &http.Client{Timeout: 10 * time.Second},
 		now:              time.Now,
 		startedAt:        time.Now(),
 	}
@@ -217,6 +232,11 @@ func (e *BotEngine) SetBotSettingsProvider(p BotSettingsProvider) {
 	e.settingsProvider = p
 }
 
+// SetReminderStore injects store for bot reminders.
+func (e *BotEngine) SetReminderStore(store BotReminderStore) {
+	e.reminderStore = store
+}
+
 // ReloadSettings reads bot_settings from DB and updates runtime config.
 func (e *BotEngine) ReloadSettings(ctx context.Context) error {
 	if e.settingsProvider == nil {
@@ -230,7 +250,7 @@ func (e *BotEngine) ReloadSettings(ctx context.Context) error {
 	disabled := make(map[string]bool)
 	rooms := make(map[string]map[string]bool)
 	rateLimit := make(map[string]time.Duration)
-	custom := make(map[string]string)
+	custom := make(map[string]BotCommand)
 
 	for _, s := range settings {
 		if s == nil {
@@ -251,10 +271,13 @@ func (e *BotEngine) ReloadSettings(ctx context.Context) error {
 				disabled[cmdName] = true
 				continue
 			}
-			if cmd.Handler == "static-reply" && cmd.Description != "" {
-				custom[cmdName] = cmd.Description
+			switch cmd.Handler {
+			case "static-reply", "template", "random", "alias", "webhook":
+				custom[cmdName] = cmd
 			}
-			if s.RateLimitMs > 0 {
+			if cmd.RateLimitMs > 0 {
+				rateLimit[cmdName] = time.Duration(cmd.RateLimitMs) * time.Millisecond
+			} else if s.RateLimitMs > 0 {
 				rateLimit[cmdName] = time.Duration(s.RateLimitMs) * time.Millisecond
 			}
 			if len(s.AllowedRooms) > 0 {
@@ -280,7 +303,7 @@ func (e *BotEngine) ReloadSettings(ctx context.Context) error {
 	e.disabledCommands = disabled
 	e.commandRooms = rooms
 	e.commandRateLimit = rateLimit
-	e.customHandlers = custom
+	e.customCommands = custom
 	e.mu.Unlock()
 	return nil
 }
@@ -294,6 +317,9 @@ func (e *BotEngine) registerBuiltinBots() {
 	e.handlers["whoami"] = e.handleWhoami
 	e.handlers["dice"] = e.handleDice
 	e.handlers["find"] = e.handleFind
+	e.handlers["remind"] = e.handleRemind
+	e.handlers["poll"] = e.handlePoll
+	e.handlers["pin"] = e.handlePin
 }
 
 // HandleMessage обрабатывает сообщение и проверяет на наличие команд бота
@@ -319,7 +345,7 @@ func (e *BotEngine) HandleMessage(ctx context.Context, roomID, userID, content s
 	isDisabled := e.disabledCommands[command]
 	allowedRooms := e.commandRooms[command]
 	cmdRateLimit := e.commandRateLimit[command]
-	customReply := e.customHandlers[command]
+	customCmd, hasCustom := e.customCommands[command]
 	e.mu.Unlock()
 
 	if isDisabled {
@@ -333,7 +359,7 @@ func (e *BotEngine) HandleMessage(ctx context.Context, roomID, userID, content s
 	}
 
 	handler, isBuiltin := e.handlers[command]
-	if !isBuiltin && customReply == "" {
+	if !isBuiltin && !hasCustom {
 		return nil
 	}
 
@@ -356,7 +382,7 @@ func (e *BotEngine) HandleMessage(ctx context.Context, roomID, userID, content s
 	if isBuiltin {
 		response, err = handler(ctx, roomID, userID, command, args)
 	} else {
-		response = customReply
+		response, err = e.executeCustomCommand(ctx, customCmd, roomID, userID, command, args)
 	}
 	if err != nil {
 		e.recordCommandEvent(ctx, roomID, userID, command, args, "failed", err.Error())
@@ -511,13 +537,20 @@ func (e *BotEngine) handleHelp(ctx context.Context, roomID, userID, command, arg
   /status — Статус комнат и аптайм бота
   /help — Показать эту справку
 
+⏰ Напоминания:
+  /remind <время> <сообщение> — Установить напоминание (5m, 2h, 1d)
+
+📊 Опросы:
+  /poll "Вопрос?" вариант1 вариант2 — Создать опрос
+
 🎲 Развлечения:
   /dice [грани] — Бросить кубик (по умолчанию 6 граней)
 
 Примеры:
   /create meeting Планёрка
   /schedule meeting Обзор спринта at 2026-04-01 15:00
-  /find планёрка
+  /remind 30m Проверить сборку
+  /poll "Обед?" пицца суши бургер
   /dice 20`
 
 	return helpText, nil
@@ -656,6 +689,222 @@ func (e *BotEngine) handleFind(ctx context.Context, roomID, userID, command, arg
 		sb.WriteString(fmt.Sprintf("  %s %s (%s)\n", icon, room.Name, room.Type))
 	}
 	return sb.String(), nil
+}
+
+// handleRemind /remind <duration> <message>
+func (e *BotEngine) handleRemind(ctx context.Context, roomID, userID, command, args string) (string, error) {
+	parts := strings.SplitN(strings.TrimSpace(args), " ", 2)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "Использование: `/remind <время> <сообщение>`\nПримеры: `/remind 30m Проверить сборку`, `/remind 2h Митинг`", nil
+	}
+	dur, err := parseDuration(parts[0])
+	if err != nil {
+		return fmt.Sprintf("Некорректное время: %s\nИспользуйте формат: 30s, 5m, 2h, 1d", parts[0]), nil
+	}
+	if dur < 10*time.Second || dur > 30*24*time.Hour {
+		return "Время напоминания: от 10 секунд до 30 дней", nil
+	}
+	fireAt := e.now().Add(dur)
+	if e.reminderStore != nil {
+		reminder := &models.BotReminder{
+			ID:        uuid.New(),
+			RoomID:    roomID,
+			UserID:    userID,
+			Message:   parts[1],
+			FireAt:    fireAt,
+			CreatedAt: e.now().UTC(),
+		}
+		if err := e.reminderStore.CreateReminder(ctx, reminder); err != nil {
+			return "", fmt.Errorf("save reminder: %w", err)
+		}
+	}
+	return fmt.Sprintf("⏰ Напоминание установлено на %s: \"%s\"", fireAt.Format("02.01.2006 15:04"), parts[1]), nil
+}
+
+// handlePoll /poll "Question?" option1 option2
+func (e *BotEngine) handlePoll(ctx context.Context, roomID, userID, command, args string) (string, error) {
+	question, options := parsePollArgs(args)
+	if question == "" || len(options) < 2 {
+		return "Использование: `/poll \"Вопрос?\" вариант1 вариант2 [вариант3 ...]`", nil
+	}
+	emojis := []string{"1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("📊 **Опрос**: %s\n\n", question))
+	for i, opt := range options {
+		emoji := "▪️"
+		if i < len(emojis) {
+			emoji = emojis[i]
+		}
+		sb.WriteString(fmt.Sprintf("  %s %s\n", emoji, opt))
+	}
+	sb.WriteString("\nОтветьте номером варианта в чат.")
+	return sb.String(), nil
+}
+
+// handlePin /pin
+func (e *BotEngine) handlePin(ctx context.Context, roomID, userID, command, args string) (string, error) {
+	return "📌 Закрепление сообщений пока реализуется. Следите за обновлениями!", nil
+}
+
+func parseDuration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if strings.HasSuffix(s, "d") {
+		n, err := strconv.Atoi(strings.TrimSuffix(s, "d"))
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	return time.ParseDuration(s)
+}
+
+func parsePollArgs(args string) (string, []string) {
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return "", nil
+	}
+	var question string
+	var rest string
+	if strings.HasPrefix(args, "\"") {
+		end := strings.Index(args[1:], "\"")
+		if end >= 0 {
+			question = args[1 : end+1]
+			rest = strings.TrimSpace(args[end+2:])
+		} else {
+			parts := strings.SplitN(args, " ", 2)
+			question = strings.Trim(parts[0], "\"")
+			if len(parts) > 1 {
+				rest = parts[1]
+			}
+		}
+	} else {
+		idx := strings.IndexByte(args, '?')
+		if idx >= 0 {
+			question = args[:idx+1]
+			rest = strings.TrimSpace(args[idx+1:])
+		} else {
+			parts := strings.SplitN(args, " ", 2)
+			question = parts[0]
+			if len(parts) > 1 {
+				rest = parts[1]
+			}
+		}
+	}
+	options := strings.Fields(rest)
+	return question, options
+}
+
+func (e *BotEngine) executeCustomCommand(ctx context.Context, cmd BotCommand, roomID, userID, command, args string) (string, error) {
+	switch cmd.Handler {
+	case "template":
+		return e.resolveTemplate(ctx, cmd.Description, roomID, userID, args), nil
+	case "webhook":
+		return e.executeWebhook(ctx, cmd, roomID, userID, command, args)
+	case "random":
+		return e.pickRandomReply(cmd.Description), nil
+	case "alias":
+		target := strings.TrimPrefix(strings.TrimSpace(cmd.Description), "/")
+		if target == "" {
+			return "Alias target not configured", nil
+		}
+		if h, ok := e.handlers[target]; ok {
+			return h(ctx, roomID, userID, target, args)
+		}
+		e.mu.Lock()
+		aliasCmd, ok := e.customCommands[target]
+		e.mu.Unlock()
+		if ok {
+			return e.executeCustomCommand(ctx, aliasCmd, roomID, userID, target, args)
+		}
+		return fmt.Sprintf("Unknown alias target: /%s", target), nil
+	default:
+		return cmd.Description, nil
+	}
+}
+
+func (e *BotEngine) resolveTemplate(ctx context.Context, tmpl, roomID, userID, args string) string {
+	result := tmpl
+	result = strings.ReplaceAll(result, "{{args}}", args)
+	result = strings.ReplaceAll(result, "{{date}}", e.now().Format("02.01.2006"))
+	result = strings.ReplaceAll(result, "{{time}}", e.now().Format("15:04"))
+	result = strings.ReplaceAll(result, "{{room_id}}", roomID)
+	result = strings.ReplaceAll(result, "{{user_id}}", userID)
+
+	if e.userRepo != nil && strings.Contains(result, "{{user_") {
+		if uid, err := uuid.Parse(userID); err == nil {
+			if user, err := e.userRepo.GetByID(ctx, uid); err == nil {
+				result = strings.ReplaceAll(result, "{{user_name}}", user.Name)
+				result = strings.ReplaceAll(result, "{{user_email}}", user.Email)
+			}
+		}
+	}
+	if e.roomRepo != nil && strings.Contains(result, "{{room_") {
+		if rid, err := uuid.Parse(roomID); err == nil {
+			if room, err := e.roomRepo.GetByID(ctx, rid); err == nil {
+				result = strings.ReplaceAll(result, "{{room_name}}", room.Name)
+				result = strings.ReplaceAll(result, "{{room_type}}", string(room.Type))
+			}
+		}
+	}
+	return result
+}
+
+func (e *BotEngine) executeWebhook(ctx context.Context, cmd BotCommand, roomID, userID, command, args string) (string, error) {
+	webhookURL := strings.TrimSpace(cmd.WebhookURL)
+	if webhookURL == "" {
+		webhookURL = strings.TrimSpace(cmd.Description)
+	}
+	if webhookURL == "" {
+		return "Webhook URL not configured", nil
+	}
+
+	payload, _ := json.Marshal(map[string]string{
+		"command":   command,
+		"args":      args,
+		"user_id":   userID,
+		"room_id":   roomID,
+		"timestamp": e.now().UTC().Format(time.RFC3339),
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(payload))
+	if err != nil {
+		return "", fmt.Errorf("webhook request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Focus-Bot-Command", command)
+
+	resp, err := e.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("webhook call: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err != nil {
+		return "", fmt.Errorf("webhook read: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return fmt.Sprintf("Webhook error (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(body))), nil
+	}
+	text := strings.TrimSpace(string(body))
+	if text == "" {
+		text = "OK"
+	}
+	return text, nil
+}
+
+func (e *BotEngine) pickRandomReply(description string) string {
+	parts := strings.Split(description, "||")
+	cleaned := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			cleaned = append(cleaned, t)
+		}
+	}
+	if len(cleaned) == 0 {
+		return description
+	}
+	return cleaned[rand.Intn(len(cleaned))]
 }
 
 // CreateBot создаёт нового бота

@@ -417,6 +417,14 @@ func (f *fakeAdminBotRepo) ListCommandEvents(ctx context.Context, limit int, onl
 	return filtered, nil
 }
 
+func (f *fakeAdminBotRepo) ListCommandEventsFiltered(ctx context.Context, limit, offset int, command, userID, roomID, status string, since time.Time) ([]*bots.BotCommandEvent, int64, error) {
+	return f.events, int64(len(f.events)), f.err
+}
+
+func (f *fakeAdminBotRepo) ListCommandStatsGrouped(ctx context.Context, since time.Time) ([]repository.CommandStat, error) {
+	return nil, f.err
+}
+
 func (f *fakeAdminAuthAuditRepo) ListAuthAuditEvents(ctx context.Context, limit int, onlyFailed bool) ([]*models.AuthAuditEvent, error) {
 	if f.err != nil {
 		return nil, f.err

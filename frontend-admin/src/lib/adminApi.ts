@@ -75,6 +75,18 @@ export const adminApi = {
     request<{ total_events_24h: number; errors_24h: number; total_events: number }>(`/api/v1/admin/bots/${botId}/stats`),
   getBotErrors: (limit = 50) =>
     request<{ data: any[]; total: number }>(`/api/v1/admin/bots/errors?limit=${limit}`),
+  testBotCommand: (payload: { handler: string; description: string; webhook_url?: string; args?: string }) =>
+    request<{ result: string }>('/api/v1/admin/bots/test-command', { method: 'POST', body: JSON.stringify(payload) }),
+  getCommandStats: (days = 7) =>
+    request<{ data: CommandStat[]; days: number }>(`/api/v1/admin/bots/command-stats?days=${days}`),
+  getCommandHistory: (params: string) =>
+    request<{ data: any[]; total: number }>(`/api/v1/admin/bots/command-history?${params}`),
+  exportBot: (botId: string) =>
+    request<Record<string, unknown>>(`/api/v1/admin/bots/${botId}/export`),
+  importBot: (payload: Record<string, unknown>) =>
+    request('/api/v1/admin/bots/import', { method: 'POST', body: JSON.stringify(payload) }),
+  listBotTemplates: () =>
+    request<{ data: BotTemplate[] }>('/api/v1/admin/bots/templates'),
   getExchangeSettings: () => request('/api/v1/admin/exchange/settings'),
   putExchangeSettings: (payload: Record<string, unknown>) =>
     request('/api/v1/admin/exchange/settings', { method: 'PUT', body: JSON.stringify(payload) }),
@@ -107,4 +119,18 @@ export type AppearanceSettings = {
   conference_theme_json: string
   branding_product_name: string
   branding_logo_url: string
+}
+
+export type CommandStat = {
+  command: string
+  status: string
+  count: number
+}
+
+export type BotTemplate = {
+  name: string
+  description: string
+  category: string
+  commands_json: string
+  schedule_json?: string
 }

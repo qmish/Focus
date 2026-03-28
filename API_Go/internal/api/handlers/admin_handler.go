@@ -102,6 +102,8 @@ type adminWebhookRepository interface {
 
 type adminBotRepository interface {
 	ListCommandEvents(ctx context.Context, limit int, onlyFailed bool) ([]*bots.BotCommandEvent, error)
+	ListCommandEventsFiltered(ctx context.Context, limit, offset int, command, userID, roomID, status string, since time.Time) ([]*bots.BotCommandEvent, int64, error)
+	ListCommandStatsGrouped(ctx context.Context, since time.Time) ([]repository.CommandStat, error)
 }
 
 type adminAuthAuditRepository interface {
@@ -1231,6 +1233,8 @@ func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 		RateLimitMs  int      `json:"rate_limit_ms"`
 		AllowedRooms []string `json:"allowed_rooms"`
 		CommandsJSON string   `json:"commands_json"`
+		ScheduleJSON string   `json:"schedule_json"`
+		AvatarURL    string   `json:"avatar_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -1247,6 +1251,9 @@ func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.CommandsJSON) == "" {
 		req.CommandsJSON = "[]"
 	}
+	if strings.TrimSpace(req.ScheduleJSON) == "" {
+		req.ScheduleJSON = "[]"
+	}
 	setting := &models.BotSetting{
 		ID:           uuid.New(),
 		Name:         req.Name,
@@ -1255,6 +1262,8 @@ func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 		RateLimitMs:  req.RateLimitMs,
 		AllowedRooms: req.AllowedRooms,
 		CommandsJSON: req.CommandsJSON,
+		ScheduleJSON: req.ScheduleJSON,
+		AvatarURL:    strings.TrimSpace(req.AvatarURL),
 	}
 	if req.IsEnabled != nil {
 		setting.IsEnabled = *req.IsEnabled
@@ -1263,6 +1272,7 @@ func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create bot", http.StatusInternalServerError)
 		return
 	}
+	h.recordAudit(r.Context(), claims.Email, "create_bot", "bot", setting.ID.String(), "name="+setting.Name)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(setting)
@@ -1291,6 +1301,8 @@ func (h *AdminHandler) PatchBot(w http.ResponseWriter, r *http.Request) {
 		RateLimitMs  *int      `json:"rate_limit_ms"`
 		AllowedRooms *[]string `json:"allowed_rooms"`
 		CommandsJSON *string   `json:"commands_json"`
+		ScheduleJSON *string   `json:"schedule_json"`
+		AvatarURL    *string   `json:"avatar_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -1322,6 +1334,15 @@ func (h *AdminHandler) PatchBot(w http.ResponseWriter, r *http.Request) {
 		if setting.CommandsJSON == "" {
 			setting.CommandsJSON = "[]"
 		}
+	}
+	if req.ScheduleJSON != nil {
+		setting.ScheduleJSON = strings.TrimSpace(*req.ScheduleJSON)
+		if setting.ScheduleJSON == "" {
+			setting.ScheduleJSON = "[]"
+		}
+	}
+	if req.AvatarURL != nil {
+		setting.AvatarURL = strings.TrimSpace(*req.AvatarURL)
 	}
 	if err := h.botSettingsRepo.Update(r.Context(), setting); err != nil {
 		http.Error(w, "failed to update bot", http.StatusInternalServerError)
@@ -1555,6 +1576,281 @@ func (h *AdminHandler) ListBotErrors(w http.ResponseWriter, r *http.Request) {
 		"data":  events,
 		"total": len(events),
 	})
+}
+
+// TestBotCommand POST /api/v1/admin/bots/test-command
+func (h *AdminHandler) TestBotCommand(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Handler     string `json:"handler"`
+		Description string `json:"description"`
+		WebhookURL  string `json:"webhook_url"`
+		Args        string `json:"args"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	var result string
+	switch req.Handler {
+	case "static-reply":
+		result = req.Description
+	case "template":
+		result = req.Description
+		result = strings.ReplaceAll(result, "{{user_name}}", claims.Email)
+		result = strings.ReplaceAll(result, "{{user_email}}", claims.Email)
+		result = strings.ReplaceAll(result, "{{room_name}}", "test-room")
+		result = strings.ReplaceAll(result, "{{room_type}}", "public")
+		result = strings.ReplaceAll(result, "{{date}}", time.Now().Format("02.01.2006"))
+		result = strings.ReplaceAll(result, "{{time}}", time.Now().Format("15:04"))
+		result = strings.ReplaceAll(result, "{{args}}", req.Args)
+		result = strings.ReplaceAll(result, "{{user_id}}", "test-user-id")
+		result = strings.ReplaceAll(result, "{{room_id}}", "test-room-id")
+	case "random":
+		parts := strings.Split(req.Description, "||")
+		if len(parts) > 0 {
+			result = strings.TrimSpace(parts[0]) + " (1 из " + strconv.Itoa(len(parts)) + " вариантов)"
+		}
+	case "alias":
+		result = fmt.Sprintf("Перенаправление на /%s", strings.TrimPrefix(req.Description, "/"))
+	case "webhook":
+		url := strings.TrimSpace(req.WebhookURL)
+		if url == "" {
+			url = strings.TrimSpace(req.Description)
+		}
+		result = fmt.Sprintf("Webhook будет вызван: %s", url)
+	default:
+		result = req.Description
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"result": result})
+}
+
+// GetCommandStats GET /api/v1/admin/bots/command-stats
+func (h *AdminHandler) GetCommandStats(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.botRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []interface{}{}})
+		return
+	}
+	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+	if days < 1 || days > 90 {
+		days = 7
+	}
+	since := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+	stats, err := h.botRepo.ListCommandStatsGrouped(r.Context(), since)
+	if err != nil {
+		http.Error(w, "failed to get command stats", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": stats, "days": days})
+}
+
+// ListCommandHistory GET /api/v1/admin/bots/command-history
+func (h *AdminHandler) ListCommandHistory(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.botRepo == nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []interface{}{}, "total": 0})
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 500 {
+		limit = 50
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	command := strings.TrimSpace(r.URL.Query().Get("command"))
+	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	roomID := strings.TrimSpace(r.URL.Query().Get("room_id"))
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	var since time.Time
+	if s := strings.TrimSpace(r.URL.Query().Get("since")); s != "" {
+		since, _ = time.Parse(time.RFC3339, s)
+	}
+	events, total, err := h.botRepo.ListCommandEventsFiltered(r.Context(), limit, offset, command, userID, roomID, status, since)
+	if err != nil {
+		http.Error(w, "failed to list command history", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": events, "total": total})
+}
+
+// ExportBot GET /api/v1/admin/bots/:id/export
+func (h *AdminHandler) ExportBot(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.botSettingsRepo == nil {
+		http.Error(w, "bot settings repository is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	botID, err := uuid.Parse(id)
+	if err != nil {
+		http.Error(w, "invalid bot id", http.StatusBadRequest)
+		return
+	}
+	setting, err := h.botSettingsRepo.GetByID(r.Context(), botID)
+	if err != nil {
+		if err == repository.ErrBotSettingNotFound {
+			http.Error(w, "bot not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to get bot", http.StatusInternalServerError)
+		return
+	}
+	export := map[string]interface{}{
+		"name":          setting.Name,
+		"description":   setting.Description,
+		"is_enabled":    setting.IsEnabled,
+		"rate_limit_ms": setting.RateLimitMs,
+		"allowed_rooms": setting.AllowedRooms,
+		"commands_json": setting.CommandsJSON,
+		"schedule_json": setting.ScheduleJSON,
+		"avatar_url":    setting.AvatarURL,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"bot-%s.json\"", setting.Name))
+	_ = json.NewEncoder(w).Encode(export)
+}
+
+// ImportBot POST /api/v1/admin/bots/import
+func (h *AdminHandler) ImportBot(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.botSettingsRepo == nil {
+		http.Error(w, "bot settings repository is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var req struct {
+		Name         string   `json:"name"`
+		Description  string   `json:"description"`
+		IsEnabled    *bool    `json:"is_enabled"`
+		RateLimitMs  int      `json:"rate_limit_ms"`
+		AllowedRooms []string `json:"allowed_rooms"`
+		CommandsJSON string   `json:"commands_json"`
+		ScheduleJSON string   `json:"schedule_json"`
+		AvatarURL    string   `json:"avatar_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if req.RateLimitMs <= 0 {
+		req.RateLimitMs = 2000
+	}
+	if strings.TrimSpace(req.CommandsJSON) == "" {
+		req.CommandsJSON = "[]"
+	}
+	if strings.TrimSpace(req.ScheduleJSON) == "" {
+		req.ScheduleJSON = "[]"
+	}
+	setting := &models.BotSetting{
+		ID:           uuid.New(),
+		Name:         req.Name,
+		Description:  strings.TrimSpace(req.Description),
+		IsEnabled:    true,
+		RateLimitMs:  req.RateLimitMs,
+		AllowedRooms: req.AllowedRooms,
+		CommandsJSON: req.CommandsJSON,
+		ScheduleJSON: req.ScheduleJSON,
+		AvatarURL:    strings.TrimSpace(req.AvatarURL),
+	}
+	if req.IsEnabled != nil {
+		setting.IsEnabled = *req.IsEnabled
+	}
+	if err := h.botSettingsRepo.Create(r.Context(), setting); err != nil {
+		http.Error(w, "failed to import bot", http.StatusInternalServerError)
+		return
+	}
+	h.recordAudit(r.Context(), claims.Email, "import_bot", "bot", setting.ID.String(), "name="+setting.Name)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(setting)
+}
+
+// ListBotTemplates GET /api/v1/admin/bots/templates
+func (h *AdminHandler) ListBotTemplates(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil || !hasRole(claims, "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	templates := []models.BotTemplate{
+		{
+			Name:        "FAQ Bot",
+			Description: "Отвечает на часто задаваемые вопросы",
+			Category:    "support",
+			CommandsJSON: `[
+				{"command": "/faq", "handler": "static-reply", "description": "Часто задаваемые вопросы:\n1. Как создать комнату? — /create meeting Название\n2. Как найти комнату? — /find запрос\n3. Как получить помощь? — /help", "is_active": true},
+				{"command": "/hours", "handler": "static-reply", "description": "Время работы: Пн-Пт 9:00-18:00", "is_active": true}
+			]`,
+		},
+		{
+			Name:        "Onboarding Bot",
+			Description: "Приветствует новых участников и проводит ориентацию",
+			Category:    "hr",
+			CommandsJSON: `[
+				{"command": "/welcome", "handler": "template", "description": "Добро пожаловать, {{user_name}}! 👋\nВы находитесь в комнате «{{room_name}}».\nНапишите /help для списка команд.", "is_active": true},
+				{"command": "/rules", "handler": "static-reply", "description": "📋 Правила общения:\n1. Уважайте других участников\n2. Используйте тематические комнаты\n3. Не спамьте\n4. При проблемах обращайтесь к администратору", "is_active": true}
+			]`,
+		},
+		{
+			Name:        "Standup Bot",
+			Description: "Ежедневные стендапы — вопросы и сбор ответов",
+			Category:    "agile",
+			CommandsJSON: `[
+				{"command": "/standup", "handler": "static-reply", "description": "🔄 Время стендапа!\n\n1. Что вы сделали вчера?\n2. Что планируете сделать сегодня?\n3. Есть ли блокеры?\n\nОтветьте в чат.", "is_active": true}
+			]`,
+			ScheduleJSON: `[{"cron": "0 10 * * 1-5", "room_id": "", "message": "🔄 Время стендапа! Расскажите о своём прогрессе."}]`,
+		},
+		{
+			Name:        "Fun Bot",
+			Description: "Развлекательные команды: шутки, цитаты, приветствия",
+			Category:    "fun",
+			CommandsJSON: `[
+				{"command": "/joke", "handler": "random", "description": "Почему программисты путают Хэллоуин и Рождество? Потому что Oct 31 = Dec 25!||Как программист открывает дверь? — Push!||Что говорит программист в ресторане? — SELECT * FROM menu WHERE price < 500;||В мире всего 10 типов людей: те, кто понимает двоичную систему, и те, кто нет.", "is_active": true},
+				{"command": "/motivation", "handler": "random", "description": "💪 Код — это поэзия, которая ещё и работает!||🚀 Каждый баг — это возможность стать лучше!||✨ Хороший код пишется не сразу, а после рефакторинга!||🎯 Маленькие шаги приводят к большим результатам!", "is_active": true},
+				{"command": "/greet", "handler": "template", "description": "Привет, {{user_name}}! Сегодня {{date}}, {{time}}. Отличного дня! 🌟", "is_active": true}
+			]`,
+		},
+		{
+			Name:        "DevOps Bot",
+			Description: "Интеграция с CI/CD через вебхуки",
+			Category:    "devops",
+			CommandsJSON: `[
+				{"command": "/deploy", "handler": "webhook", "description": "Запуск деплоя", "webhook_url": "https://your-ci.example.com/api/deploy", "is_active": false},
+				{"command": "/build-status", "handler": "webhook", "description": "Статус сборки", "webhook_url": "https://your-ci.example.com/api/status", "is_active": false}
+			]`,
+		},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": templates})
 }
 
 // ListAuthAuditEvents GET /api/v1/admin/auth/audit

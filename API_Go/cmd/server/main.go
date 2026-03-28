@@ -85,6 +85,8 @@ func main() {
 		&models.ConferencePolicy{},
 		&models.RevokedSession{},
 		&bots.BotCommandEvent{},
+		&models.BotReminder{},
+		&models.BotDialogState{},
 		&webhooks.IncomingEvent{},
 		&webhooks.WebhookDelivery{},
 	); err != nil {
@@ -193,9 +195,14 @@ func main() {
 		userRepo:        userRepo,
 	})
 	botEngine.SetBotSettingsProvider(botSettingsRepo)
+	botEngine.SetReminderStore(botRepo)
 	if err := botEngine.ReloadSettings(context.Background()); err != nil {
 		logger.Warn("Failed to load bot settings from DB", zap.Error(err))
 	}
+
+	botScheduler := bots.NewBotScheduler(botEngine, botRepo, botSettingsRepo)
+	go botScheduler.Start(appCtx)
+	logger.Info("Bot scheduler started")
 
 	// Создание handlers
 	authHandler := handlers.NewAuthHandler(oidcProvider, userRepo, jitsiGen, cfg, logger.WithContext(context.Background()))
@@ -419,14 +426,20 @@ func main() {
 				r.Get("/invites", adminHandler.ListInvites)
 				r.Post("/invites", adminHandler.CreateInvite)
 				r.Post("/invites/:id/resend", adminHandler.ResendInvite)
-				r.Get("/bots", adminHandler.ListBots)
-				r.Post("/bots", adminHandler.CreateBot)
-				r.Post("/bots/reload", adminHandler.ReloadBotConfig)
-				r.Patch("/bots/:id", adminHandler.PatchBot)
-				r.Delete("/bots/:id", adminHandler.DeleteBot)
-				r.Post("/bots/:id/enable", adminHandler.EnableBot)
-				r.Post("/bots/:id/disable", adminHandler.DisableBot)
-				r.Get("/bots/:id/stats", adminHandler.GetBotStats)
+			r.Get("/bots", adminHandler.ListBots)
+			r.Post("/bots", adminHandler.CreateBot)
+			r.Post("/bots/reload", adminHandler.ReloadBotConfig)
+			r.Post("/bots/test-command", adminHandler.TestBotCommand)
+			r.Post("/bots/import", adminHandler.ImportBot)
+			r.Get("/bots/templates", adminHandler.ListBotTemplates)
+			r.Get("/bots/command-stats", adminHandler.GetCommandStats)
+			r.Get("/bots/command-history", adminHandler.ListCommandHistory)
+			r.Patch("/bots/:id", adminHandler.PatchBot)
+			r.Delete("/bots/:id", adminHandler.DeleteBot)
+			r.Post("/bots/:id/enable", adminHandler.EnableBot)
+			r.Post("/bots/:id/disable", adminHandler.DisableBot)
+			r.Get("/bots/:id/stats", adminHandler.GetBotStats)
+			r.Get("/bots/:id/export", adminHandler.ExportBot)
 				r.Put("/settings/appearance", adminHandler.PutAppearanceSettings)
 				r.Get("/exchange/settings", adminHandler.GetExchangeSettings)
 				r.Put("/exchange/settings", adminHandler.PutExchangeSettings)

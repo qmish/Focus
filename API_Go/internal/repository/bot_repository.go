@@ -2,9 +2,11 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/bots"
+	"github.com/qmish/focus-api/internal/models"
 	"gorm.io/gorm"
 )
 
@@ -82,4 +84,73 @@ func (r *BotRepository) ListCommandEvents(ctx context.Context, limit int, onlyFa
 	}
 	err := query.Find(&events).Error
 	return events, err
+}
+
+// ListCommandEventsFiltered returns command events with filters for full history.
+func (r *BotRepository) ListCommandEventsFiltered(ctx context.Context, limit, offset int, command, userID, roomID, status string, since time.Time) ([]*bots.BotCommandEvent, int64, error) {
+	if limit < 1 {
+		limit = 50
+	}
+	query := r.db.WithContext(ctx).Model(&bots.BotCommandEvent{})
+	if command != "" {
+		query = query.Where("command = ?", command)
+	}
+	if userID != "" {
+		query = query.Where("user_id = ?", userID)
+	}
+	if roomID != "" {
+		query = query.Where("room_id = ?", roomID)
+	}
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if !since.IsZero() {
+		query = query.Where("created_at >= ?", since)
+	}
+	var total int64
+	query.Count(&total)
+	var events []*bots.BotCommandEvent
+	err := query.Order("created_at DESC").Offset(offset).Limit(limit).Find(&events).Error
+	return events, total, err
+}
+
+// ListCommandStatsGrouped returns per-command stats breakdown.
+func (r *BotRepository) ListCommandStatsGrouped(ctx context.Context, since time.Time) ([]CommandStat, error) {
+	var stats []CommandStat
+	err := r.db.WithContext(ctx).
+		Model(&bots.BotCommandEvent{}).
+		Select("command, status, count(*) as count").
+		Where("created_at >= ?", since).
+		Group("command, status").
+		Order("command, status").
+		Find(&stats).Error
+	return stats, err
+}
+
+// CommandStat represents a per-command stat row.
+type CommandStat struct {
+	Command string `json:"command"`
+	Status  string `json:"status"`
+	Count   int64  `json:"count"`
+}
+
+// CreateReminder creates a new bot reminder.
+func (r *BotRepository) CreateReminder(ctx context.Context, reminder *models.BotReminder) error {
+	return r.db.WithContext(ctx).Create(reminder).Error
+}
+
+// ListPendingReminders returns reminders not yet fired before the given time.
+func (r *BotRepository) ListPendingReminders(ctx context.Context, before time.Time) ([]*models.BotReminder, error) {
+	var reminders []*models.BotReminder
+	err := r.db.WithContext(ctx).
+		Where("fired = ? AND fire_at <= ?", false, before).
+		Order("fire_at ASC").
+		Limit(100).
+		Find(&reminders).Error
+	return reminders, err
+}
+
+// MarkFired marks a reminder as fired.
+func (r *BotRepository) MarkFired(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Model(&models.BotReminder{}).Where("id = ?", id).Update("fired", true).Error
 }

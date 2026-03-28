@@ -1,5 +1,55 @@
 # Documentation Changelog
 
+## 2026-03-25 (v2): Bot Engine Phase 3
+
+- `docs/Bots.md`: полная переработка до версии 2.0:
+  - добавлены новые типы обработчиков: template, webhook, random, alias
+  - документированы шаблонные переменные и webhook формат запроса
+  - добавлена документация по запланированным сообщениям (cron scheduler)
+  - добавлена документация по напоминаниям (/remind)
+  - документированы модель данных BotSetting, BotCommand
+  - добавлена таблица всех admin API эндпоинтов ботов
+  - описана библиотека шаблонов (FAQ, Onboarding, Standup, Fun, DevOps)
+- `API_Go/internal/bots/bots.go`: расширен BotEngine:
+  - новые типы обработчиков: template (переменные), webhook (HTTP POST), random, alias
+  - per-command rate limit (поле `rate_limit_ms` в BotCommand)
+  - новые встроенные команды: /remind, /poll, /pin
+  - webhook-клиент с таймаутом 10с
+- `API_Go/internal/bots/scheduler.go`: новый BotScheduler:
+  - периодическая проверка и отправка напоминаний
+  - выполнение запланированных сообщений по cron
+  - встроенный простой cron-парсер
+- `API_Go/internal/models/bot_settings.go`: расширена модель BotSetting:
+  - добавлены поля: ScheduleJSON, BotUserID, AvatarURL
+  - добавлены модели: BotReminder, BotDialogState, BotTemplate, BotScheduleEntry
+- `API_Go/internal/repository/bot_repository.go`: новые методы:
+  - ListCommandEventsFiltered (фильтрация истории)
+  - ListCommandStatsGrouped (per-command аналитика)
+  - CreateReminder, ListPendingReminders, MarkFired
+- `API_Go/internal/api/handlers/admin_handler.go`: новые эндпоинты:
+  - POST /admin/bots/test-command (песочница тестирования)
+  - GET /admin/bots/command-stats (аналитика по командам)
+  - GET /admin/bots/command-history (полная история с фильтрами)
+  - GET /admin/bots/:id/export (экспорт конфигурации)
+  - POST /admin/bots/import (импорт конфигурации)
+  - GET /admin/bots/templates (библиотека шаблонов)
+  - расширен CreateBot/PatchBot: schedule_json, avatar_url
+- `frontend-admin/src/pages/BotsPage.tsx`: полная переработка UI:
+  - визуальный конструктор команд (замена JSON-редактора)
+  - выбор типа обработчика из dropdown
+  - кнопка "Тест" для каждой команды
+  - per-command rate limit в UI
+  - вкладка "Аналитика" (per-command статистика)
+  - вкладка "История" (полная история с фильтрами и экспортом CSV)
+  - вкладка "Шаблоны" (библиотека с созданием из шаблона)
+  - кнопки импорт/экспорт конфигурации
+  - редактор cron-расписания
+  - поле URL аватара бота
+- `frontend-admin/src/lib/adminApi.ts`: новые API-функции:
+  - testBotCommand, getCommandStats, getCommandHistory
+  - exportBot, importBot, listBotTemplates
+  - типы CommandStat, BotTemplate
+
 ## 2026-03-27
 
 - Добавлена спецификация OpenAPI и встроенный Swagger UI:
