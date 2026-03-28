@@ -123,7 +123,7 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
     })
     if (!res.ok) {
       const text = await res.text()
-      throw new Error(text || 'Login failed')
+      throw new Error(text || 'Ошибка входа')
     }
     const data = await res.json()
     const isAdmin = data.user?.roles?.includes('admin')

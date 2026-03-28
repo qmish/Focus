@@ -34,19 +34,19 @@ func NewFileHandler(uploadDir string) *FileHandler {
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
 	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
-		http.Error(w, "file too large (max 50MB)", http.StatusBadRequest)
+		http.Error(w, "Файл слишком большой (макс. 50 МБ)", http.StatusBadRequest)
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "missing file field", http.StatusBadRequest)
+		http.Error(w, "Отсутствует поле file", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
@@ -54,7 +54,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	fileID := uuid.New().String()
 	ext := filepath.Ext(header.Filename)
 	if !validExtRe.MatchString(ext) {
-		http.Error(w, "invalid file extension", http.StatusBadRequest)
+		http.Error(w, "Некорректное расширение файла", http.StatusBadRequest)
 		return
 	}
 	storedName := fileID + ext
@@ -62,7 +62,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	dstPath := filepath.Join(h.uploadDir, storedName)
 	dst, err := os.Create(dstPath)
 	if err != nil {
-		http.Error(w, "failed to save file", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сохранить файл", http.StatusInternalServerError)
 		return
 	}
 	defer dst.Close()
@@ -70,7 +70,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	written, err := io.Copy(dst, file)
 	if err != nil {
 		os.Remove(dstPath)
-		http.Error(w, "failed to save file", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сохранить файл", http.StatusInternalServerError)
 		return
 	}
 
@@ -96,18 +96,18 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	fileParam := chi.URLParam(r, "fileId")
 	if fileParam == "" {
-		http.Error(w, "missing file id", http.StatusBadRequest)
+		http.Error(w, "Отсутствует идентификатор файла", http.StatusBadRequest)
 		return
 	}
 
 	if strings.Contains(fileParam, "..") || strings.Contains(fileParam, "/") || strings.Contains(fileParam, "\\") {
-		http.Error(w, "invalid file id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор файла", http.StatusBadRequest)
 		return
 	}
 
 	entries, err := os.ReadDir(h.uploadDir)
 	if err != nil {
-		http.Error(w, "file not found", http.StatusNotFound)
+		http.Error(w, "Файл не найден", http.StatusNotFound)
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if found == "" {
-		http.Error(w, "file not found", http.StatusNotFound)
+		http.Error(w, "Файл не найден", http.StatusNotFound)
 		return
 	}
 

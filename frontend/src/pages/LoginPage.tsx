@@ -32,7 +32,7 @@ export default function LoginPage() {
         await loginLocal(email, password)
       }
     } catch (err: any) {
-      setError(err.message || 'Authentication failed')
+      setError(err.message || 'Ошибка аутентификации')
     } finally {
       setSubmitting(false)
     }
@@ -116,9 +116,15 @@ export default function LoginPage() {
             <span>или</span>
           </div>
           <button
-            onClick={() => {
+            onClick={async () => {
               if (keycloakAvailable) {
-                loginKeycloak()
+                try {
+                  setError('')
+                  await loginKeycloak()
+                } catch (err: unknown) {
+                  const msg = err instanceof Error ? err.message : String(err)
+                  setError(`Ошибка входа через Keycloak: ${msg}`)
+                }
               } else {
                 setError('SSO (Keycloak/AD) не настроен. Обратитесь к администратору.')
               }

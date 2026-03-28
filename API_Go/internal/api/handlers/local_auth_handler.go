@@ -70,7 +70,7 @@ func (h *LocalAuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		ip = strings.Split(fwd, ",")[0]
 	}
 	if isRegistrationRateLimited(strings.TrimSpace(ip)) {
-		http.Error(w, "too many registration attempts, try again later", http.StatusTooManyRequests)
+		http.Error(w, "Слишком много попыток регистрации, попробуйте позже", http.StatusTooManyRequests)
 		return
 	}
 
@@ -80,7 +80,7 @@ func (h *LocalAuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
@@ -88,24 +88,24 @@ func (h *LocalAuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	req.Name = strings.TrimSpace(req.Name)
 
 	if req.Email == "" || req.Password == "" || req.Name == "" {
-		http.Error(w, "email, password, and name are required", http.StatusBadRequest)
+		http.Error(w, "Требуются email, пароль и имя", http.StatusBadRequest)
 		return
 	}
 	if len(req.Password) < 6 {
-		http.Error(w, "password must be at least 6 characters", http.StatusBadRequest)
+		http.Error(w, "Пароль должен содержать не менее 6 символов", http.StatusBadRequest)
 		return
 	}
 
 	existing, _ := h.userRepo.GetByEmail(r.Context(), req.Email)
 	if existing != nil {
-		http.Error(w, "user with this email already exists", http.StatusConflict)
+		http.Error(w, "Пользователь с таким email уже существует", http.StatusConflict)
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		h.logger.Error("failed to hash password", zap.Error(err))
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
 	}
 
@@ -124,14 +124,14 @@ func (h *LocalAuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.userRepo.Create(r.Context(), user); err != nil {
 		h.logger.Error("failed to create user", zap.Error(err))
-		http.Error(w, "failed to create user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось создать пользователя", http.StatusInternalServerError)
 		return
 	}
 
 	token, err := h.issueToken(user)
 	if err != nil {
 		h.logger.Error("failed to generate token", zap.Error(err))
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
 	}
 
@@ -156,34 +156,34 @@ func (h *LocalAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" || req.Password == "" {
-		http.Error(w, "email and password are required", http.StatusBadRequest)
+		http.Error(w, "Требуются email и пароль", http.StatusBadRequest)
 		return
 	}
 
 	user, err := h.userRepo.GetByEmail(r.Context(), req.Email)
 	if err != nil {
-		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		http.Error(w, "Неверный email или пароль", http.StatusUnauthorized)
 		return
 	}
 
 	if !user.IsActive {
-		http.Error(w, "account is deactivated", http.StatusForbidden)
+		http.Error(w, "Учётная запись деактивирована", http.StatusForbidden)
 		return
 	}
 
 	if user.PasswordHash == "" {
-		http.Error(w, "this account uses SSO login only", http.StatusBadRequest)
+		http.Error(w, "Эта учётная запись использует вход только через SSO", http.StatusBadRequest)
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		http.Error(w, "Неверный email или пароль", http.StatusUnauthorized)
 		return
 	}
 
@@ -192,7 +192,7 @@ func (h *LocalAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	token, err := h.issueToken(user)
 	if err != nil {
 		h.logger.Error("failed to generate token", zap.Error(err))
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
 	}
 

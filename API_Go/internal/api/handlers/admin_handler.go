@@ -246,7 +246,7 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
@@ -266,14 +266,14 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	// Получаем пользователей
 	users, err := h.userRepo.List(r.Context(), perPage, offset)
 	if err != nil {
-		http.Error(w, "failed to get users", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить пользователей", http.StatusInternalServerError)
 		return
 	}
 
 	// Получаем общее количество
 	total, err := h.userRepo.Count(r.Context())
 	if err != nil {
-		http.Error(w, "failed to count users", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить количество пользователей", http.StatusInternalServerError)
 		return
 	}
 
@@ -296,24 +296,24 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
 	id := chi.URLParam(r, "id")
 	userID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusBadRequest)
 		return
 	}
 
 	user, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
 		if err == repository.ErrUserNotFound {
-			http.Error(w, "user not found", http.StatusNotFound)
+			http.Error(w, "Пользователь не найден", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -326,14 +326,14 @@ func (h *AdminHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
 	id := chi.URLParam(r, "id")
 	userID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusBadRequest)
 		return
 	}
 
@@ -342,23 +342,23 @@ func (h *AdminHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
 	user, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
 		if err == repository.ErrUserNotFound {
-			http.Error(w, "user not found", http.StatusNotFound)
+			http.Error(w, "Пользователь не найден", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить пользователя", http.StatusInternalServerError)
 		return
 	}
 
 	user.Roles = req.Roles
 	if err := h.userRepo.Update(r.Context(), user); err != nil {
-		http.Error(w, "failed to update user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось обновить пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -370,7 +370,7 @@ func (h *AdminHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	var req struct {
@@ -381,13 +381,13 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		IsActive *bool    `json:"is_active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Email == "" || req.Name == "" {
-		http.Error(w, "email and name are required", http.StatusBadRequest)
+		http.Error(w, "Укажите email и имя", http.StatusBadRequest)
 		return
 	}
 	user := &models.User{
@@ -406,17 +406,17 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.Password) != "" {
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			http.Error(w, "failed to hash password", http.StatusInternalServerError)
+			http.Error(w, "Не удалось вычислить хеш пароля", http.StatusInternalServerError)
 			return
 		}
 		user.PasswordHash = string(hash)
 	}
 	if err := h.userRepo.Create(r.Context(), user); err != nil {
 		if err == repository.ErrUserAlreadyExists {
-			http.Error(w, "user already exists", http.StatusConflict)
+			http.Error(w, "Пользователь уже существует", http.StatusConflict)
 			return
 		}
-		http.Error(w, "failed to create user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось создать пользователя", http.StatusInternalServerError)
 		return
 	}
 	h.recordAudit(r.Context(), claims.Email, "create_user", "user", user.ID.String(), "email="+user.Email)
@@ -429,13 +429,13 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	id := chi.URLParam(r, "id")
 	userID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusBadRequest)
 		return
 	}
 	var req struct {
@@ -446,16 +446,16 @@ func (h *AdminHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		BannedUntil **string `json:"banned_until"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	user, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
 		if err == repository.ErrUserNotFound {
-			http.Error(w, "user not found", http.StatusNotFound)
+			http.Error(w, "Пользователь не найден", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить пользователя", http.StatusInternalServerError)
 		return
 	}
 	if req.Email != nil {
@@ -476,7 +476,7 @@ func (h *AdminHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		} else {
 			t, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(**req.BannedUntil))
 			if parseErr != nil {
-				http.Error(w, "invalid banned_until format", http.StatusBadRequest)
+				http.Error(w, "Некорректный формат banned_until", http.StatusBadRequest)
 				return
 			}
 			tt := t.UTC()
@@ -484,7 +484,7 @@ func (h *AdminHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := h.userRepo.Update(r.Context(), user); err != nil {
-		http.Error(w, "failed to update user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось обновить пользователя", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -495,17 +495,17 @@ func (h *AdminHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	id := chi.URLParam(r, "id")
 	userID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusBadRequest)
 		return
 	}
 	if err := h.userRepo.Delete(r.Context(), userID); err != nil {
-		http.Error(w, "failed to delete user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось удалить пользователя", http.StatusInternalServerError)
 		return
 	}
 	h.recordAudit(r.Context(), claims.Email, "delete_user", "user", userID.String(), "")
@@ -516,11 +516,11 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.inviteRepo == nil {
-		http.Error(w, "invite repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий приглашений не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	var req struct {
@@ -529,12 +529,12 @@ func (h *AdminHandler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 		ExpiresInHours int      `json:"expires_in_hours"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" {
-		http.Error(w, "email is required", http.StatusBadRequest)
+		http.Error(w, "Укажите email", http.StatusBadRequest)
 		return
 	}
 	if req.ExpiresInHours < 1 || req.ExpiresInHours > 720 {
@@ -545,7 +545,7 @@ func (h *AdminHandler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	rawToken, tokenHash, err := generateInviteToken()
 	if err != nil {
-		http.Error(w, "failed to generate invite token", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сгенерировать токен приглашения", http.StatusInternalServerError)
 		return
 	}
 	invite := &models.AdminInvite{
@@ -558,7 +558,7 @@ func (h *AdminHandler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: time.Now().UTC().Add(time.Duration(req.ExpiresInHours) * time.Hour),
 	}
 	if err := h.inviteRepo.Create(r.Context(), invite); err != nil {
-		http.Error(w, "failed to create invite", http.StatusInternalServerError)
+		http.Error(w, "Не удалось создать приглашение", http.StatusInternalServerError)
 		return
 	}
 	inviteURL := h.buildInviteURL(rawToken)
@@ -582,7 +582,7 @@ func (h *AdminHandler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) ListInvites(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.inviteRepo == nil {
@@ -601,7 +601,7 @@ func (h *AdminHandler) ListInvites(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * perPage
 	invites, err := h.inviteRepo.List(r.Context(), perPage, offset)
 	if err != nil {
-		http.Error(w, "failed to list invites", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить список приглашений", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -618,38 +618,38 @@ func (h *AdminHandler) ListInvites(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) ResendInvite(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.inviteRepo == nil {
-		http.Error(w, "invite repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий приглашений не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	id := chi.URLParam(r, "id")
 	inviteID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid invite id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор приглашения", http.StatusBadRequest)
 		return
 	}
 	invite, err := h.inviteRepo.GetByID(r.Context(), inviteID)
 	if err != nil {
 		if err == repository.ErrAdminInviteNotFound {
-			http.Error(w, "invite not found", http.StatusNotFound)
+			http.Error(w, "Приглашение не найдено", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get invite", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить приглашение", http.StatusInternalServerError)
 		return
 	}
 	rawToken, tokenHash, err := generateInviteToken()
 	if err != nil {
-		http.Error(w, "failed to generate invite token", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сгенерировать токен приглашения", http.StatusInternalServerError)
 		return
 	}
 	invite.TokenHash = tokenHash
 	invite.Status = models.AdminInviteStatusPending
 	invite.ExpiresAt = time.Now().UTC().Add(72 * time.Hour)
 	if err := h.inviteRepo.Update(r.Context(), invite); err != nil {
-		http.Error(w, "failed to update invite", http.StatusInternalServerError)
+		http.Error(w, "Не удалось обновить приглашение", http.StatusInternalServerError)
 		return
 	}
 	inviteURL := h.buildInviteURL(rawToken)
@@ -671,19 +671,19 @@ func (h *AdminHandler) ResendInvite(w http.ResponseWriter, r *http.Request) {
 // AcceptInvite POST /api/v1/admin/invites/accept
 func (h *AdminHandler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 	if h.inviteRepo == nil {
-		http.Error(w, "invite repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий приглашений не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	var req struct {
 		Token string `json:"token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	req.Token = strings.TrimSpace(req.Token)
 	if req.Token == "" {
-		http.Error(w, "token is required", http.StatusBadRequest)
+		http.Error(w, "Требуется токен", http.StatusBadRequest)
 		return
 	}
 	hash := sha256.Sum256([]byte(req.Token))
@@ -691,23 +691,23 @@ func (h *AdminHandler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 	invite, err := h.inviteRepo.GetByTokenHash(r.Context(), tokenHash)
 	if err != nil {
 		if err == repository.ErrAdminInviteNotFound {
-			http.Error(w, "invite not found", http.StatusNotFound)
+			http.Error(w, "Приглашение не найдено", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get invite", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить приглашение", http.StatusInternalServerError)
 		return
 	}
 	if invite.ExpiresAt.Before(time.Now().UTC()) {
 		invite.Status = models.AdminInviteStatusExpired
 		_ = h.inviteRepo.Update(r.Context(), invite)
-		http.Error(w, "invite expired", http.StatusGone)
+		http.Error(w, "Срок действия приглашения истёк", http.StatusGone)
 		return
 	}
 	now := time.Now().UTC()
 	invite.Status = models.AdminInviteStatusAccepted
 	invite.AcceptedAt = &now
 	if err := h.inviteRepo.Update(r.Context(), invite); err != nil {
-		http.Error(w, "failed to accept invite", http.StatusInternalServerError)
+		http.Error(w, "Не удалось принять приглашение", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -723,14 +723,14 @@ func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
 	id := chi.URLParam(r, "id")
 	userID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusBadRequest)
 		return
 	}
 
@@ -740,21 +740,21 @@ func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	if req.DurationHours < 0 {
-		http.Error(w, "duration_hours must be non-negative", http.StatusBadRequest)
+		http.Error(w, "Параметр duration_hours не может быть отрицательным", http.StatusBadRequest)
 		return
 	}
 
 	user, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
 		if err == repository.ErrUserNotFound {
-			http.Error(w, "user not found", http.StatusNotFound)
+			http.Error(w, "Пользователь не найден", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -766,7 +766,7 @@ func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 	}
 	user.BannedUntil = bannedUntil
 	if err := h.userRepo.Update(r.Context(), user); err != nil {
-		http.Error(w, "failed to ban user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось заблокировать пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -786,31 +786,31 @@ func (h *AdminHandler) UnbanUser(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
 	id := chi.URLParam(r, "id")
 	userID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusBadRequest)
 		return
 	}
 
 	user, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
 		if err == repository.ErrUserNotFound {
-			http.Error(w, "user not found", http.StatusNotFound)
+			http.Error(w, "Пользователь не найден", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить пользователя", http.StatusInternalServerError)
 		return
 	}
 
 	user.IsActive = true
 	user.BannedUntil = nil
 	if err := h.userRepo.Update(r.Context(), user); err != nil {
-		http.Error(w, "failed to unban user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось разблокировать пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -826,7 +826,7 @@ func (h *AdminHandler) ListConferences(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
@@ -849,7 +849,7 @@ func (h *AdminHandler) ListConferences(w http.ResponseWriter, r *http.Request) {
 
 	meetings, err := h.roomRepo.ListMeetingsWithParticipantCounts(r.Context(), perPage, offset)
 	if err != nil {
-		http.Error(w, "failed to list conferences", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить список конференций", http.StatusInternalServerError)
 		return
 	}
 
@@ -891,42 +891,42 @@ func (h *AdminHandler) EndConference(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		http.Error(w, "conference id is required", http.StatusBadRequest)
+		http.Error(w, "Укажите идентификатор конференции", http.StatusBadRequest)
 		return
 	}
 	roomID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid conference id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор конференции", http.StatusBadRequest)
 		return
 	}
 
 	if h.roomRepo == nil {
-		http.Error(w, "conference service unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "Сервис конференций недоступен", http.StatusServiceUnavailable)
 		return
 	}
 
 	room, err := h.roomRepo.GetByID(r.Context(), roomID)
 	if err != nil {
 		if err == repository.ErrRoomNotFound {
-			http.Error(w, "conference not found", http.StatusNotFound)
+			http.Error(w, "Конференция не найдена", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get conference", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить конференцию", http.StatusInternalServerError)
 		return
 	}
 	if room.Type != models.RoomTypeMeeting {
-		http.Error(w, "room is not a conference", http.StatusBadRequest)
+		http.Error(w, "Комната не является конференцией", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.roomRepo.Delete(r.Context(), roomID); err != nil {
-		http.Error(w, "failed to end conference", http.StatusInternalServerError)
+		http.Error(w, "Не удалось завершить конференцию", http.StatusInternalServerError)
 		return
 	}
 
@@ -947,7 +947,7 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	// Проверяем роль администратора
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
@@ -991,11 +991,11 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) GetExchangeSettings(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.exchangeSettingsRepo == nil {
-		http.Error(w, "exchange settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек Exchange не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	settings, err := h.exchangeSettingsRepo.Get(r.Context())
@@ -1005,7 +1005,7 @@ func (h *AdminHandler) GetExchangeSettings(w http.ResponseWriter, r *http.Reques
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"configured": false})
 			return
 		}
-		http.Error(w, "failed to get exchange settings", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить настройки Exchange", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1040,11 +1040,11 @@ func (h *AdminHandler) GetExchangeSettings(w http.ResponseWriter, r *http.Reques
 func (h *AdminHandler) PutExchangeSettings(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.exchangeSettingsRepo == nil {
-		http.Error(w, "exchange settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек Exchange не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	var req struct {
@@ -1067,16 +1067,16 @@ func (h *AdminHandler) PutExchangeSettings(w http.ResponseWriter, r *http.Reques
 		SyncLookaheadS int    `json:"sync_lookahead_seconds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	if strings.TrimSpace(req.EWSURL) == "" || strings.TrimSpace(req.Username) == "" {
-		http.Error(w, "ews_url and username are required", http.StatusBadRequest)
+		http.Error(w, "Требуются поля ews_url и username", http.StatusBadRequest)
 		return
 	}
 	existing, err := h.exchangeSettingsRepo.Get(r.Context())
 	if err != nil && err != repository.ErrExchangeSettingNotFound {
-		http.Error(w, "failed to read exchange settings", http.StatusInternalServerError)
+		http.Error(w, "Не удалось прочитать настройки Exchange", http.StatusInternalServerError)
 		return
 	}
 	settings := &models.ExchangeSetting{ID: "default"}
@@ -1119,7 +1119,7 @@ func (h *AdminHandler) PutExchangeSettings(w http.ResponseWriter, r *http.Reques
 	}
 	settings.UpdatedBy = claims.Email
 	if err := h.exchangeSettingsRepo.Upsert(r.Context(), settings); err != nil {
-		http.Error(w, "failed to update exchange settings", http.StatusInternalServerError)
+		http.Error(w, "Не удалось обновить настройки Exchange", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1130,11 +1130,11 @@ func (h *AdminHandler) PutExchangeSettings(w http.ResponseWriter, r *http.Reques
 func (h *AdminHandler) TestExchangeConnection(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.exchangeSettingsRepo == nil {
-		http.Error(w, "exchange settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек Exchange не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	var req struct {
@@ -1143,7 +1143,7 @@ func (h *AdminHandler) TestExchangeConnection(w http.ResponseWriter, r *http.Req
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	settings, err := h.exchangeSettingsRepo.Get(r.Context())
 	if err != nil {
-		http.Error(w, "exchange settings not found", http.StatusNotFound)
+		http.Error(w, "Настройки Exchange не найдены", http.StatusNotFound)
 		return
 	}
 	client, err := exchange.NewEWSClient(exchange.EWSConfig{
@@ -1187,7 +1187,7 @@ func (h *AdminHandler) TestExchangeConnection(w http.ResponseWriter, r *http.Req
 func (h *AdminHandler) ListBots(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botSettingsRepo == nil {
@@ -1197,7 +1197,7 @@ func (h *AdminHandler) ListBots(w http.ResponseWriter, r *http.Request) {
 	}
 	settings, err := h.botSettingsRepo.List(r.Context())
 	if err != nil {
-		http.Error(w, "failed to list bots", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить список ботов", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1208,11 +1208,11 @@ func (h *AdminHandler) ListBots(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botSettingsRepo == nil {
-		http.Error(w, "bot settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек ботов не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	var req struct {
@@ -1226,12 +1226,12 @@ func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 		AvatarURL    string   `json:"avatar_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+		http.Error(w, "Укажите имя", http.StatusBadRequest)
 		return
 	}
 	if req.RateLimitMs <= 0 {
@@ -1258,7 +1258,7 @@ func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 		setting.IsEnabled = *req.IsEnabled
 	}
 	if err := h.botSettingsRepo.Create(r.Context(), setting); err != nil {
-		http.Error(w, "failed to create bot", http.StatusInternalServerError)
+		http.Error(w, "Не удалось создать бота", http.StatusInternalServerError)
 		return
 	}
 	h.reloadBotEngineInMemory(r.Context())
@@ -1272,17 +1272,17 @@ func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) PatchBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botSettingsRepo == nil {
-		http.Error(w, "bot settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек ботов не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	id := chi.URLParam(r, "id")
 	botID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid bot id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор бота", http.StatusBadRequest)
 		return
 	}
 	var req struct {
@@ -1295,16 +1295,16 @@ func (h *AdminHandler) PatchBot(w http.ResponseWriter, r *http.Request) {
 		AvatarURL    *string   `json:"avatar_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	setting, err := h.botSettingsRepo.GetByID(r.Context(), botID)
 	if err != nil {
 		if err == repository.ErrBotSettingNotFound {
-			http.Error(w, "bot not found", http.StatusNotFound)
+			http.Error(w, "Бот не найден", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get bot", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить бота", http.StatusInternalServerError)
 		return
 	}
 	if req.Name != nil {
@@ -1335,7 +1335,7 @@ func (h *AdminHandler) PatchBot(w http.ResponseWriter, r *http.Request) {
 		setting.AvatarURL = strings.TrimSpace(*req.AvatarURL)
 	}
 	if err := h.botSettingsRepo.Update(r.Context(), setting); err != nil {
-		http.Error(w, "failed to update bot", http.StatusInternalServerError)
+		http.Error(w, "Не удалось обновить бота", http.StatusInternalServerError)
 		return
 	}
 	h.reloadBotEngineInMemory(r.Context())
@@ -1347,31 +1347,31 @@ func (h *AdminHandler) PatchBot(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) SetBotEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botSettingsRepo == nil {
-		http.Error(w, "bot settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек ботов не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	id := chi.URLParam(r, "id")
 	botID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid bot id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор бота", http.StatusBadRequest)
 		return
 	}
 	setting, err := h.botSettingsRepo.GetByID(r.Context(), botID)
 	if err != nil {
 		if err == repository.ErrBotSettingNotFound {
-			http.Error(w, "bot not found", http.StatusNotFound)
+			http.Error(w, "Бот не найден", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get bot", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить бота", http.StatusInternalServerError)
 		return
 	}
 	setting.IsEnabled = enabled
 	if err := h.botSettingsRepo.Update(r.Context(), setting); err != nil {
-		http.Error(w, "failed to update bot", http.StatusInternalServerError)
+		http.Error(w, "Не удалось обновить бота", http.StatusInternalServerError)
 		return
 	}
 	h.reloadBotEngineInMemory(r.Context())
@@ -1394,21 +1394,21 @@ func (h *AdminHandler) DisableBot(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) DeleteBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botSettingsRepo == nil {
-		http.Error(w, "bot settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек ботов не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	id := chi.URLParam(r, "id")
 	botID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid bot id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор бота", http.StatusBadRequest)
 		return
 	}
 	if err := h.botSettingsRepo.Delete(r.Context(), botID); err != nil {
-		http.Error(w, "failed to delete bot", http.StatusInternalServerError)
+		http.Error(w, "Не удалось удалить бота", http.StatusInternalServerError)
 		return
 	}
 	h.reloadBotEngineInMemory(r.Context())
@@ -1419,11 +1419,11 @@ func (h *AdminHandler) DeleteBot(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) ReloadBotConfig(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botConfigReloader == nil {
-		http.Error(w, "bot config reloader is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Перезагрузчик конфигурации ботов не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	if err := h.botConfigReloader.ReloadSettings(r.Context()); err != nil {
@@ -1440,7 +1440,7 @@ func (h *AdminHandler) ReloadBotConfig(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) GetBotStats(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botRepo == nil {
@@ -1451,7 +1451,7 @@ func (h *AdminHandler) GetBotStats(w http.ResponseWriter, r *http.Request) {
 	since24h := time.Now().Add(-24 * time.Hour)
 	counts, err := h.botRepo.CountCommandEventsSince(r.Context(), since24h)
 	if err != nil {
-		http.Error(w, "failed to get bot stats", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить статистику бота", http.StatusInternalServerError)
 		return
 	}
 	totalAll, _ := h.botRepo.CountCommandEventsAll(r.Context())
@@ -1467,7 +1467,7 @@ func (h *AdminHandler) GetBotStats(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
@@ -1484,7 +1484,7 @@ func (h *AdminHandler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Requ
 
 	deliveries, err := h.webhookRepo.ListRecentDeliveries(r.Context(), limit, false)
 	if err != nil {
-		http.Error(w, "failed to list webhook deliveries", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить список доставок вебхуков", http.StatusInternalServerError)
 		return
 	}
 
@@ -1496,7 +1496,7 @@ func (h *AdminHandler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Requ
 func (h *AdminHandler) ListWebhookErrors(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
@@ -1516,7 +1516,7 @@ func (h *AdminHandler) ListWebhookErrors(w http.ResponseWriter, r *http.Request)
 
 	deliveries, err := h.webhookRepo.ListRecentDeliveries(r.Context(), limit, true)
 	if err != nil {
-		http.Error(w, "failed to list webhook errors", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить список ошибок вебхуков", http.StatusInternalServerError)
 		return
 	}
 
@@ -1531,7 +1531,7 @@ func (h *AdminHandler) ListWebhookErrors(w http.ResponseWriter, r *http.Request)
 func (h *AdminHandler) ListBotErrors(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
@@ -1551,7 +1551,7 @@ func (h *AdminHandler) ListBotErrors(w http.ResponseWriter, r *http.Request) {
 
 	events, err := h.botRepo.ListCommandEvents(r.Context(), limit, true)
 	if err != nil {
-		http.Error(w, "failed to list bot errors", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить список ошибок ботов", http.StatusInternalServerError)
 		return
 	}
 
@@ -1566,7 +1566,7 @@ func (h *AdminHandler) ListBotErrors(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) TestBotCommand(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	var req struct {
@@ -1576,7 +1576,7 @@ func (h *AdminHandler) TestBotCommand(w http.ResponseWriter, r *http.Request) {
 		Args        string `json:"args"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	var result string
@@ -1618,7 +1618,7 @@ func (h *AdminHandler) TestBotCommand(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) GetCommandStats(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botRepo == nil {
@@ -1633,7 +1633,7 @@ func (h *AdminHandler) GetCommandStats(w http.ResponseWriter, r *http.Request) {
 	since := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
 	stats, err := h.botRepo.ListCommandStatsGrouped(r.Context(), since)
 	if err != nil {
-		http.Error(w, "failed to get command stats", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить статистику команд", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1644,7 +1644,7 @@ func (h *AdminHandler) GetCommandStats(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) ListCommandHistory(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botRepo == nil {
@@ -1667,7 +1667,7 @@ func (h *AdminHandler) ListCommandHistory(w http.ResponseWriter, r *http.Request
 	}
 	events, total, err := h.botRepo.ListCommandEventsFiltered(r.Context(), limit, offset, command, userID, roomID, status, since)
 	if err != nil {
-		http.Error(w, "failed to list command history", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить историю команд", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1678,26 +1678,26 @@ func (h *AdminHandler) ListCommandHistory(w http.ResponseWriter, r *http.Request
 func (h *AdminHandler) ExportBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botSettingsRepo == nil {
-		http.Error(w, "bot settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек ботов не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	id := chi.URLParam(r, "id")
 	botID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid bot id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор бота", http.StatusBadRequest)
 		return
 	}
 	setting, err := h.botSettingsRepo.GetByID(r.Context(), botID)
 	if err != nil {
 		if err == repository.ErrBotSettingNotFound {
-			http.Error(w, "bot not found", http.StatusNotFound)
+			http.Error(w, "Бот не найден", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get bot", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить бота", http.StatusInternalServerError)
 		return
 	}
 	export := map[string]interface{}{
@@ -1719,11 +1719,11 @@ func (h *AdminHandler) ExportBot(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) ImportBot(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.botSettingsRepo == nil {
-		http.Error(w, "bot settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек ботов не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	var req struct {
@@ -1737,12 +1737,12 @@ func (h *AdminHandler) ImportBot(w http.ResponseWriter, r *http.Request) {
 		AvatarURL    string   `json:"avatar_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+		http.Error(w, "Укажите имя", http.StatusBadRequest)
 		return
 	}
 	if req.RateLimitMs <= 0 {
@@ -1769,7 +1769,7 @@ func (h *AdminHandler) ImportBot(w http.ResponseWriter, r *http.Request) {
 		setting.IsEnabled = *req.IsEnabled
 	}
 	if err := h.botSettingsRepo.Create(r.Context(), setting); err != nil {
-		http.Error(w, "failed to import bot", http.StatusInternalServerError)
+		http.Error(w, "Не удалось импортировать бота", http.StatusInternalServerError)
 		return
 	}
 	h.reloadBotEngineInMemory(r.Context())
@@ -1783,7 +1783,7 @@ func (h *AdminHandler) ImportBot(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) ListBotTemplates(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	templates := []models.BotTemplate{
@@ -1842,7 +1842,7 @@ func (h *AdminHandler) ListBotTemplates(w http.ResponseWriter, r *http.Request) 
 func (h *AdminHandler) ListAuthAuditEvents(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
@@ -1863,7 +1863,7 @@ func (h *AdminHandler) ListAuthAuditEvents(w http.ResponseWriter, r *http.Reques
 
 	events, err := h.authAuditRepo.ListAuthAuditEvents(r.Context(), limit, onlyFailed)
 	if err != nil {
-		http.Error(w, "failed to list auth audit events", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить события аудита авторизации", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1877,7 +1877,7 @@ func (h *AdminHandler) ListAuthAuditEvents(w http.ResponseWriter, r *http.Reques
 func (h *AdminHandler) ListCalendarAuditEvents(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
@@ -1896,7 +1896,7 @@ func (h *AdminHandler) ListCalendarAuditEvents(w http.ResponseWriter, r *http.Re
 	}
 	events, err := h.calendarAuditRepo.ListCalendarAuditEvents(r.Context(), limit, onlyFailed)
 	if err != nil {
-		http.Error(w, "failed to list calendar audit events", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить события аудита календаря", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1910,7 +1910,7 @@ func (h *AdminHandler) ListCalendarAuditEvents(w http.ResponseWriter, r *http.Re
 func (h *AdminHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
@@ -1973,7 +1973,7 @@ func (h *AdminHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) GetConferencePolicies(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.conferencePolicyRepo == nil {
@@ -2009,16 +2009,16 @@ func (h *AdminHandler) GetConferencePolicies(w http.ResponseWriter, r *http.Requ
 func (h *AdminHandler) PutConferencePolicies(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.conferencePolicyRepo == nil {
-		http.Error(w, "conference policy repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий политик конференций не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	var req models.ConferencePolicy
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 	req.UpdatedBy = claims.Email
@@ -2029,7 +2029,7 @@ func (h *AdminHandler) PutConferencePolicies(w http.ResponseWriter, r *http.Requ
 		req.MaxDurationMinutes = 480
 	}
 	if err := h.conferencePolicyRepo.Upsert(r.Context(), &req); err != nil {
-		http.Error(w, "failed to save conference policies", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сохранить политики конференций", http.StatusInternalServerError)
 		return
 	}
 	h.recordAudit(r.Context(), claims.Email, "update_conference_policies", "conference_policy", "default", "")
@@ -2041,7 +2041,7 @@ func (h *AdminHandler) PutConferencePolicies(w http.ResponseWriter, r *http.Requ
 func (h *AdminHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.auditLogRepo == nil {
@@ -2063,7 +2063,7 @@ func (h *AdminHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, total, err := h.auditLogRepo.List(r.Context(), limit, offset, actor, action, resourceType, since)
 	if err != nil {
-		http.Error(w, "failed to list audit logs", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить журнал аудита", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -2116,11 +2116,11 @@ func (h *AdminHandler) GetAppearanceSettings(w http.ResponseWriter, r *http.Requ
 func (h *AdminHandler) PutAppearanceSettings(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil || !auth.HasRole(claims, "admin") {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 	if h.appSettingsRepo == nil {
-		http.Error(w, "app settings repository is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "Репозиторий настроек приложения не настроен", http.StatusServiceUnavailable)
 		return
 	}
 	var req struct {
@@ -2134,7 +2134,7 @@ func (h *AdminHandler) PutAppearanceSettings(w http.ResponseWriter, r *http.Requ
 		BrandingLogoURL     string `json:"branding_logo_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
@@ -2170,7 +2170,7 @@ func (h *AdminHandler) PutAppearanceSettings(w http.ResponseWriter, r *http.Requ
 	existing.UpdatedBy = claims.Email
 
 	if err := h.appSettingsRepo.Upsert(r.Context(), existing); err != nil {
-		http.Error(w, "failed to save appearance settings", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сохранить настройки оформления", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

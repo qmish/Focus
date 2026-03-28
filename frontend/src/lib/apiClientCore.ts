@@ -39,7 +39,7 @@ export async function apiRequest<T>(url: string, options: RequestOptions = {}): 
         if (method === 'GET' && attempt <= retry + 1 && response.status >= 500) {
           continue
         }
-        throw new ApiError(text || `HTTP ${response.status}`, response.status, text)
+        throw new ApiError(text || `Ошибка сервера (${response.status})`, response.status, text)
       }
 
       if (response.status === 204) {

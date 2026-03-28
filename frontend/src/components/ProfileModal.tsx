@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { apiClient } from '../lib/apiClient'
 
 interface ProfileData {
   id: string
@@ -20,11 +21,10 @@ interface ProfileModalProps {
   open: boolean
   onClose: () => void
   user: ProfileData | null
-  token: string | null
   onSave: (updated: ProfileData) => void
 }
 
-export default function ProfileModal({ open, onClose, user, token, onSave }: ProfileModalProps) {
+export default function ProfileModal({ open, onClose, user, onSave }: ProfileModalProps) {
   const [form, setForm] = useState({
     name: '',
     directorate: '',
@@ -62,23 +62,11 @@ export default function ProfileModal({ open, onClose, user, token, onSave }: Pro
     setSaving(true)
     setError('')
     try {
-      const res = await fetch('/api/v1/auth/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(form),
-      })
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to save')
-      }
-      const updated = await res.json()
+      const updated = await apiClient.put<ProfileData>('/api/v1/auth/profile', form)
       onSave(updated)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка сохранения')
+      setError(err instanceof Error ? err.message : 'Ошибка сохранения профиля')
     } finally {
       setSaving(false)
     }

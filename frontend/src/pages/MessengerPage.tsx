@@ -104,10 +104,14 @@ export default function MessengerPage() {
         wsRef.current = ws
 
         ws.onopen = () => {
+          const wasReconnect = reconnectAttemptsRef.current > 0
           reconnectAttemptsRef.current = 0
           setWsConnected(true)
           ws.send(JSON.stringify({ type: 'auth', payload: { token } }))
           ws.send(JSON.stringify({ type: 'subscribe', payload: { room_id: roomId } }))
+          if (wasReconnect) {
+            refreshMessages(roomId, 500)
+          }
         }
 
         ws.onmessage = (event) => {
@@ -116,7 +120,11 @@ export default function MessengerPage() {
             if (data.type === 'message' && data.payload?.room_id === roomId) {
               setMessages(prev => mergeMessageList(prev, data.payload))
             }
-          } catch (err) { console.error('MessengerPage:', err) }
+          } catch (err) { console.error('WS parse error:', err) }
+        }
+
+        ws.onerror = () => {
+          setWsConnected(false)
         }
 
         ws.onclose = () => {
@@ -214,6 +222,17 @@ export default function MessengerPage() {
     }
   }
 
+  const refreshMessages = useCallback((id: string, delayMs: number) => {
+    setTimeout(async () => {
+      try {
+        const data = await apiClient.get<{ data?: Message[] }>(`/api/v1/messages?room_id=${id}`)
+        if (data.data) {
+          setMessages(data.data)
+        }
+      } catch { /* silent */ }
+    }, delayMs)
+  }, [])
+
   const sendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     if (!roomId) return
@@ -228,16 +247,23 @@ export default function MessengerPage() {
     setMessageInput('')
 
     try {
-      await apiClient.post('/api/v1/messages', {
+      const created = await apiClient.post<Message>('/api/v1/messages', {
         room_id: roomId,
         content,
         type: 'text',
       })
+      if (created?.id) {
+        setMessages(prev => mergeMessageList(prev, created))
+      }
+      if (content.startsWith('/')) {
+        refreshMessages(roomId, 1200)
+        refreshMessages(roomId, 3000)
+      }
     } catch {
       setError('Не удалось отправить сообщение')
       setMessageInput(content)
     }
-  }, [roomId, messageInput, pendingFile])
+  }, [roomId, messageInput, pendingFile, refreshMessages])
 
   const sendFileMessage = async (file: File, caption: string) => {
     if (!roomId) return
@@ -248,7 +274,7 @@ export default function MessengerPage() {
       }>('/api/v1/files/upload', file)
 
       const isImage = file.type.startsWith('image/')
-      await apiClient.post('/api/v1/messages', {
+      const created = await apiClient.post<Message>('/api/v1/messages', {
         room_id: roomId,
         content: caption || upload.file_name,
         type: isImage ? 'image' : 'file',
@@ -259,6 +285,9 @@ export default function MessengerPage() {
           file_mime: upload.file_mime,
         },
       })
+      if (created?.id) {
+        setMessages(prev => mergeMessageList(prev, created))
+      }
       setPendingFile(null)
       setMessageInput('')
     } catch {
@@ -648,7 +677,6 @@ export default function MessengerPage() {
         open={showProfileModal}
         onClose={() => setShowProfileModal(false)}
         user={user}
-        token={token}
         onSave={(updated) => {
           useAuthStore.setState({
             user: {

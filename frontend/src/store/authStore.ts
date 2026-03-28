@@ -5,6 +5,21 @@ import { initKeycloak } from '../lib/keycloakInit'
 const ACCESS_TOKEN_KEY = 'focus_access_token'
 const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || ''
 
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const data = new TextEncoder().encode(verifier)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
 const keycloak = KEYCLOAK_URL
   ? new Keycloak({
       url: KEYCLOAK_URL,
@@ -59,6 +74,60 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   init: async () => {
     if (storeInitPromise) return storeInitPromise
     storeInitPromise = (async () => {
+
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    if (code) {
+      window.history.replaceState({}, '', window.location.pathname)
+      try {
+        const kcUrl = KEYCLOAK_URL
+        const realm = import.meta.env.VITE_KEYCLOAK_REALM || 'company'
+        const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'messenger-frontend'
+        const codeVerifier = sessionStorage.getItem('pkce_code_verifier') || ''
+        sessionStorage.removeItem('pkce_code_verifier')
+        const tokenUrl = `${kcUrl}/realms/${realm}/protocol/openid-connect/token`
+        const tokenBody: Record<string, string> = {
+          grant_type: 'authorization_code',
+          client_id: clientId,
+          code,
+          redirect_uri: window.location.origin + '/',
+        }
+        if (codeVerifier) {
+          tokenBody.code_verifier = codeVerifier
+        }
+        const tokenRes = await fetch(tokenUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(tokenBody),
+        })
+        if (tokenRes.ok) {
+          const tokens = await tokenRes.json()
+          const idToken = tokens.id_token
+          if (idToken) {
+            const exchangeRes = await fetch(`${API_BASE}/v1/auth/token-exchange`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: idToken }),
+            })
+            if (exchangeRes.ok) {
+              const data = await exchangeRes.json()
+              localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token)
+              set({
+                keycloak,
+                isAuthenticated: true,
+                isLoading: false,
+                user: data.user,
+                token: data.access_token,
+              })
+              return
+            }
+          }
+        }
+      } catch (err) {
+        console.error('OIDC callback handling failed:', err)
+      }
+    }
+
     const saved = localStorage.getItem(ACCESS_TOKEN_KEY)
     if (saved) {
       try {
@@ -128,7 +197,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (!res.ok) {
       const text = await res.text()
-      throw new Error(text || 'Login failed')
+      throw new Error(text || 'Ошибка входа')
     }
 
     const data = await res.json()
@@ -150,7 +219,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (!res.ok) {
       const text = await res.text()
-      throw new Error(text || 'Registration failed')
+      throw new Error(text || 'Ошибка регистрации')
     }
 
     const data = await res.json()
@@ -164,9 +233,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loginKeycloak: async () => {
-    if (keycloak) {
-      await keycloak.login()
+    const kcUrl = KEYCLOAK_URL
+    if (!kcUrl) {
+      throw new Error('Keycloak не сконфигурирован (VITE_KEYCLOAK_URL пуст)')
     }
+    const realm = import.meta.env.VITE_KEYCLOAK_REALM || 'company'
+    const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'messenger-frontend'
+    const redirectUri = window.location.origin + '/'
+    const codeVerifier = generateCodeVerifier()
+    const codeChallenge = await generateCodeChallenge(codeVerifier)
+    sessionStorage.setItem('pkce_code_verifier', codeVerifier)
+    const authUrl =
+      `${kcUrl}/realms/${realm}/protocol/openid-connect/auth` +
+      `?client_id=${encodeURIComponent(clientId)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&response_type=code` +
+      `&scope=openid` +
+      `&code_challenge=${encodeURIComponent(codeChallenge)}` +
+      `&code_challenge_method=S256`
+    window.location.href = authUrl
   },
 
   logout: async () => {

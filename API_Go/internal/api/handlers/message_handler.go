@@ -35,13 +35,13 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	// Получаем room_id из query параметров
 	roomIDStr := r.URL.Query().Get("room_id")
 	if roomIDStr == "" {
-		http.Error(w, "room_id is required", http.StatusBadRequest)
+		http.Error(w, "Отсутствует room_id", http.StatusBadRequest)
 		return
 	}
 
 	roomID, err := uuid.Parse(roomIDStr)
 	if err != nil {
-		http.Error(w, "invalid room_id", http.StatusBadRequest)
+		http.Error(w, "Некорректный room_id", http.StatusBadRequest)
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	// Получаем сообщения из БД
 	messages, err := h.msgRepo.GetByRoomID(r.Context(), roomID, limit, offset)
 	if err != nil {
-		http.Error(w, "failed to get messages", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить сообщения", http.StatusInternalServerError)
 		return
 	}
 
@@ -92,41 +92,41 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
 	// Валидация
 	if req.RoomID == "" {
-		http.Error(w, "room_id is required", http.StatusBadRequest)
+		http.Error(w, "Отсутствует room_id", http.StatusBadRequest)
 		return
 	}
 
 	if len(req.Content) > 10000 {
-		http.Error(w, "content too long (max 10000 characters)", http.StatusBadRequest)
+		http.Error(w, "Слишком длинное содержимое (макс. 10000 символов)", http.StatusBadRequest)
 		return
 	}
 	if req.Content == "" && req.Type != "file" && req.Type != "image" {
-		http.Error(w, "content is required", http.StatusBadRequest)
+		http.Error(w, "Отсутствует содержимое", http.StatusBadRequest)
 		return
 	}
 
 	roomID, err := uuid.Parse(req.RoomID)
 	if err != nil {
-		http.Error(w, "invalid room_id", http.StatusBadRequest)
+		http.Error(w, "Некорректный room_id", http.StatusBadRequest)
 		return
 	}
 
 	// Получаем пользователя из контекста
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	userID, err := uuid.Parse(claims.UserID)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusInternalServerError)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -158,7 +158,7 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 
 	// Сохраняем сообщение в БД
 	if err := h.msgRepo.Create(r.Context(), message); err != nil {
-		http.Error(w, "failed to create message", http.StatusInternalServerError)
+		http.Error(w, "Не удалось создать сообщение", http.StatusInternalServerError)
 		return
 	}
 
@@ -183,17 +183,17 @@ func (h *MessageHandler) GetMessage(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	messageID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid message id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор сообщения", http.StatusBadRequest)
 		return
 	}
 
 	message, err := h.msgRepo.GetByID(r.Context(), messageID)
 	if err != nil {
 		if err == repository.ErrMessageNotFound {
-			http.Error(w, "message not found", http.StatusNotFound)
+			http.Error(w, "Сообщение не найдено", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get message", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить сообщение", http.StatusInternalServerError)
 		return
 	}
 
@@ -206,7 +206,7 @@ func (h *MessageHandler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	messageID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid message id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор сообщения", http.StatusBadRequest)
 		return
 	}
 
@@ -215,27 +215,27 @@ func (h *MessageHandler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
 	message, err := h.msgRepo.GetByID(r.Context(), messageID)
 	if err != nil {
 		if err == repository.ErrMessageNotFound {
-			http.Error(w, "message not found", http.StatusNotFound)
+			http.Error(w, "Сообщение не найдено", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get message", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить сообщение", http.StatusInternalServerError)
 		return
 	}
 
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 	if message.UserID.String() != claims.UserID {
-		http.Error(w, "forbidden: not message owner", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён: вы не автор сообщения", http.StatusForbidden)
 		return
 	}
 
@@ -245,7 +245,7 @@ func (h *MessageHandler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 	message.Metadata.Edited = &edited
 
 	if err := h.msgRepo.Update(r.Context(), message); err != nil {
-		http.Error(w, "failed to update message", http.StatusInternalServerError)
+		http.Error(w, "Не удалось обновить сообщение", http.StatusInternalServerError)
 		return
 	}
 
@@ -258,32 +258,32 @@ func (h *MessageHandler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	messageID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid message id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор сообщения", http.StatusBadRequest)
 		return
 	}
 
 	message, err := h.msgRepo.GetByID(r.Context(), messageID)
 	if err != nil {
 		if err == repository.ErrMessageNotFound {
-			http.Error(w, "message not found", http.StatusNotFound)
+			http.Error(w, "Сообщение не найдено", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get message", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить сообщение", http.StatusInternalServerError)
 		return
 	}
 
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 	if message.UserID.String() != claims.UserID {
-		http.Error(w, "forbidden: not message owner", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён: вы не автор сообщения", http.StatusForbidden)
 		return
 	}
 
 	if err := h.msgRepo.Delete(r.Context(), messageID); err != nil {
-		http.Error(w, "failed to delete message", http.StatusInternalServerError)
+		http.Error(w, "Не удалось удалить сообщение", http.StatusInternalServerError)
 		return
 	}
 

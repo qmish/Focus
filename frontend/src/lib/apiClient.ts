@@ -29,7 +29,7 @@ export const apiClient = {
     })
     if (!res.ok) {
       const text = await res.text()
-      throw new ApiError(text || `HTTP ${res.status}`, res.status, text)
+      throw new ApiError(text || `Ошибка сервера (${res.status})`, res.status, text)
     }
     return res.json() as Promise<T>
   },

@@ -359,31 +359,31 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			http.Error(w, "missing authorization header", http.StatusUnauthorized)
+			http.Error(w, "Отсутствует заголовок авторизации", http.StatusUnauthorized)
 			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "invalid authorization format", http.StatusUnauthorized)
+			http.Error(w, "Некорректный формат авторизации", http.StatusUnauthorized)
 			return
 		}
 
 		claims, err := ValidateSessionJWTWithSecrets(parts[1], m.sessionValidationSecrets())
 		if err != nil {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
+			http.Error(w, "Недействительный токен", http.StatusUnauthorized)
 			return
 		}
 		if !m.isAudienceAllowed(claims) {
-			http.Error(w, "invalid audience", http.StatusUnauthorized)
+			http.Error(w, "Недействительная аудитория токена", http.StatusUnauthorized)
 			return
 		}
 		if !m.isServiceScopeValid(claims) {
-			http.Error(w, "insufficient_scope", http.StatusUnauthorized)
+			http.Error(w, "Недостаточные права доступа", http.StatusUnauthorized)
 			return
 		}
 		if IsSessionRevoked(claims.SessionID) {
-			http.Error(w, "session revoked", http.StatusUnauthorized)
+			http.Error(w, "Сессия отозвана", http.StatusUnauthorized)
 			return
 		}
 
@@ -470,7 +470,7 @@ func RequireRole(requiredRole string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := GetUserClaimsFromContext(r.Context())
 			if claims == nil {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 				return
 			}
 
@@ -483,7 +483,7 @@ func RequireRole(requiredRole string) func(http.Handler) http.Handler {
 			}
 
 			if !hasRole {
-				http.Error(w, "forbidden", http.StatusForbidden)
+				http.Error(w, "Доступ запрещён", http.StatusForbidden)
 				return
 			}
 
@@ -505,11 +505,11 @@ func RequireAccess(rule AccessRule) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := GetUserClaimsFromContext(r.Context())
 			if claims == nil {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 				return
 			}
 			if !hasAccess(claims, rule) {
-				http.Error(w, "forbidden", http.StatusForbidden)
+				http.Error(w, "Доступ запрещён", http.StatusForbidden)
 				return
 			}
 			next.ServeHTTP(w, r)

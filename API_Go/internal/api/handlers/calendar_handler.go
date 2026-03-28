@@ -106,12 +106,12 @@ func (h *CalendarHandler) SetCalendarIdempotencyRepository(repo calendarIdempote
 // GetEvents GET /api/v1/calendar/events
 func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	if h.calendarService == nil {
-		http.Error(w, "calendar service unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "Служба календаря недоступна", http.StatusServiceUnavailable)
 		return
 	}
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 	// Получаем параметры времени
@@ -124,7 +124,7 @@ func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	if startStr != "" {
 		start, err = time.Parse(time.RFC3339, startStr)
 		if err != nil {
-			http.Error(w, "invalid start time", http.StatusBadRequest)
+			http.Error(w, "Некорректное время начала", http.StatusBadRequest)
 			return
 		}
 	} else {
@@ -134,7 +134,7 @@ func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	if endStr != "" {
 		end, err = time.Parse(time.RFC3339, endStr)
 		if err != nil {
-			http.Error(w, "invalid end time", http.StatusBadRequest)
+			http.Error(w, "Некорректное время окончания", http.StatusBadRequest)
 			return
 		}
 	} else {
@@ -146,8 +146,8 @@ func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	userEmail := claims.Email
 	events, err := h.calendarService.GetEvents(r.Context(), userEmail, start, end)
 	if err != nil {
-		http.Error(w, "failed to get events", http.StatusInternalServerError)
-		return
+		log.Printf("calendar: не удалось получить события для %s: %v", userEmail, err)
+		events = nil
 	}
 
 	// Формируем ответ
@@ -173,12 +173,12 @@ func (h *CalendarHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 // CreateEvent POST /api/v1/calendar/events
 func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	if h.calendarService == nil {
-		http.Error(w, "calendar service unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "Служба календаря недоступна", http.StatusServiceUnavailable)
 		return
 	}
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 	userEmail := strings.TrimSpace(strings.ToLower(claims.Email))
@@ -205,30 +205,30 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
 	// Валидация
 	if req.Subject == "" {
-		http.Error(w, "subject is required", http.StatusBadRequest)
+		http.Error(w, "Отсутствует тема", http.StatusBadRequest)
 		return
 	}
 
 	startTime, err := time.Parse(time.RFC3339, req.StartTime)
 	if err != nil {
-		http.Error(w, "invalid start_time", http.StatusBadRequest)
+		http.Error(w, "Некорректное start_time", http.StatusBadRequest)
 		return
 	}
 
 	endTime, err := time.Parse(time.RFC3339, req.EndTime)
 	if err != nil {
-		http.Error(w, "invalid end_time", http.StatusBadRequest)
+		http.Error(w, "Некорректное end_time", http.StatusBadRequest)
 		return
 	}
 
 	if endTime.Before(startTime) {
-		http.Error(w, "end_time must be after start_time", http.StatusBadRequest)
+		http.Error(w, "Время окончания должно быть позже времени начала", http.StatusBadRequest)
 		return
 	}
 
@@ -240,7 +240,7 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		room := models.NewRoom(req.Subject, userID, "meeting")
 
 		if err := h.roomRepo.Create(r.Context(), room); err != nil {
-			http.Error(w, "failed to create room", http.StatusInternalServerError)
+			http.Error(w, "Не удалось создать комнату", http.StatusInternalServerError)
 			return
 		}
 
@@ -275,7 +275,7 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	createdEvent, err := h.calendarService.CreateEvent(r.Context(), userEmail, event)
 	if err != nil {
 		h.recordCalendarAudit(r, "create", "failed", "", "create_event_failed")
-		http.Error(w, "failed to create event", http.StatusInternalServerError)
+		http.Error(w, "Не удалось создать событие", http.StatusInternalServerError)
 		return
 	}
 	h.recordCalendarAudit(r, "create", "success", createdEvent.ID, "")
@@ -348,18 +348,18 @@ func (h *CalendarHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 // UpdateEvent PUT /api/v1/calendar/events/:id
 func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	if h.calendarService == nil {
-		http.Error(w, "calendar service unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "Служба календаря недоступна", http.StatusServiceUnavailable)
 		return
 	}
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	eventID := chi.URLParam(r, "id")
 	if eventID == "" {
-		http.Error(w, "event id is required", http.StatusBadRequest)
+		http.Error(w, "Отсутствует идентификатор события", http.StatusBadRequest)
 		return
 	}
 
@@ -371,7 +371,7 @@ func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
@@ -383,7 +383,7 @@ func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	if req.StartTime != "" {
 		startTime, err := time.Parse(time.RFC3339, req.StartTime)
 		if err != nil {
-			http.Error(w, "invalid start_time", http.StatusBadRequest)
+			http.Error(w, "Некорректное start_time", http.StatusBadRequest)
 			return
 		}
 		event.StartTime = startTime
@@ -392,7 +392,7 @@ func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	if req.EndTime != "" {
 		endTime, err := time.Parse(time.RFC3339, req.EndTime)
 		if err != nil {
-			http.Error(w, "invalid end_time", http.StatusBadRequest)
+			http.Error(w, "Некорректное end_time", http.StatusBadRequest)
 			return
 		}
 		event.EndTime = endTime
@@ -403,7 +403,7 @@ func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	err := h.calendarService.UpdateEvent(r.Context(), userEmail, eventID, event)
 	if err != nil {
 		h.recordCalendarAudit(r, "update", "failed", eventID, "update_event_failed")
-		http.Error(w, "failed to update event", http.StatusInternalServerError)
+		http.Error(w, "Не удалось обновить событие", http.StatusInternalServerError)
 		return
 	}
 	h.recordCalendarAudit(r, "update", "success", eventID, "")
@@ -435,18 +435,18 @@ func (h *CalendarHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 // DeleteEvent DELETE /api/v1/calendar/events/:id
 func (h *CalendarHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 	if h.calendarService == nil {
-		http.Error(w, "calendar service unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "Служба календаря недоступна", http.StatusServiceUnavailable)
 		return
 	}
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	eventID := chi.URLParam(r, "id")
 	if eventID == "" {
-		http.Error(w, "event id is required", http.StatusBadRequest)
+		http.Error(w, "Отсутствует идентификатор события", http.StatusBadRequest)
 		return
 	}
 
@@ -457,7 +457,7 @@ func (h *CalendarHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 	err := h.calendarService.DeleteEvent(r.Context(), userEmail, eventID)
 	if err != nil {
 		h.recordCalendarAudit(r, "delete", "failed", eventID, "delete_event_failed")
-		http.Error(w, "failed to delete event", http.StatusInternalServerError)
+		http.Error(w, "Не удалось удалить событие", http.StatusInternalServerError)
 		return
 	}
 	h.recordCalendarAudit(r, "delete", "success", eventID, "")

@@ -90,7 +90,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to generate state", zap.Error(err))
 		h.recordAudit(r, "login", "failed", "", "", "state_generation_failed")
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	if code == "" {
 		h.recordAudit(r, "callback", "failed", "", "", "missing_code")
-		http.Error(w, "missing code parameter", http.StatusBadRequest)
+		http.Error(w, "Отсутствует параметр code", http.StatusBadRequest)
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("oauth_state")
 	if err != nil || auth.ValidateState(cookie.Value, state) != nil {
 		h.recordAudit(r, "callback", "failed", "", "", "invalid_state")
-		http.Error(w, "invalid state parameter", http.StatusBadRequest)
+		http.Error(w, "Некорректный параметр state", http.StatusBadRequest)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("token exchange failed", zap.Error(err))
 		h.recordAudit(r, "callback", "failed", "", "", "token_exchange_failed")
-		http.Error(w, "authentication failed", http.StatusInternalServerError)
+		http.Error(w, "Ошибка аутентификации", http.StatusInternalServerError)
 		return
 	}
 
@@ -155,7 +155,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to get user info", zap.Error(err))
 		h.recordAudit(r, "callback", "failed", "", "", "userinfo_failed")
-		http.Error(w, "authentication failed", http.StatusInternalServerError)
+		http.Error(w, "Ошибка аутентификации", http.StatusInternalServerError)
 		return
 	}
 	h.groupPolicyMapper.Apply(userInfo)
@@ -170,7 +170,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("invalid keycloak id", zap.Error(err))
 		h.recordAudit(r, "callback", "failed", userInfo.Sub, userInfo.Email, "invalid_keycloak_id")
-		http.Error(w, "invalid user id", http.StatusInternalServerError)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -178,7 +178,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to get or create user", zap.Error(err))
 		h.recordAudit(r, "callback", "failed", userInfo.Sub, userInfo.Email, "user_create_failed")
-		http.Error(w, "failed to create user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось создать пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -193,7 +193,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to generate session jwt", zap.Error(err))
 		h.recordAudit(r, "callback", "failed", user.ID.String(), user.Email, "session_jwt_failed")
-		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сгенерировать токен", http.StatusInternalServerError)
 		return
 	}
 
@@ -232,7 +232,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 // Accepts a Keycloak ID token from SPA clients and returns an API session JWT.
 func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
 	if h.oidcProvider == nil {
-		http.Error(w, "auth provider unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "Сервис аутентификации недоступен", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -240,7 +240,7 @@ func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
 		Token string `json:"token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
-		http.Error(w, "missing token field", http.StatusBadRequest)
+		http.Error(w, "Отсутствует поле token", http.StatusBadRequest)
 		return
 	}
 
@@ -250,7 +250,7 @@ func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("token exchange: verification failed", zap.Error(err))
 		h.recordAudit(r, "token_exchange", "failed", "", "", "verification_failed")
-		http.Error(w, "invalid token", http.StatusUnauthorized)
+		http.Error(w, "Недействительный токен", http.StatusUnauthorized)
 		return
 	}
 	h.groupPolicyMapper.Apply(userInfo)
@@ -258,14 +258,14 @@ func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
 	keycloakID, err := parseUUID(userInfo.Sub)
 	if err != nil {
 		h.logger.Error("token exchange: invalid keycloak id", zap.Error(err))
-		http.Error(w, "invalid user id", http.StatusInternalServerError)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusInternalServerError)
 		return
 	}
 
 	user, err := h.userRepo.GetOrCreate(ctx, keycloakID, userInfo.Email, userInfo.Name)
 	if err != nil {
 		h.logger.Error("token exchange: failed to get or create user", zap.Error(err))
-		http.Error(w, "failed to create user", http.StatusInternalServerError)
+		http.Error(w, "Не удалось создать пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -278,7 +278,7 @@ func (h *AuthHandler) TokenExchange(w http.ResponseWriter, r *http.Request) {
 	sessionJWT, err := auth.GenerateSessionJWT(userInfo, sessionID, h.sessionSecret, h.sessionTokenLifetime)
 	if err != nil {
 		h.logger.Error("token exchange: failed to generate session jwt", zap.Error(err))
-		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сгенерировать токен", http.StatusInternalServerError)
 		return
 	}
 
@@ -307,7 +307,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	refreshToken, err := extractBearerToken(r.Header.Get("Authorization"))
 	if err != nil {
 		h.recordAudit(r, "refresh", "failed", "", "", "invalid_authorization_format")
-		http.Error(w, "invalid authorization format", http.StatusBadRequest)
+		http.Error(w, "Некорректный формат авторизации", http.StatusBadRequest)
 		return
 	}
 	if refreshToken == "" {
@@ -315,7 +315,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 			RefreshToken string `json:"refresh_token"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 			return
 		}
 		refreshToken = req.RefreshToken
@@ -323,12 +323,12 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	if refreshToken == "" {
 		h.recordAudit(r, "refresh", "failed", "", "", "missing_refresh_token")
-		http.Error(w, "refresh_token is required", http.StatusBadRequest)
+		http.Error(w, "Требуется refresh_token", http.StatusBadRequest)
 		return
 	}
 	if h.oidcProvider == nil {
 		h.recordAudit(r, "refresh", "failed", "", "", "provider_unavailable")
-		http.Error(w, "auth provider unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "Сервис аутентификации недоступен", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -339,7 +339,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to refresh token", zap.Error(err))
 		h.recordAudit(r, "refresh", "failed", "", "", "refresh_failed")
-		http.Error(w, "failed to refresh token", http.StatusUnauthorized)
+		http.Error(w, "Не удалось обновить токен", http.StatusUnauthorized)
 		return
 	}
 
@@ -348,7 +348,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to get user info", zap.Error(err))
 		h.recordAudit(r, "refresh", "failed", "", "", "userinfo_failed")
-		http.Error(w, "failed to get user info", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить данные пользователя", http.StatusInternalServerError)
 		return
 	}
 	h.groupPolicyMapper.Apply(userInfo)
@@ -359,7 +359,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to generate session jwt", zap.Error(err))
 		h.recordAudit(r, "refresh", "failed", userInfo.Sub, userInfo.Email, "session_jwt_failed")
-		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сгенерировать токен", http.StatusInternalServerError)
 		return
 	}
 	h.recordAudit(r, "refresh", "success", userInfo.Sub, userInfo.Email, "")
@@ -379,19 +379,19 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	token, err := extractBearerToken(r.Header.Get("Authorization"))
 	if err != nil {
 		h.recordAudit(r, "logout", "failed", "", "", "invalid_authorization_format")
-		http.Error(w, "invalid authorization format", http.StatusBadRequest)
+		http.Error(w, "Некорректный формат авторизации", http.StatusBadRequest)
 		return
 	}
 	if token == "" {
 		h.recordAudit(r, "logout", "failed", "", "", "missing_authorization_header")
-		http.Error(w, "missing authorization header", http.StatusBadRequest)
+		http.Error(w, "Отсутствует заголовок авторизации", http.StatusBadRequest)
 		return
 	}
 
 	claims, err := auth.ValidateSessionJWTWithSecrets(token, h.logoutValidationSecrets())
 	if err != nil {
 		h.recordAudit(r, "logout", "failed", "", "", "invalid_token")
-		http.Error(w, "invalid token", http.StatusUnauthorized)
+		http.Error(w, "Недействительный токен", http.StatusUnauthorized)
 		return
 	}
 
@@ -414,7 +414,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 
@@ -454,13 +454,13 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	userID, err := uuid.Parse(claims.UserID)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusBadRequest)
 		return
 	}
 
@@ -478,13 +478,13 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
 	user, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "user not found", http.StatusNotFound)
+		http.Error(w, "Пользователь не найден", http.StatusNotFound)
 		return
 	}
 
@@ -520,7 +520,8 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.userRepo.Update(r.Context(), user); err != nil {
-		http.Error(w, "failed to update profile", http.StatusInternalServerError)
+		h.logger.Error("Ошибка обновления профиля", zap.String("user_id", claims.UserID), zap.Error(err))
+		http.Error(w, "Не удалось сохранить профиль", http.StatusInternalServerError)
 		return
 	}
 

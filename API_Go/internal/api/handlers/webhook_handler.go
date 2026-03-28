@@ -24,13 +24,13 @@ func NewInboundWebhookHandler(webhookHandler *webhooks.WebhookHandler) *InboundW
 // JitsiWebhook POST /api/v1/webhooks/jitsi
 func (h *InboundWebhookHandler) JitsiWebhook(w http.ResponseWriter, r *http.Request) {
 	if h.webhookHandler == nil {
-		http.Error(w, "webhook handler unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "Обработчик вебхуков недоступен", http.StatusServiceUnavailable)
 		return
 	}
 
 	payload, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
-		http.Error(w, "failed to read payload", http.StatusBadRequest)
+		http.Error(w, "Не удалось прочитать данные", http.StatusBadRequest)
 		return
 	}
 
@@ -41,7 +41,7 @@ func (h *InboundWebhookHandler) JitsiWebhook(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		switch {
 		case errors.Is(err, webhooks.ErrMissingWebhookSignature), errors.Is(err, webhooks.ErrInvalidWebhookSignature):
-			http.Error(w, "invalid signature", http.StatusUnauthorized)
+			http.Error(w, "Некорректная подпись", http.StatusUnauthorized)
 			return
 		case errors.Is(err, webhooks.ErrWebhookEventAlreadyProcessed):
 			w.Header().Set("Content-Type", "application/json")
@@ -49,10 +49,10 @@ func (h *InboundWebhookHandler) JitsiWebhook(w http.ResponseWriter, r *http.Requ
 			_, _ = w.Write([]byte(`{"status":"duplicate"}`))
 			return
 		case strings.Contains(err.Error(), "failed to parse jitsi webhook"):
-			http.Error(w, "invalid payload", http.StatusBadRequest)
+			http.Error(w, "Некорректные данные", http.StatusBadRequest)
 			return
 		default:
-			http.Error(w, "failed to process webhook", http.StatusInternalServerError)
+			http.Error(w, "Не удалось обработать вебхук", http.StatusInternalServerError)
 			return
 		}
 	}

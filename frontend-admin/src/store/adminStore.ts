@@ -76,7 +76,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
     try {
       const token = getAdminAccessToken()
       const response = await fetch('/api/v1/admin/stats', { headers: { Authorization: `Bearer ${token || ''}` } })
-      if (!response.ok) throw new Error('Failed to fetch stats')
+      if (!response.ok) throw new Error('Не удалось загрузить статистику')
       const data = await response.json()
       set({ stats: normalizeStats(data), loading: false })
     } catch (error) {

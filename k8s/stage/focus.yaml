@@ -12,6 +12,40 @@ metadata:
 # NOTE: focus-secrets Secret is managed separately (kubectl create secret).
 # Do NOT include it here to avoid overwriting real credentials with placeholders.
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-nginx-conf
+  namespace: messenger-stage
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        resolver 10.43.0.10 valid=10s;
+        set $api_upstream "http://api-go.messenger-stage.svc.cluster.local";
+
+        location /api/ {
+            proxy_pass $api_upstream;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 86400s;
+            proxy_send_timeout 86400s;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -34,7 +68,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: api-go
-        image: docker.io/qmishnik/focus-api-go:profile-20260328-200529
+        image: docker.io/qmishnik/focus-api-go:calfix-20260328
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -44,6 +78,8 @@ spec:
         env:
         - name: ENV
           value: stage
+        - name: AUTO_MIGRATE
+          value: "true"
         - name: SERVER_PORT
           value: "8080"
         - name: SWAGGER_PORT
@@ -192,7 +228,7 @@ spec:
           name: frontend-nginx-conf
       containers:
       - name: frontend
-        image: docker.io/qmishnik/focus-frontend:profile-20260328-200529
+        image: docker.io/qmishnik/focus-frontend:msgfix-20260328
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -258,7 +294,7 @@ spec:
           name: frontend-admin-sso
       containers:
       - name: frontend-admin
-        image: docker.io/qmishnik/focus-frontend-admin:profile-20260328-200529
+        image: docker.io/qmishnik/focus-frontend-admin:rufix-20260328-205131
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

@@ -40,6 +40,22 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/rooms"
+          element={
+            <ProtectedRoute>
+              <MessengerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/rooms/:roomId"
+          element={
+            <ProtectedRoute>
+              <MessengerPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

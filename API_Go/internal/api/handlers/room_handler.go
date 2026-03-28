@@ -48,27 +48,27 @@ func (h *RoomHandler) ListRooms(w http.ResponseWriter, r *http.Request) {
 	// Получаем пользователя из контекста
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	userID, err := uuid.Parse(claims.UserID)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusInternalServerError)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusInternalServerError)
 		return
 	}
 
 	// Получаем комнаты пользователя
 	rooms, err := h.roomRepo.ListByParticipant(r.Context(), userID, perPage, offset)
 	if err != nil {
-		http.Error(w, "failed to get rooms", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить комнаты", http.StatusInternalServerError)
 		return
 	}
 
 	// Получаем общее количество комнат пользователя
 	total, err := h.roomRepo.CountByParticipant(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "failed to count rooms", http.StatusInternalServerError)
+		http.Error(w, "Не удалось подсчитать комнаты", http.StatusInternalServerError)
 		return
 	}
 
@@ -96,26 +96,26 @@ func (h *RoomHandler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
 	// Валидация
 	if req.Name == "" || len(req.Name) < 3 || len(req.Name) > 100 {
-		http.Error(w, "invalid room name (3-100 characters)", http.StatusBadRequest)
+		http.Error(w, "Некорректное название комнаты (3–100 символов)", http.StatusBadRequest)
 		return
 	}
 
 	// Получаем пользователя из контекста
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	userID, err := uuid.Parse(claims.UserID)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusInternalServerError)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusInternalServerError)
 		return
 	}
 
@@ -133,13 +133,13 @@ func (h *RoomHandler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	room.Description = req.Description
 
 	if err := h.roomRepo.Create(r.Context(), room); err != nil {
-		http.Error(w, "failed to create room", http.StatusInternalServerError)
+		http.Error(w, "Не удалось создать комнату", http.StatusInternalServerError)
 		return
 	}
 
 	// Добавляем создателя как участника
 	if err := h.roomRepo.AddParticipant(r.Context(), room.ID, userID, models.ParticipantRoleAdmin); err != nil {
-		http.Error(w, "failed to add participant", http.StatusInternalServerError)
+		http.Error(w, "Не удалось добавить участника", http.StatusInternalServerError)
 		return
 	}
 
@@ -162,17 +162,17 @@ func (h *RoomHandler) GetRoom(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	roomID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid room id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор комнаты", http.StatusBadRequest)
 		return
 	}
 
 	room, err := h.roomRepo.GetByID(r.Context(), roomID)
 	if err != nil {
 		if err == repository.ErrRoomNotFound {
-			http.Error(w, "room not found", http.StatusNotFound)
+			http.Error(w, "Комната не найдена", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get room", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить комнату", http.StatusInternalServerError)
 		return
 	}
 
@@ -185,7 +185,7 @@ func (h *RoomHandler) UpdateRoom(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	roomID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid room id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор комнаты", http.StatusBadRequest)
 		return
 	}
 
@@ -196,28 +196,28 @@ func (h *RoomHandler) UpdateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
 
 	room, err := h.roomRepo.GetByID(r.Context(), roomID)
 	if err != nil {
 		if err == repository.ErrRoomNotFound {
-			http.Error(w, "room not found", http.StatusNotFound)
+			http.Error(w, "Комната не найдена", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get room", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить комнату", http.StatusInternalServerError)
 		return
 	}
 
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 	claimsUID, _ := uuid.Parse(claims.UserID)
 	if room.CreatorID != claimsUID {
-		http.Error(w, "forbidden: not room creator", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён: вы не создатель комнаты", http.StatusForbidden)
 		return
 	}
 
@@ -233,7 +233,7 @@ func (h *RoomHandler) UpdateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.roomRepo.Update(r.Context(), room); err != nil {
-		http.Error(w, "failed to update room", http.StatusInternalServerError)
+		http.Error(w, "Не удалось обновить комнату", http.StatusInternalServerError)
 		return
 	}
 
@@ -246,33 +246,33 @@ func (h *RoomHandler) DeleteRoom(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	roomID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid room id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор комнаты", http.StatusBadRequest)
 		return
 	}
 
 	room, err := h.roomRepo.GetByID(r.Context(), roomID)
 	if err != nil {
 		if err == repository.ErrRoomNotFound {
-			http.Error(w, "room not found", http.StatusNotFound)
+			http.Error(w, "Комната не найдена", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "failed to get room", http.StatusInternalServerError)
+		http.Error(w, "Не удалось получить комнату", http.StatusInternalServerError)
 		return
 	}
 
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 	claimsUID, _ := uuid.Parse(claims.UserID)
 	if room.CreatorID != claimsUID {
-		http.Error(w, "forbidden: not room creator", http.StatusForbidden)
+		http.Error(w, "Доступ запрещён: вы не создатель комнаты", http.StatusForbidden)
 		return
 	}
 
 	if err := h.roomRepo.Delete(r.Context(), roomID); err != nil {
-		http.Error(w, "failed to delete room", http.StatusInternalServerError)
+		http.Error(w, "Не удалось удалить комнату", http.StatusInternalServerError)
 		return
 	}
 
@@ -284,27 +284,27 @@ func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	roomID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, "invalid room id", http.StatusBadRequest)
+		http.Error(w, "Некорректный идентификатор комнаты", http.StatusBadRequest)
 		return
 	}
 
 	// Получаем пользователя из контекста
 	claims := auth.GetUserClaimsFromContext(r.Context())
 	if claims == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	userID, err := uuid.Parse(claims.UserID)
 	if err != nil {
-		http.Error(w, "invalid user id", http.StatusInternalServerError)
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusInternalServerError)
 		return
 	}
 
 	// Проверяем, является ли пользователь участником комнаты
 	isParticipant, err := h.roomRepo.IsParticipant(r.Context(), roomID, userID)
 	if err != nil {
-		http.Error(w, "failed to check participation", http.StatusInternalServerError)
+		http.Error(w, "Не удалось проверить участие", http.StatusInternalServerError)
 		return
 	}
 
@@ -312,17 +312,17 @@ func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
 		// Если комната публичная, добавляем пользователя
 		room, err := h.roomRepo.GetByID(r.Context(), roomID)
 		if err != nil {
-			http.Error(w, "room not found", http.StatusNotFound)
+			http.Error(w, "Комната не найдена", http.StatusNotFound)
 			return
 		}
 
 		if room.Type == models.RoomTypePublic {
 			if err := h.roomRepo.AddParticipant(r.Context(), roomID, userID, models.ParticipantRoleMember); err != nil {
-				http.Error(w, "failed to join room", http.StatusInternalServerError)
+				http.Error(w, "Не удалось присоединиться к комнате", http.StatusInternalServerError)
 				return
 			}
 		} else {
-			http.Error(w, "you are not a participant of this room", http.StatusForbidden)
+			http.Error(w, "Вы не являетесь участником этой комнаты", http.StatusForbidden)
 			return
 		}
 	}
@@ -330,14 +330,14 @@ func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	// Получаем комнату для генерации JWT
 	room, err := h.roomRepo.GetByID(r.Context(), roomID)
 	if err != nil {
-		http.Error(w, "room not found", http.StatusNotFound)
+		http.Error(w, "Комната не найдена", http.StatusNotFound)
 		return
 	}
 
 	// Получаем пользователя для определения роли модератора
 	user, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "user not found", http.StatusNotFound)
+		http.Error(w, "Пользователь не найден", http.StatusNotFound)
 		return
 	}
 
@@ -357,7 +357,7 @@ func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
 		isModerator,
 	)
 	if err != nil {
-		http.Error(w, "failed to generate jitsi token", http.StatusInternalServerError)
+		http.Error(w, "Не удалось сгенерировать токен Jitsi", http.StatusInternalServerError)
 		return
 	}
 
