@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -186,6 +187,15 @@ func (h *AdminHandler) SetCalendarAuditRepository(calendarAuditRepo adminCalenda
 // SetBotConfigReloader sets BotEngine reference for hot-reload of bot settings.
 func (h *AdminHandler) SetBotConfigReloader(reloader BotConfigReloader) {
 	h.botConfigReloader = reloader
+}
+
+func (h *AdminHandler) reloadBotEngineInMemory(ctx context.Context) {
+	if h.botConfigReloader == nil {
+		return
+	}
+	if err := h.botConfigReloader.ReloadSettings(ctx); err != nil {
+		log.Printf("admin: bot engine reload after settings change: %v", err)
+	}
 }
 
 // SetAppSettingsRepository sets repository for global app appearance settings.
@@ -1272,6 +1282,7 @@ func (h *AdminHandler) CreateBot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create bot", http.StatusInternalServerError)
 		return
 	}
+	h.reloadBotEngineInMemory(r.Context())
 	h.recordAudit(r.Context(), claims.Email, "create_bot", "bot", setting.ID.String(), "name="+setting.Name)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -1348,6 +1359,7 @@ func (h *AdminHandler) PatchBot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to update bot", http.StatusInternalServerError)
 		return
 	}
+	h.reloadBotEngineInMemory(r.Context())
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(setting)
 }
@@ -1383,6 +1395,7 @@ func (h *AdminHandler) SetBotEnabled(w http.ResponseWriter, r *http.Request, ena
 		http.Error(w, "failed to update bot", http.StatusInternalServerError)
 		return
 	}
+	h.reloadBotEngineInMemory(r.Context())
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":         setting.ID.String(),
@@ -1419,6 +1432,7 @@ func (h *AdminHandler) DeleteBot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to delete bot", http.StatusInternalServerError)
 		return
 	}
+	h.reloadBotEngineInMemory(r.Context())
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1788,6 +1802,7 @@ func (h *AdminHandler) ImportBot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to import bot", http.StatusInternalServerError)
 		return
 	}
+	h.reloadBotEngineInMemory(r.Context())
 	h.recordAudit(r.Context(), claims.Email, "import_bot", "bot", setting.ID.String(), "name="+setting.Name)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

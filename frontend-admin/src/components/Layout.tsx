@@ -56,6 +56,14 @@ export default function Layout() {
               {sidebarOpen && <span>{item.label}</span>}
             </Link>
           ))}
+
+          <button
+            onClick={() => { logout(); navigate('/login') }}
+            className="nav-item logout-nav-btn"
+          >
+            <span className="nav-icon">🚪</span>
+            {sidebarOpen && <span>Выйти</span>}
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -65,9 +73,6 @@ export default function Layout() {
               <span className="user-email">{user?.email || ''}</span>
             </div>
           )}
-          <button onClick={() => { logout(); navigate('/login') }} className="logout-btn">
-            {sidebarOpen ? 'Выйти' : '🚪'}
-          </button>
         </div>
       </aside>
 

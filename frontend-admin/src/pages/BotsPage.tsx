@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Fragment } from 'react'
 import { adminApi, type CommandStat, type BotTemplate } from '../lib/adminApi'
 
 type BotCommand = {
@@ -280,8 +280,8 @@ export default function BotsPage() {
                 <thead><tr><th>Имя</th><th>Описание</th><th>Rate limit</th><th>Команд</th><th>Статус</th><th>Действия</th></tr></thead>
                 <tbody>
                   {bots.map((bot) => (
-                    <>
-                      <tr key={bot.id} style={{ cursor: 'pointer' }} onClick={() => expand(bot)}>
+                    <Fragment key={bot.id}>
+                      <tr style={{ cursor: 'pointer' }} onClick={() => expand(bot)}>
                         <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           {bot.avatar_url && <img src={bot.avatar_url} alt="" style={{ width: 24, height: 24, borderRadius: '50%' }} />}
                           {bot.name}
@@ -299,7 +299,7 @@ export default function BotsPage() {
                         </td>
                       </tr>
                       {expandedId === bot.id && (
-                        <tr key={bot.id + '-edit'}>
+                        <tr>
                           <td colSpan={6}>
                             <div className="settings-section" style={{ margin: '8px 0' }}>
                               <h3>Редактирование: {bot.name}</h3>
@@ -391,7 +391,7 @@ export default function BotsPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
