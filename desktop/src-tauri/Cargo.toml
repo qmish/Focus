@@ -1,6 +1,6 @@
 [package]
 name = "focus-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Focus Messenger Desktop Client"
 authors = ["Focus Team"]
 edition = "2021"

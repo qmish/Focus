@@ -21,10 +21,10 @@ jobs:
             target: x86_64-pc-windows-msvc
             bundle: nsis
           - platform: macos-latest
-            target: x86_64-apple-darwin
-            bundle: dmg
-          - platform: macos-latest
             target: aarch64-apple-darwin
+            bundle: dmg
+          - platform: macos-13
+            target: x86_64-apple-darwin
             bundle: dmg
 
     runs-on: ${{ matrix.platform }}
@@ -56,24 +56,49 @@ jobs:
         working-directory: desktop
         run: npm ci
 
+      - name: Create desktop .env
+        working-directory: desktop
+        run: |
+          cat > .env << 'ENVEOF'
+          VITE_API_URL=https://chat.focus.local:30443
+          VITE_KEYCLOAK_URL=https://auth.focus.local:30443
+          VITE_KEYCLOAK_REALM=company
+          VITE_KEYCLOAK_CLIENT_ID=messenger-frontend
+          VITE_JITSI_DOMAIN=meet.focus.local:30443
+          ENVEOF
+
       - name: Build Tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: desktop
           tauriScript: npx tauri
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
           tagName: ${{ github.ref_name }}
-          releaseName: 'Focus Desktop ${{ github.ref_name }}'
+          releaseName: 'Focus Messenger Desktop ${{ github.ref_name }}'
           releaseBody: |
-            Десктопный клиент Focus Messenger.
+            ## Focus Messenger — Десктопный клиент ${{ github.ref_name }}
 
-            ## Установка
-            - **Windows**: скачайте `.exe` установщик (NSIS)
-            - **macOS Intel**: скачайте `.dmg` (x86_64)
-            - **macOS Apple Silicon**: скачайте `.dmg` (aarch64)
-          releaseDraft: true
+            Десктопное приложение Focus Messenger на базе Tauri 2.
+
+            ### Возможности
+            - Полная функциональность веб-версии в нативном окне
+            - Авторизация: локальная и через Keycloak (PKCE)
+            - Чат в реальном времени (WebSocket)
+            - Видеозвонки через Jitsi Meet
+            - Нативные уведомления (Windows/macOS)
+            - Системный трей (сворачивание при закрытии)
+            - Автозапуск при старте системы
+            - Единственный экземпляр приложения
+
+            ### Установка
+            - **Windows x64**: скачайте `.exe` установщик (NSIS)
+            - **macOS Apple Silicon (M1/M2/M3)**: скачайте `_aarch64.dmg`
+            - **macOS Intel**: скачайте `_x64.dmg`
+
+            ### Требования
+            - Windows 10 (1809+) / Windows 11 или macOS 10.15+
+            - Корпоративный CA-сертификат в системном хранилище
+          releaseDraft: false
           prerelease: false
