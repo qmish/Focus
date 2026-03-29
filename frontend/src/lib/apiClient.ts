@@ -1,5 +1,6 @@
 import { useAuthStore } from '../store/authStore'
 import { apiRequest, ApiError } from './apiClientCore'
+import { getApiBaseUrl } from './apiBase'
 
 function getToken(): string | null {
   return useAuthStore.getState().token
@@ -22,7 +23,8 @@ export const apiClient = {
     const token = getToken()
     const form = new FormData()
     form.append('file', file)
-    const res = await fetch(url, {
+    const fullUrl = url.startsWith('/') ? `${getApiBaseUrl()}${url}` : url
+    const res = await fetch(fullUrl, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: form,

@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from './apiBase'
+
 export class ApiError extends Error {
   status: number
   body: unknown
@@ -24,7 +26,8 @@ export async function apiRequest<T>(url: string, options: RequestOptions = {}): 
   while (true) {
     attempt++
     try {
-      const response = await fetch(url, {
+      const fullUrl = url.startsWith('/') ? `${getApiBaseUrl()}${url}` : url
+      const response = await fetch(fullUrl, {
         method,
         headers: {
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),

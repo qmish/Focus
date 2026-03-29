@@ -2,13 +2,22 @@ mod commands;
 mod tray;
 
 use std::sync::Mutex;
-use tauri::{Emitter, Listener, Manager};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--ignore-certificate-errors --use-fake-ui-for-media-stream",
+        );
+    }
+
     tauri::Builder::default()
         .manage(commands::AuthState {
             code_verifier: Mutex::new(None),
+            callback_redirect_uri: Mutex::new(None),
         })
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -35,21 +44,6 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             tray::create_tray(&handle)?;
-
-            let app_handle = app.handle().clone();
-            app.listen("deep-link://new-url", move |event: tauri::Event| {
-                if let Some(payload) = event
-                    .payload()
-                    .strip_prefix('"')
-                    .and_then(|s| s.strip_suffix('"'))
-                {
-                    if payload.starts_with("focus://auth/callback") {
-                        app_handle
-                            .emit("auth-deep-link", payload.to_string())
-                            .ok();
-                    }
-                }
-            });
 
             let main_window = app.get_webview_window("main").unwrap();
             let app_handle_close = app.handle().clone();

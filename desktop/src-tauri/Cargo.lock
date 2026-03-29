@@ -1111,6 +1111,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "urlencoding",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

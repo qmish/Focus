@@ -1,10 +1,11 @@
 import { create } from 'zustand'
 import Keycloak from 'keycloak-js'
 import { initKeycloak } from '../lib/keycloakInit'
+import { getApiBaseUrl } from '../lib/apiBase'
 
 const ACCESS_TOKEN_KEY = 'focus_access_token'
 const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || ''
-const isTauri = '__TAURI__' in window
+const isTauri = '__TAURI__' in window || '__TAURI_INTERNALS__' in window
 
 function generateCodeVerifier(): string {
   const array = new Uint8Array(32)
@@ -60,7 +61,7 @@ interface AuthState {
   refreshToken: () => Promise<void>
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
+const API_BASE = isTauri ? `${getApiBaseUrl()}/api` : (import.meta.env.VITE_API_URL || '/api')
 
 let storeInitPromise: Promise<void> | null = null
 
@@ -80,10 +81,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       try {
         const { listen } = await import('@tauri-apps/api/event')
         const { invoke } = await import('@tauri-apps/api/core')
-        listen<string>('auth-deep-link', async (event) => {
+        listen<string>('auth-code-received', async (event) => {
           try {
-            const url = new URL(event.payload)
-            const code = url.searchParams.get('code')
+            const code = event.payload
             if (!code) return
             const kcUrl = KEYCLOAK_URL
             const realm = import.meta.env.VITE_KEYCLOAK_REALM || 'company'
@@ -92,7 +92,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               keycloakUrl: kcUrl,
               realm,
               clientId,
-              redirectUri: 'focus://auth/callback',
+              redirectUri: '',
               code,
             })
             const idToken = tokens.id_token
@@ -293,7 +293,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         keycloakUrl: kcUrl,
         realm,
         clientId,
-        redirectUri: 'focus://auth/callback',
+        redirectUri: '',
       })
       return
     }

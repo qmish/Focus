@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 	"github.com/qmish/focus-api/internal/api/handlers"
 	"github.com/qmish/focus-api/internal/auth"
@@ -312,6 +313,22 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: []string{
+			"https://chat.focus.local:*",
+			"https://focus.local:*",
+			"https://focus.ftsystems.ru",
+			"http://tauri.localhost",
+			"https://tauri.localhost",
+			"http://localhost:*",
+			"http://127.0.0.1:*",
+		},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
 	// Health check endpoints
 	r.Get("/health", healthCheck)

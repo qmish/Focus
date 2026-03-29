@@ -163,6 +163,8 @@ func Load() *Config {
 				"http://localhost:3001",
 				"http://localhost:5173",
 				"http://localhost:5174",
+				"http://tauri.localhost",
+				"https://tauri.localhost",
 			}),
 			StrictRoomAccess: getBoolEnv("WS_STRICT_ROOM_ACCESS", strictRoomAccessDefault),
 		},
