@@ -77,6 +77,13 @@ export default function MessengerPage() {
   useEffect(() => {
     fetchRooms()
     fetchScheduledMeetings()
+    if ('__TAURI__' in window) {
+      import('@tauri-apps/api/event').then(({ listen }) => {
+        listen<string>('navigate-to-room', (event) => {
+          if (event.payload) navigate(`/rooms/${event.payload}`)
+        })
+      })
+    }
   }, [])
 
   useEffect(() => {
@@ -119,6 +126,15 @@ export default function MessengerPage() {
             const data = JSON.parse(event.data)
             if (data.type === 'message' && data.payload?.room_id === roomId) {
               setMessages(prev => mergeMessageList(prev, data.payload))
+              if ('__TAURI__' in window && !document.hasFocus() && data.payload.user_id !== user?.id) {
+                import('@tauri-apps/api/core').then(({ invoke }) => {
+                  invoke('show_notification', {
+                    title: data.payload.user?.name || 'Новое сообщение',
+                    body: data.payload.content?.substring(0, 100) || '',
+                    roomId: data.payload.room_id,
+                  }).catch(() => {})
+                })
+              }
             }
           } catch (err) { console.error('WS parse error:', err) }
         }

@@ -325,6 +325,9 @@ func main() {
 		})
 		r.Get("/settings/appearance", adminHandler.GetAppearanceSettings)
 
+		desktopUpdateHandler := handlers.NewDesktopUpdateHandler(zap.L())
+		r.Get("/desktop/update/{target}/{arch}/{current_version}", desktopUpdateHandler.CheckUpdate)
+
 		r.Route("/webhooks", func(r chi.Router) {
 			r.Post("/jitsi", inboundWebhookHandler.JitsiWebhook)
 		})

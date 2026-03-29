@@ -4,6 +4,7 @@ import { initKeycloak } from '../lib/keycloakInit'
 
 const ACCESS_TOKEN_KEY = 'focus_access_token'
 const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || ''
+const isTauri = '__TAURI__' in window
 
 function generateCodeVerifier(): string {
   const array = new Uint8Array(32)
@@ -74,6 +75,52 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   init: async () => {
     if (storeInitPromise) return storeInitPromise
     storeInitPromise = (async () => {
+
+    if (isTauri) {
+      try {
+        const { listen } = await import('@tauri-apps/api/event')
+        const { invoke } = await import('@tauri-apps/api/core')
+        listen<string>('auth-deep-link', async (event) => {
+          try {
+            const url = new URL(event.payload)
+            const code = url.searchParams.get('code')
+            if (!code) return
+            const kcUrl = KEYCLOAK_URL
+            const realm = import.meta.env.VITE_KEYCLOAK_REALM || 'company'
+            const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'messenger-frontend'
+            const tokens = await invoke<{ id_token?: string; access_token?: string }>('exchange_auth_code', {
+              keycloakUrl: kcUrl,
+              realm,
+              clientId,
+              redirectUri: 'focus://auth/callback',
+              code,
+            })
+            const idToken = tokens.id_token
+            if (idToken) {
+              const exchangeRes = await fetch(`${API_BASE}/v1/auth/token-exchange`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: idToken }),
+              })
+              if (exchangeRes.ok) {
+                const data = await exchangeRes.json()
+                localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token)
+                set({
+                  isAuthenticated: true,
+                  isLoading: false,
+                  user: data.user,
+                  token: data.access_token,
+                })
+              }
+            }
+          } catch (err) {
+            console.error('Tauri auth callback error:', err)
+          }
+        })
+      } catch (err) {
+        console.error('Tauri event listen failed:', err)
+      }
+    }
 
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
@@ -239,6 +286,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     const realm = import.meta.env.VITE_KEYCLOAK_REALM || 'company'
     const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'messenger-frontend'
+
+    if (isTauri) {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('open_keycloak_auth', {
+        keycloakUrl: kcUrl,
+        realm,
+        clientId,
+        redirectUri: 'focus://auth/callback',
+      })
+      return
+    }
+
     const redirectUri = window.location.origin + '/'
     const codeVerifier = generateCodeVerifier()
     const codeChallenge = await generateCodeChallenge(codeVerifier)
@@ -265,7 +324,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       } catch { /* ignore */ }
     }
 
-    if (keycloak?.authenticated) {
+    if (!isTauri && keycloak?.authenticated) {
       await keycloak.logout({ redirectUri: window.location.origin })
     }
 
