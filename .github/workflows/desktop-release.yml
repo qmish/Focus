@@ -58,6 +58,7 @@ jobs:
 
       - name: Create desktop .env
         working-directory: desktop
+        shell: bash
         run: |
           cat > .env << 'ENVEOF'
           VITE_API_URL=https://chat.focus.local:30443
