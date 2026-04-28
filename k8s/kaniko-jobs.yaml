@@ -1,0 +1,179 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kaniko-build-api-go
+  namespace: kaniko
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: kaniko-build
+        component: api-go
+    spec:
+      restartPolicy: Never
+      hostAliases:
+        - ip: "10.204.41.11"
+          hostnames:
+            - registry.focus.local
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:latest
+          args:
+            - "--context=git://github.com/qmish/Focus.git#refs/heads/master"
+            - "--context-sub-path=API_Go"
+            - "--dockerfile=Dockerfile"
+            - "--destination=registry.focus.local/focus/api-go:latest"
+            - "--destination=registry.focus.local/focus/api-go:stage4"
+            - "--skip-tls-verify"
+            - "--cache=true"
+            - "--cache-repo=registry.focus.local/focus/cache"
+          env:
+            - name: GIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: github-creds
+                  key: username
+            - name: GIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: github-creds
+                  key: token
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: docker-config
+              mountPath: /kaniko/.docker
+      volumes:
+        - name: docker-config
+          secret:
+            secretName: nexus-docker-config
+            items:
+              - key: config.json
+                path: config.json
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kaniko-build-frontend
+  namespace: kaniko
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: kaniko-build
+        component: frontend
+    spec:
+      restartPolicy: Never
+      hostAliases:
+        - ip: "10.204.41.11"
+          hostnames:
+            - registry.focus.local
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:latest
+          args:
+            - "--context=git://github.com/qmish/Focus.git#refs/heads/master"
+            - "--context-sub-path=frontend"
+            - "--dockerfile=Dockerfile"
+            - "--destination=registry.focus.local/focus/frontend:latest"
+            - "--destination=registry.focus.local/focus/frontend:stage4"
+            - "--skip-tls-verify"
+            - "--cache=true"
+            - "--cache-repo=registry.focus.local/focus/cache"
+          env:
+            - name: GIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: github-creds
+                  key: username
+            - name: GIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: github-creds
+                  key: token
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: docker-config
+              mountPath: /kaniko/.docker
+      volumes:
+        - name: docker-config
+          secret:
+            secretName: nexus-docker-config
+            items:
+              - key: config.json
+                path: config.json
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kaniko-build-frontend-admin
+  namespace: kaniko
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: kaniko-build
+        component: frontend-admin
+    spec:
+      restartPolicy: Never
+      hostAliases:
+        - ip: "10.204.41.11"
+          hostnames:
+            - registry.focus.local
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:latest
+          args:
+            - "--context=git://github.com/qmish/Focus.git#refs/heads/master"
+            - "--context-sub-path=frontend-admin"
+            - "--dockerfile=Dockerfile"
+            - "--destination=registry.focus.local/focus/frontend-admin:latest"
+            - "--destination=registry.focus.local/focus/frontend-admin:stage4"
+            - "--skip-tls-verify"
+            - "--cache=true"
+            - "--cache-repo=registry.focus.local/focus/cache"
+          env:
+            - name: GIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: github-creds
+                  key: username
+            - name: GIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: github-creds
+                  key: token
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: docker-config
+              mountPath: /kaniko/.docker
+      volumes:
+        - name: docker-config
+          secret:
+            secretName: nexus-docker-config
+            items:
+              - key: config.json
+                path: config.json

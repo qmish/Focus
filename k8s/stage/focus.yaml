@@ -95,9 +95,11 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      imagePullSecrets:
+      - name: regcred
       containers:
       - name: api-go
-        image: docker.io/qmishnik/focus-api-go:calfix-20260328
+        image: registry.focus.local/focus/api-go:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -257,9 +259,11 @@ spec:
       - name: nginx-conf
         configMap:
           name: frontend-nginx-conf
+      imagePullSecrets:
+      - name: regcred
       containers:
       - name: frontend
-        image: docker.io/qmishnik/focus-frontend:botfix2-20260328
+        image: registry.focus.local/focus/frontend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -323,9 +327,11 @@ spec:
       - name: sso-html
         configMap:
           name: frontend-admin-sso
+      imagePullSecrets:
+      - name: regcred
       containers:
       - name: frontend-admin
-        image: docker.io/qmishnik/focus-frontend-admin:rufix-20260328-205131
+        image: registry.focus.local/focus/frontend-admin:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
