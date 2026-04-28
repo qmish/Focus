@@ -15,6 +15,21 @@ metadata:
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  name: frontend-admin-sso
+  namespace: messenger-stage
+data:
+  silent-check-sso.html: |
+    <html>
+    <body>
+    <script>
+        parent.postMessage(location.href, location.origin);
+    </script>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
   name: frontend-nginx-conf
   namespace: messenger-stage
 data:
@@ -97,6 +112,12 @@ spec:
           type: RuntimeDefault
       imagePullSecrets:
       - name: regcred
+      hostAliases:
+      - ip: "10.204.41.11"
+        hostnames:
+        - auth.focus.local
+        - registry.focus.local
+        - chat.focus.local
       containers:
       - name: api-go
         image: registry.focus.local/focus/api-go:latest
@@ -138,7 +159,11 @@ spec:
               name: focus-secrets
               key: redis-password
         - name: KEYCLOAK_URL
-          value: https://auth.focus.local:30443
+          value: http://auth.focus.local
+        - name: KEYCLOAK_INTERNAL_URL
+          value: http://keycloak.keycloak.svc.cluster.local
+        - name: KEYCLOAK_REALM
+          value: company
         - name: KEYCLOAK_CLIENT_ID
           value: messenger-api
         - name: KEYCLOAK_CLIENT_SECRET
