@@ -29,6 +29,7 @@ const (
 	MessageTypeUserJoined  MessageType = "user_joined"
 	MessageTypeUserLeft    MessageType = "user_left"
 	MessageTypeError       MessageType = "error"
+	MessageTypeThreadReply MessageType = "thread_reply"
 )
 
 // WSMessage сообщение WebSocket

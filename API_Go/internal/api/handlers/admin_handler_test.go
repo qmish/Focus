@@ -20,14 +20,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func hasRoleTest(claims *auth.SessionClaims, role string) bool {
+	for _, r := range claims.Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
 func TestHasRole(t *testing.T) {
 	claims := &auth.SessionClaims{
 		Roles: []string{"user", "moderator"},
 	}
 
-	assert.True(t, hasRole(claims, "user"))
-	assert.True(t, hasRole(claims, "moderator"))
-	assert.False(t, hasRole(claims, "admin"))
+	assert.True(t, hasRoleTest(claims, "user"))
+	assert.True(t, hasRoleTest(claims, "moderator"))
+	assert.False(t, hasRoleTest(claims, "admin"))
 }
 
 func TestAdminHandler(t *testing.T) {
@@ -329,9 +338,24 @@ func (f *fakeAdminRoomRepo) CountParticipants(ctx context.Context, roomID uuid.U
 	}
 	return f.participantByRoom[roomID], nil
 }
+func (f *fakeAdminRoomRepo) ListMeetingsWithParticipantCounts(ctx context.Context, limit, offset int) ([]repository.RoomWithParticipantCount, error) {
+	var result []repository.RoomWithParticipantCount
+	for _, room := range f.rooms {
+		if room != nil && room.Type == models.RoomTypeMeeting && room.DeletedAt == nil {
+			result = append(result, repository.RoomWithParticipantCount{
+				Room:              *room,
+				ParticipantsCount: f.participantByRoom[room.ID],
+			})
+		}
+	}
+	return result, nil
+}
 
 func (f *fakeAdminMessageRepo) CountSince(ctx context.Context, since time.Time) (int64, error) {
 	return f.countSince, nil
+}
+func (f *fakeAdminMessageRepo) CountByDay(ctx context.Context, since time.Time) ([]repository.DayMessageCount, error) {
+	return nil, nil
 }
 
 func (f *fakeAdminWebhookRepo) ListRecentDeliveries(ctx context.Context, limit int, onlyFailed bool) ([]*webhooks.WebhookDelivery, error) {
@@ -375,6 +399,12 @@ func (f *fakeAdminBotRepo) ListCommandEventsFiltered(ctx context.Context, limit,
 
 func (f *fakeAdminBotRepo) ListCommandStatsGrouped(ctx context.Context, since time.Time) ([]repository.CommandStat, error) {
 	return nil, f.err
+}
+func (f *fakeAdminBotRepo) CountCommandEventsSince(ctx context.Context, since time.Time) (repository.BotEventCounts, error) {
+	return repository.BotEventCounts{}, f.err
+}
+func (f *fakeAdminBotRepo) CountCommandEventsAll(ctx context.Context) (int64, error) {
+	return int64(len(f.events)), f.err
 }
 
 func (f *fakeAdminAuthAuditRepo) ListAuthAuditEvents(ctx context.Context, limit int, onlyFailed bool) ([]*models.AuthAuditEvent, error) {

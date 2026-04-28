@@ -43,11 +43,11 @@ func (r *MessageRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.
 	return &message, nil
 }
 
-// GetByRoomID получает сообщения комнаты
+// GetByRoomID получает сообщения комнаты (без thread-ответов)
 func (r *MessageRepository) GetByRoomID(ctx context.Context, roomID uuid.UUID, limit, offset int) ([]*models.Message, error) {
 	var messages []*models.Message
 	err := r.db.WithContext(ctx).
-		Where("room_id = ? AND is_deleted = ?", roomID, false).
+		Where("room_id = ? AND is_deleted = ? AND thread_root_id IS NULL", roomID, false).
 		Preload("User").
 		Order("created_at DESC").
 		Limit(limit).
@@ -56,10 +56,10 @@ func (r *MessageRepository) GetByRoomID(ctx context.Context, roomID uuid.UUID, l
 	return messages, err
 }
 
-// GetByRoomIDWithCursor получает сообщения комнаты с курсором
+// GetByRoomIDWithCursor получает сообщения комнаты с курсором (без thread-ответов)
 func (r *MessageRepository) GetByRoomIDWithCursor(ctx context.Context, roomID uuid.UUID, cursor string, limit int) ([]*models.Message, error) {
 	query := r.db.WithContext(ctx).
-		Where("room_id = ? AND is_deleted = ?", roomID, false).
+		Where("room_id = ? AND is_deleted = ? AND thread_root_id IS NULL", roomID, false).
 		Preload("User").
 		Order("created_at DESC").
 		Limit(limit)
@@ -184,4 +184,27 @@ func (r *MessageRepository) Search(ctx context.Context, roomID uuid.UUID, query 
 		Order("created_at DESC").
 		Find(&messages).Error
 	return messages, err
+}
+
+// GetThreadMessages возвращает ответы в треде
+func (r *MessageRepository) GetThreadMessages(ctx context.Context, rootID uuid.UUID, limit, offset int) ([]*models.Message, error) {
+	var messages []*models.Message
+	err := r.db.WithContext(ctx).
+		Where("thread_root_id = ? AND is_deleted = ?", rootID, false).
+		Preload("User").
+		Order("created_at ASC").
+		Limit(limit).
+		Offset(offset).
+		Find(&messages).Error
+	return messages, err
+}
+
+// CountThreadReplies возвращает количество ответов в треде
+func (r *MessageRepository) CountThreadReplies(ctx context.Context, rootID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&models.Message{}).
+		Where("thread_root_id = ? AND is_deleted = ?", rootID, false).
+		Count(&count).Error
+	return count, err
 }

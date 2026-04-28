@@ -103,6 +103,45 @@ func TestMessageReactionTableName(t *testing.T) {
 	assert.Equal(t, "message_reactions", r.TableName())
 }
 
+func TestMessageWithThreadRootID(t *testing.T) {
+	roomID := uuid.New()
+	userID := uuid.New()
+	threadRootID := uuid.New()
+
+	msg := NewMessage(roomID, userID, "Thread reply", MessageTypeText)
+	msg.ThreadRootID = &threadRootID
+
+	assert.NotNil(t, msg.ThreadRootID)
+	assert.Equal(t, threadRootID, *msg.ThreadRootID)
+	assert.Nil(t, msg.ThreadRoot)
+}
+
+func TestMessageWithoutThreadRootID(t *testing.T) {
+	roomID := uuid.New()
+	userID := uuid.New()
+
+	msg := NewMessage(roomID, userID, "Regular message", MessageTypeText)
+
+	assert.Nil(t, msg.ThreadRootID)
+	assert.Nil(t, msg.ThreadRoot)
+}
+
+func TestMessageThreadAndReplyToCombined(t *testing.T) {
+	roomID := uuid.New()
+	userID := uuid.New()
+	threadRootID := uuid.New()
+	replyToID := uuid.New()
+
+	msg := NewMessage(roomID, userID, "Combined", MessageTypeText)
+	msg.ThreadRootID = &threadRootID
+	msg.ReplyToID = &replyToID
+
+	assert.NotNil(t, msg.ThreadRootID)
+	assert.NotNil(t, msg.ReplyToID)
+	assert.Equal(t, threadRootID, *msg.ThreadRootID)
+	assert.Equal(t, replyToID, *msg.ReplyToID)
+}
+
 func boolPtr(b bool) *bool {
 	return &b
 }
