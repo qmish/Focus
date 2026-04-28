@@ -16,13 +16,50 @@ type UserContext struct {
 	AvatarURL string `json:"avatar,omitempty"`
 }
 
-// JitsiClaims claims для Jitsi JWT
+// JitsiClaims claims для Jitsi JWT.
+//
+// ВАЖНО: поле Audience сериализуется как одиночная строка, а не массив,
+// потому что lua-jwt-библиотека Jitsi (luajwtjitsi.lib.lua) сравнивает
+// claim с принимаемым audience через прямое равенство строк
+// (verify_claim: claim == accepted) и не поддерживает массив. Стандартный
+// jwt.RegisteredClaims использует ClaimStrings, который всегда даёт массив,
+// поэтому используем собственные поля.
 type JitsiClaims struct {
 	Context struct {
 		User UserContext `json:"user"`
 	} `json:"context"`
-	Room string `json:"room"`
-	jwt.RegisteredClaims
+	Room      string           `json:"room"`
+	Issuer    string           `json:"iss,omitempty"`
+	Subject   string           `json:"sub,omitempty"`
+	Audience  string           `json:"aud,omitempty"`
+	ExpiresAt *jwt.NumericDate `json:"exp,omitempty"`
+	NotBefore *jwt.NumericDate `json:"nbf,omitempty"`
+	IssuedAt  *jwt.NumericDate `json:"iat,omitempty"`
+}
+
+// GetExpirationTime реализует интерфейс jwt.Claims.
+func (c JitsiClaims) GetExpirationTime() (*jwt.NumericDate, error) { return c.ExpiresAt, nil }
+
+// GetIssuedAt реализует интерфейс jwt.Claims.
+func (c JitsiClaims) GetIssuedAt() (*jwt.NumericDate, error) { return c.IssuedAt, nil }
+
+// GetNotBefore реализует интерфейс jwt.Claims.
+func (c JitsiClaims) GetNotBefore() (*jwt.NumericDate, error) { return c.NotBefore, nil }
+
+// GetIssuer реализует интерфейс jwt.Claims.
+func (c JitsiClaims) GetIssuer() (string, error) { return c.Issuer, nil }
+
+// GetSubject реализует интерфейс jwt.Claims.
+func (c JitsiClaims) GetSubject() (string, error) { return c.Subject, nil }
+
+// GetAudience реализует интерфейс jwt.Claims. Для совместимости со
+// стандартом возвращает audience как ClaimStrings, хотя в JSON хранится
+// одиночная строка.
+func (c JitsiClaims) GetAudience() (jwt.ClaimStrings, error) {
+	if c.Audience == "" {
+		return nil, nil
+	}
+	return jwt.ClaimStrings{c.Audience}, nil
 }
 
 // Config конфигурация Jitsi JWT
@@ -72,21 +109,20 @@ func (g *TokenGenerator) GenerateToken(roomName string, user UserContext) (strin
 	now := time.Now()
 	exp := now.Add(g.config.TokenLifetime)
 
-	claims := JitsiClaims{}
-	claims.Context.User = user
-	claims.Room = roomName
 	subject := g.config.Subject
 	if subject == "" {
 		subject = defaultSubject
 	}
-	claims.RegisteredClaims = jwt.RegisteredClaims{
+	claims := JitsiClaims{
+		Room:      roomName,
 		Issuer:    g.config.Issuer,
 		Subject:   subject,
-		Audience:  jwt.ClaimStrings{g.config.Audience},
+		Audience:  g.config.Audience,
 		ExpiresAt: jwt.NewNumericDate(exp),
 		IssuedAt:  jwt.NewNumericDate(now),
 		NotBefore: jwt.NewNumericDate(now),
 	}
+	claims.Context.User = user
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
