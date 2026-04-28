@@ -57,12 +57,10 @@ func TestMe_RequiresAuth_ResponseBody(t *testing.T) {
 		t.Fatalf("expected 401, got %d", rr.Code)
 	}
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		// http.Error writes plain text, not JSON — that's acceptable
-		body := rr.Body.String()
-		if body == "" {
-			t.Error("expected non-empty error body")
-		}
+	body := rr.Body.String()
+	if body == "" {
+		t.Error("expected non-empty error body")
 	}
+	var resp map[string]interface{}
+	_ = json.Unmarshal([]byte(body), &resp) // допускается plain-text ответ от http.Error
 }

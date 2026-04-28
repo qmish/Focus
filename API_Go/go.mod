@@ -1,6 +1,6 @@
 module github.com/qmish/focus-api
 
-go 1.25.0
+go 1.24
 
 require (
 	github.com/Azure/go-ntlmssp v0.1.0
