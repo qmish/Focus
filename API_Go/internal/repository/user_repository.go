@@ -165,6 +165,28 @@ func (r *UserRepository) GetOrCreate(ctx context.Context, keycloakID uuid.UUID, 
 		return nil, err
 	}
 
+	// Запись по keycloak_id не найдена — пробуем привязаться к существующему
+	// пользователю по email (например, созданному через локальную регистрацию
+	// или импортированному из Exchange/AD). Это позволяет одному email
+	// иметь и локальный, и SSO-вход.
+	if email != "" {
+		existing, errByEmail := r.GetByEmail(ctx, email)
+		if errByEmail == nil {
+			kid := keycloakID
+			existing.KeycloakID = &kid
+			if name != "" && existing.Name == "" {
+				existing.Name = name
+			}
+			if err := r.Update(ctx, existing); err != nil {
+				return nil, err
+			}
+			return existing, nil
+		}
+		if !errors.Is(errByEmail, ErrUserNotFound) {
+			return nil, errByEmail
+		}
+	}
+
 	user = models.NewUser(keycloakID, email, name)
 	if err := r.Create(ctx, user); err != nil {
 		return nil, err
