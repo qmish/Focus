@@ -3,4 +3,9 @@ node_modules
 dist
 *.md
 .env
-.env.*
+.env.local
+.env.development
+.env.development.local
+.env.production.local
+.env.test
+.env.test.local
