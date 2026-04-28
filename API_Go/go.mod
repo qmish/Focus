@@ -1,6 +1,6 @@
 module github.com/qmish/focus-api
 
-go 1.24
+go 1.25.0
 
 require (
 	github.com/Azure/go-ntlmssp v0.1.0
@@ -17,7 +17,6 @@ require (
 	golang.org/x/crypto v0.47.0
 	golang.org/x/oauth2 v0.36.0
 	gorm.io/driver/postgres v1.6.0
-	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.30.5
 )
 
@@ -44,7 +43,6 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
-	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/swaggo/files/v2 v2.0.0 // indirect
