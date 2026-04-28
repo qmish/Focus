@@ -28,6 +28,7 @@ export interface Message {
     file_size?: number
     file_mime?: string
     edited?: boolean
+    mentions?: string[]
   }
   user?: {
     id: string

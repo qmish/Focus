@@ -8,6 +8,7 @@ import { JitsiMeeting } from '../components/JitsiMeeting'
 import ProfileModal from '../components/ProfileModal'
 import MessageBubble from '../components/MessageBubble'
 import ThreadPanel from '../components/ThreadPanel'
+import MentionPopup from '../components/MentionPopup'
 import { JITSI_DOMAIN } from '../lib/config'
 
 interface ScheduledMeeting {
@@ -63,6 +64,10 @@ export default function MessengerPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeThread, setActiveThread] = useState<Message | null>(null)
   const [threadReplies, setThreadReplies] = useState<Message[]>([])
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [showMentionPopup, setShowMentionPopup] = useState(false)
+  const [mentionCursorPos, setMentionCursorPos] = useState(0)
+  const chatInputRef = useRef<HTMLInputElement>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -152,6 +157,17 @@ export default function MessengerPage() {
                 }
                 return prev
               })
+            }
+            if (data.type === 'mention' && data.payload) {
+              const p = data.payload
+              if (Notification.permission === 'granted') {
+                new Notification('Вас упомянули', {
+                  body: p.content_preview || 'Новое упоминание',
+                  tag: `mention-${p.message_id}`,
+                })
+              } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission()
+              }
             }
           } catch (err) { console.error('WS parse error:', err) }
         }
@@ -280,6 +296,35 @@ export default function MessengerPage() {
       thread_root_id: threadRootId,
     })
   }, [roomId])
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    const cursorPos = e.target.selectionStart ?? val.length
+    setMessageInput(val)
+
+    const textBefore = val.slice(0, cursorPos)
+    const atMatch = textBefore.match(/@(\w*)$/)
+    if (atMatch) {
+      setMentionQuery(atMatch[1])
+      setMentionCursorPos(cursorPos)
+      setShowMentionPopup(true)
+    } else {
+      setShowMentionPopup(false)
+      setMentionQuery('')
+    }
+  }, [])
+
+  const handleMentionSelect = useCallback((u: { name: string }) => {
+    const textBefore = messageInput.slice(0, mentionCursorPos)
+    const atIdx = textBefore.lastIndexOf('@')
+    const before = messageInput.slice(0, atIdx)
+    const after = messageInput.slice(mentionCursorPos)
+    const newVal = `${before}@${u.name} ${after}`
+    setMessageInput(newVal)
+    setShowMentionPopup(false)
+    setMentionQuery('')
+    chatInputRef.current?.focus()
+  }, [messageInput, mentionCursorPos])
 
   const sendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -660,13 +705,25 @@ export default function MessengerPage() {
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
               </button>
-              <input
-                type="text"
-                value={messageInput}
-                onChange={e => setMessageInput(e.target.value)}
-                placeholder={pendingFile ? 'Добавьте подпись...' : 'Введите сообщение...'}
-                className="chat-input"
-              />
+              <div className="chat-input-wrapper">
+                {showMentionPopup && roomId && (
+                  <MentionPopup
+                    query={mentionQuery}
+                    roomId={roomId}
+                    position={{ top: 8, left: 0 }}
+                    onSelect={handleMentionSelect}
+                    onClose={() => setShowMentionPopup(false)}
+                  />
+                )}
+                <input
+                  ref={chatInputRef}
+                  type="text"
+                  value={messageInput}
+                  onChange={handleInputChange}
+                  placeholder={pendingFile ? 'Добавьте подпись...' : 'Введите сообщение...'}
+                  className="chat-input"
+                />
+              </div>
               <button type="submit" className="chat-send-btn" disabled={(!messageInput.trim() && !pendingFile) || uploading}>
                 {uploading
                   ? <span className="chat-send-spinner" />

@@ -129,6 +129,31 @@ func (r *UserRepository) Search(ctx context.Context, query string, limit int) ([
 	return users, err
 }
 
+// FindByNames находит пользователей по списку имён
+func (r *UserRepository) FindByNames(ctx context.Context, names []string) ([]*models.User, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	var users []*models.User
+	err := r.db.WithContext(ctx).
+		Where("name IN ?", names).
+		Find(&users).Error
+	return users, err
+}
+
+// SearchInRoom ищет пользователей внутри конкретной комнаты по имени или email
+func (r *UserRepository) SearchInRoom(ctx context.Context, query string, roomID uuid.UUID, limit int) ([]*models.User, error) {
+	var users []*models.User
+	searchPattern := "%" + query + "%"
+	err := r.db.WithContext(ctx).
+		Joins("JOIN room_participants rp ON rp.user_id = users.id").
+		Where("rp.room_id = ? AND (users.name ILIKE ? OR users.email ILIKE ?)", roomID, searchPattern, searchPattern).
+		Limit(limit).
+		Order("users.name ASC").
+		Find(&users).Error
+	return users, err
+}
+
 // GetOrCreate получает пользователя или создаёт нового
 func (r *UserRepository) GetOrCreate(ctx context.Context, keycloakID uuid.UUID, email, name string) (*models.User, error) {
 	user, err := r.GetByKeycloakID(ctx, keycloakID)

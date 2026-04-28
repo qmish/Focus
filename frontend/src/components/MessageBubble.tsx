@@ -1,5 +1,16 @@
 import type { Message } from '../store/roomsStore'
 
+const mentionPattern = /(@\w+)/g
+
+function renderTextWithMentions(text: string) {
+  const parts = text.split(mentionPattern)
+  return parts.map((part, i) =>
+    mentionPattern.test(part)
+      ? <span key={i} className="mention">{part}</span>
+      : part
+  )
+}
+
 interface MessageBubbleProps {
   message: Message
   isMine: boolean
@@ -27,7 +38,7 @@ export default function MessageBubble({
             <img src={url} alt={meta.file_name || 'image'} className="msg-image" />
           </a>
           {msg.content && msg.content !== meta.file_name && (
-            <div className="msg-text">{msg.content}</div>
+            <div className="msg-text">{renderTextWithMentions(msg.content)}</div>
           )}
         </div>
       )
@@ -51,12 +62,12 @@ export default function MessageBubble({
             </div>
           </a>
           {msg.content && msg.content !== meta.file_name && (
-            <div className="msg-text">{msg.content}</div>
+            <div className="msg-text">{renderTextWithMentions(msg.content)}</div>
           )}
         </div>
       )
     }
-    return <div className="msg-text">{msg.content}</div>
+    return <div className="msg-text">{renderTextWithMentions(msg.content)}</div>
   }
 
   return (

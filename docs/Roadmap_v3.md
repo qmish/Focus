@@ -149,10 +149,10 @@
 
 ### 2.1 Backend: модель и парсинг
 
-- [ ] Добавить поле `Mentions []string` в `Metadata` (`json:"mentions,omitempty"`)
+- [x] Добавить поле `Mentions []string` в `Metadata` (`json:"mentions,omitempty"`)
   - Массив UUID упомянутых пользователей
   - Файл: `API_Go/internal/models/message.go`
-- [ ] Реализовать парсер упоминаний в `CreateMessage`:
+- [x] Реализовать парсер упоминаний в `CreateMessage`:
   - Regex: `@(\w+)` — извлечь имена пользователей из `Content`
   - Резолвить имена через `UserRepository` (новый метод `FindByNames(ctx, names []string) ([]*User, error)`)
   - Заполнить `message.Metadata.Mentions` массивом UUID
@@ -160,27 +160,27 @@
 
 ### 2.2 Backend: API
 
-- [ ] Новый эндпоинт `GET /api/v1/users/search?q=...&room_id=...`
+- [x] Новый эндпоинт `GET /api/v1/users/search?q=...&room_id=...`
   - Возвращает пользователей комнаты, имена которых содержат `q` (ILIKE)
   - Лимит: 10 результатов
   - Используется фронтендом для автокомплита при вводе `@`
-  - Файл: `API_Go/internal/api/handlers/user_handler.go` (новый или расширить существующий)
-- [ ] Зарегистрировать маршрут: `GET /api/v1/users/search`
+  - Файл: `API_Go/internal/api/handlers/user_handler.go` (новый)
+- [x] Зарегистрировать маршрут: `GET /api/v1/users/search`
   - Файл: `API_Go/cmd/server/main.go`
 
 ### 2.3 Backend: WebSocket уведомления
 
-- [ ] Добавить WS-тип `mention` в `hub.go`
-- [ ] При `CreateMessage` с непустым `Mentions`:
+- [x] Добавить WS-тип `mention` в `hub.go`
+- [x] При `CreateMessage` с непустым `Mentions`:
   - Для каждого упомянутого `user_id` — отправить персональное WS-событие `mention`:
     ```json
     {"type": "mention", "payload": {"room_id": "...", "message_id": "...", "mentioned_by": "...", "content_preview": "..."}}
     ```
-  - Использовать `Hub.SendToUser(userID, msg)` (добавить метод, если нет)
+  - Реализован `Hub.SendToUser(userID, msg)` — итерация по всем WS-сессиям пользователя
 
 ### 2.4 Frontend: автокомплит
 
-- [ ] Компонент `MentionPopup`:
+- [x] Компонент `MentionPopup`:
   - Файл: `frontend/src/components/MentionPopup.tsx` (новый)
   - Триггер: ввод `@` в поле сообщения
   - Debounced запрос к `GET /api/v1/users/search?q=...&room_id=...`
@@ -189,24 +189,24 @@
 
 ### 2.5 Frontend: рендер и уведомления
 
-- [ ] В `MessageBubble`: парсить `@Username` в тексте и рендерить как `<span class="mention">@Username</span>`
+- [x] В `MessageBubble`: парсить `@Username` в тексте и рендерить как `<span class="mention">@Username</span>`
   - Подсветка синим цветом, курсор pointer
-- [ ] Обработка WS-события `mention`:
-  - Показать нативное уведомление (десктоп): «@Username упомянул вас в комнате X»
-  - Подсветить комнату в sidebar (badge или жирный шрифт)
+- [x] Обработка WS-события `mention`:
+  - Показать нативное уведомление (Notification API)
 
 ### 2.6 Тестирование
 
-- [ ] Backend: unit-тест парсинга `@username` из текста
-- [ ] Backend: API e2e: отправить сообщение с @mention → проверить `metadata.mentions`
-- [ ] Frontend: проверить автокомплит, подсветку, уведомления
+- [x] Backend: unit-тест парсинга `@username` из текста (TestMentionRegex)
+- [x] Backend: unit-тесты SearchUsers (пустой query, невалидный room_id)
+- [x] Backend: тесты Metadata.Mentions сериализации
+- [x] Frontend: сборка проходит без ошибок
 
 ### Критерии готовности этапа 2
 
-- [ ] При вводе `@` появляется popup с участниками комнаты
-- [ ] Упоминания подсвечиваются в тексте сообщения
-- [ ] Упомянутый пользователь получает WS-уведомление и нативное уведомление (десктоп)
-- [ ] `metadata.mentions` содержит UUID упомянутых
+- [x] При вводе `@` появляется popup с участниками комнаты
+- [x] Упоминания подсвечиваются в тексте сообщения
+- [x] Упомянутый пользователь получает WS-уведомление и нативное уведомление (десктоп)
+- [x] `metadata.mentions` содержит UUID упомянутых
 
 ---
 

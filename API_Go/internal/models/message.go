@@ -47,6 +47,7 @@ type Metadata struct {
 	EditedBy  *uuid.UUID `json:"edited_by,omitempty"`
 	ReplyTo   *uuid.UUID `json:"reply_to,omitempty"`
 	Reactions []Reaction `json:"reactions,omitempty"`
+	Mentions  []string   `json:"mentions,omitempty"`
 	FileName  string     `json:"file_name,omitempty"`
 	FileSize  int64      `json:"file_size,omitempty"`
 	FileMIME  string     `json:"file_mime,omitempty"`

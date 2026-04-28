@@ -45,9 +45,10 @@ func setupHandlerWithDB(t *testing.T) (*MessageHandler, *gorm.DB) {
 	t.Helper()
 	db := getTestDB(t)
 	msgRepo := repository.NewMessageRepository(db)
+	userRepo := repository.NewUserRepository(db)
 	wsHub := websocket.NewHub(zap.NewNop())
 	go wsHub.Run()
-	return NewMessageHandler(msgRepo, wsHub, nil), db
+	return NewMessageHandler(msgRepo, userRepo, wsHub, nil), db
 }
 
 func seedTestUser(t *testing.T, db *gorm.DB, id uuid.UUID) {
@@ -79,11 +80,14 @@ func withClaimsFor(req *http.Request, userID string) *http.Request {
 
 // --- Unit tests (no DB required) ---
 
-func TestListMessages_MissingRoomID(t *testing.T) {
+func newTestHandler() *MessageHandler {
 	wsHub := websocket.NewHub(zap.NewNop())
 	go wsHub.Run()
-	handler := NewMessageHandler(nil, wsHub, nil)
+	return NewMessageHandler(nil, nil, wsHub, nil)
+}
 
+func TestListMessages_MissingRoomID(t *testing.T) {
+	handler := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/messages", nil)
 	rr := httptest.NewRecorder()
 	handler.ListMessages(rr, req)
@@ -91,10 +95,7 @@ func TestListMessages_MissingRoomID(t *testing.T) {
 }
 
 func TestListMessages_InvalidRoomID(t *testing.T) {
-	wsHub := websocket.NewHub(zap.NewNop())
-	go wsHub.Run()
-	handler := NewMessageHandler(nil, wsHub, nil)
-
+	handler := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/messages?room_id=not-uuid", nil)
 	rr := httptest.NewRecorder()
 	handler.ListMessages(rr, req)
@@ -102,10 +103,7 @@ func TestListMessages_InvalidRoomID(t *testing.T) {
 }
 
 func TestCreateMessage_MissingRoomID(t *testing.T) {
-	wsHub := websocket.NewHub(zap.NewNop())
-	go wsHub.Run()
-	handler := NewMessageHandler(nil, wsHub, nil)
-
+	handler := newTestHandler()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"content":"hi"}`))
 	req = withClaimsFor(req, uuid.New().String())
 	rr := httptest.NewRecorder()
@@ -114,10 +112,7 @@ func TestCreateMessage_MissingRoomID(t *testing.T) {
 }
 
 func TestCreateMessage_EmptyContent(t *testing.T) {
-	wsHub := websocket.NewHub(zap.NewNop())
-	go wsHub.Run()
-	handler := NewMessageHandler(nil, wsHub, nil)
-
+	handler := newTestHandler()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"`+uuid.New().String()+`","content":"","type":"text"}`))
 	req = withClaimsFor(req, uuid.New().String())
 	rr := httptest.NewRecorder()
@@ -126,10 +121,7 @@ func TestCreateMessage_EmptyContent(t *testing.T) {
 }
 
 func TestCreateMessage_Unauthorized(t *testing.T) {
-	wsHub := websocket.NewHub(zap.NewNop())
-	go wsHub.Run()
-	handler := NewMessageHandler(nil, wsHub, nil)
-
+	handler := newTestHandler()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"`+uuid.New().String()+`","content":"hi","type":"text"}`))
 	rr := httptest.NewRecorder()
 	handler.CreateMessage(rr, req)
@@ -137,17 +129,35 @@ func TestCreateMessage_Unauthorized(t *testing.T) {
 }
 
 func TestGetThread_InvalidID(t *testing.T) {
-	wsHub := websocket.NewHub(zap.NewNop())
-	go wsHub.Run()
-	handler := NewMessageHandler(nil, wsHub, nil)
-
+	handler := newTestHandler()
 	router := chi.NewRouter()
 	router.Get("/messages/{id}/thread", handler.GetThread)
-
 	req := httptest.NewRequest(http.MethodGet, "/messages/not-a-uuid/thread", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestMentionRegex(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []string
+	}{
+		{"Hello @alice and @bob", []string{"alice", "bob"}},
+		{"No mentions here", nil},
+		{"@single", []string{"single"}},
+		{"@alice @alice duplicate", []string{"alice", "alice"}},
+		{"@user123 test", []string{"user123"}},
+		{"email@example.com", []string{"example"}},
+	}
+	for _, tt := range tests {
+		matches := mentionRegex.FindAllStringSubmatch(tt.input, -1)
+		var got []string
+		for _, m := range matches {
+			got = append(got, m[1])
+		}
+		assert.Equal(t, tt.expected, got, "input: %s", tt.input)
+	}
 }
 
 // --- Integration tests (require test DB, skipped if unavailable) ---

@@ -142,6 +142,31 @@ func TestMessageThreadAndReplyToCombined(t *testing.T) {
 	assert.Equal(t, replyToID, *msg.ReplyToID)
 }
 
+func TestMetadataMentionsSerialization(t *testing.T) {
+	mentions := []string{uuid.New().String(), uuid.New().String()}
+	meta := Metadata{Mentions: mentions}
+
+	val, err := meta.Value()
+	assert.NoError(t, err)
+	assert.NotNil(t, val)
+
+	var decoded Metadata
+	err = decoded.Scan(val)
+	assert.NoError(t, err)
+	assert.Equal(t, mentions, decoded.Mentions)
+}
+
+func TestMetadataEmptyMentions(t *testing.T) {
+	meta := Metadata{}
+	val, err := meta.Value()
+	assert.NoError(t, err)
+
+	var decoded Metadata
+	err = decoded.Scan(val)
+	assert.NoError(t, err)
+	assert.Nil(t, decoded.Mentions)
+}
+
 func boolPtr(b bool) *bool {
 	return &b
 }
