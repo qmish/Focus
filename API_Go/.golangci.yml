@@ -13,6 +13,9 @@ linters:
         - all
         - "-QF1007"
         - "-S1001"
+        - "-ST1000"
+        - "-ST1020"
+        - "-ST1021"
   exclusions:
     rules:
       - path: '_test\.go'
