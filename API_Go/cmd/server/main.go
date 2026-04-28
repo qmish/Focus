@@ -216,6 +216,7 @@ func main() {
 	authHandler.SetSessionRevocationRepository(sessionRevocationRepo)
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
 	messageHandler := handlers.NewMessageHandler(messageRepo, userRepo, wsHub, botEngine)
+	reactionHandler := handlers.NewReactionHandler(messageRepo, wsHub)
 	uploadDir := os.Getenv("UPLOAD_DIR")
 	if uploadDir == "" {
 		uploadDir = "/data/uploads"
@@ -422,6 +423,9 @@ func main() {
 					r.Put("/", messageHandler.UpdateMessage)
 					r.Delete("/", messageHandler.DeleteMessage)
 					r.Get("/thread", messageHandler.GetThread)
+					r.Post("/reactions", reactionHandler.AddReaction)
+					r.Delete("/reactions/{emoji}", reactionHandler.RemoveReaction)
+					r.Get("/reactions", reactionHandler.ListReactions)
 				})
 			})
 

@@ -73,15 +73,24 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 		messages[i], messages[j] = messages[j], messages[i]
 	}
 
-	type messageWithThread struct {
+	type messageWithExtras struct {
 		*models.Message
-		ThreadCount int64 `json:"thread_count"`
+		ThreadCount      int64             `json:"thread_count"`
+		ReactionsSummary []ReactionSummary `json:"reactions_summary"`
 	}
 
-	enriched := make([]messageWithThread, 0, len(messages))
+	enriched := make([]messageWithExtras, 0, len(messages))
 	for _, msg := range messages {
 		tc, _ := h.msgRepo.CountThreadReplies(r.Context(), msg.ID)
-		enriched = append(enriched, messageWithThread{Message: msg, ThreadCount: tc})
+		var summary []ReactionSummary
+		if len(msg.Reactions) > 0 {
+			deref := make([]models.MessageReaction, len(msg.Reactions))
+			for i, r := range msg.Reactions {
+				deref[i] = r
+			}
+			summary = AggregateReactions(deref)
+		}
+		enriched = append(enriched, messageWithExtras{Message: msg, ThreadCount: tc, ReactionsSummary: summary})
 	}
 
 	hasMore := len(messages) == limit

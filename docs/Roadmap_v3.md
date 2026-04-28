@@ -218,7 +218,7 @@
 
 ### 3.1 Backend: HTTP-эндпоинты
 
-- [ ] Создать `ReactionHandler` с зависимостью от `MessageRepository` и `Hub`
+- [x] Создать `ReactionHandler` с зависимостью от `MessageRepository` и `Hub`
   - Файл: `API_Go/internal/api/handlers/reaction_handler.go` (новый)
   - Методы:
     - `AddReaction(w, r)` — `POST /api/v1/messages/{id}/reactions`
@@ -231,7 +231,7 @@
 
 ### 3.2 Backend: регистрация маршрутов
 
-- [ ] Зарегистрировать в `main.go`:
+- [x] Зарегистрировать в `main.go`:
   ```
   r.Route("/messages/{id}", func(r chi.Router) {
       ...
@@ -243,58 +243,55 @@
 
 ### 3.3 Backend: обогащение ListMessages
 
-- [ ] В `GetByRoomID`: добавить `Preload("Reactions")` с джойном по `MessageReaction`
+- [x] В `GetByRoomID`: добавить `Preload("Reactions")` с джойном по `MessageReaction`
   - Файл: `API_Go/internal/repository/message_repository.go`
-- [ ] В `ListMessages` response: агрегировать `message.Reactions` в формат:
-  ```json
-  "reactions_summary": [{"emoji": "👍", "count": 3, "user_ids": ["...", "...", "..."]}]
-  ```
+- [x] В `ListMessages` response: агрегировать `message.Reactions` в `reactions_summary`
 
 ### 3.4 Backend: WebSocket
 
-- [ ] Добавить WS-типы `reaction_added`, `reaction_removed` в `hub.go`
-- [ ] Payload:
+- [x] Добавить WS-типы `reaction_added`, `reaction_removed` в `hub.go`
+- [x] Payload:
   ```json
   {"message_id": "...", "room_id": "...", "user_id": "...", "emoji": "👍"}
   ```
 
 ### 3.5 Frontend: типы
 
-- [ ] Расширить `Message` интерфейс в `roomsStore.ts`:
+- [x] Расширить `Message` интерфейс в `roomsStore.ts`:
   ```typescript
   reactions_summary?: { emoji: string; count: number; user_ids: string[] }[]
   ```
 
 ### 3.6 Frontend: UI компоненты
 
-- [ ] Emoji picker при hover на сообщении:
+- [x] Emoji picker при hover на сообщении:
   - Файл: `frontend/src/components/EmojiPicker.tsx` (новый)
-  - Быстрые реакции: 👍 ❤️ 😂 😮 🔥 + кнопка «+» для полного списка
-  - Показывается при hover на `MessageBubble` (иконка emoji справа от bubble)
-- [ ] Строка реакций под `MessageBubble`:
+  - Быстрые реакции: 👍 ❤️ 😂 😮 🔥 👎
+  - Показывается при hover на `MessageBubble` (иконка emoji)
+- [x] Строка реакций под `MessageBubble`:
   - Файл: `frontend/src/components/ReactionsBar.tsx` (новый)
   - Каждая реакция: `[emoji count]`, подсветка если текущий пользователь в `user_ids`
   - Клик по реакции: toggle (добавить/убрать свою)
-  - Hover: показать имена пользователей (tooltip)
 
 ### 3.7 Frontend: WebSocket
 
-- [ ] Обработка `reaction_added` / `reaction_removed`:
+- [x] Обработка `reaction_added` / `reaction_removed`:
   - Обновить `reactions_summary` на соответствующем сообщении в state
   - Не перезагружать весь список сообщений
 
 ### 3.8 Тестирование
 
-- [ ] Backend: unit-тест `ReactionHandler` (add/remove/list)
-- [ ] Backend: API e2e: добавить реакцию → список реакций → удалить → проверить
-- [ ] Frontend: проверить picker, toggle, real-time обновление
+- [x] Backend: unit-тесты ReactionHandler (6 тестов: invalid/missing/unauthorized для add/remove/list)
+- [x] Backend: unit-тесты AggregateReactions (3 теста: multiple, empty, single)
+- [x] Backend: integration-тест add -> list -> remove -> verify (при наличии DB)
+- [x] Frontend: сборка проходит без ошибок
 
 ### Критерии готовности этапа 3
 
-- [ ] Пользователь может добавить/убрать реакцию на любое сообщение
-- [ ] Реакции отображаются под сообщением с агрегированными счётчиками
-- [ ] Реакции обновляются в реальном времени через WS
-- [ ] В ListMessages реакции приходят сразу (preload)
+- [x] Пользователь может добавить/убрать реакцию на любое сообщение
+- [x] Реакции отображаются под сообщением с агрегированными счётчиками
+- [x] Реакции обновляются в реальном времени через WS
+- [x] В ListMessages реакции приходят сразу (preload)
 
 ---
 

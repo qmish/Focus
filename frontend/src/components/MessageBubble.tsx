@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import type { Message } from '../store/roomsStore'
+import EmojiPicker from './EmojiPicker'
+import ReactionsBar from './ReactionsBar'
 
 const mentionPattern = /(@\w+)/g
 
@@ -14,7 +17,9 @@ function renderTextWithMentions(text: string) {
 interface MessageBubbleProps {
   message: Message
   isMine: boolean
+  currentUserId?: string
   onReplyInThread: (msg: Message) => void
+  onReaction: (messageId: string, emoji: string) => void
   formatTime: (dateStr: string) => string
   formatFileSize: (bytes: number) => string
   getInitials: (name?: string) => string
@@ -23,11 +28,15 @@ interface MessageBubbleProps {
 export default function MessageBubble({
   message: msg,
   isMine,
+  currentUserId,
   onReplyInThread,
+  onReaction,
   formatTime,
   formatFileSize,
   getInitials,
 }: MessageBubbleProps) {
+  const [showPicker, setShowPicker] = useState(false)
+
   const renderContent = () => {
     const meta = msg.metadata
     if (msg.type === 'image' && meta?.file_id) {
@@ -70,27 +79,56 @@ export default function MessageBubble({
     return <div className="msg-text">{renderTextWithMentions(msg.content)}</div>
   }
 
+  const handleEmojiSelect = (emoji: string) => {
+    setShowPicker(false)
+    onReaction(msg.id, emoji)
+  }
+
   return (
     <div className={`msg ${isMine ? 'msg-mine' : 'msg-other'}`}>
       {!isMine && <div className="msg-avatar">{getInitials(msg.user?.name)}</div>}
       <div className="msg-bubble">
         {!isMine && <div className="msg-author">{msg.user?.name || 'Пользователь'}</div>}
         {renderContent()}
+        <ReactionsBar
+          reactions={msg.reactions_summary || []}
+          currentUserId={currentUserId}
+          onToggle={(emoji) => onReaction(msg.id, emoji)}
+        />
         <div className="msg-footer">
           <span className="msg-time">{formatTime(msg.created_at)}</span>
-          <button
-            className="msg-thread-btn"
-            onClick={() => onReplyInThread(msg)}
-            title="Ответить в треде"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-            </svg>
-            {(msg.thread_count ?? 0) > 0 && (
-              <span className="msg-thread-count">{msg.thread_count}</span>
-            )}
-          </button>
+          <div className="msg-actions">
+            <button
+              className="msg-emoji-btn"
+              onClick={() => setShowPicker(!showPicker)}
+              title="Реакция"
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                <line x1="9" y1="9" x2="9.01" y2="9" />
+                <line x1="15" y1="9" x2="15.01" y2="9" />
+              </svg>
+            </button>
+            <button
+              className="msg-thread-btn"
+              onClick={() => onReplyInThread(msg)}
+              title="Ответить в треде"
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+              </svg>
+              {(msg.thread_count ?? 0) > 0 && (
+                <span className="msg-thread-count">{msg.thread_count}</span>
+              )}
+            </button>
+          </div>
         </div>
+        {showPicker && (
+          <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowPicker(false)} />
+        )}
       </div>
     </div>
   )

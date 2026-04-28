@@ -30,6 +30,7 @@ export interface Message {
     edited?: boolean
     mentions?: string[]
   }
+  reactions_summary?: { emoji: string; count: number; user_ids: string[] }[]
   user?: {
     id: string
     name: string
