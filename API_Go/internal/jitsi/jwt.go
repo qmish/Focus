@@ -32,6 +32,7 @@ type Config struct {
 	AppSecret     string
 	Issuer        string
 	Audience      string
+	Subject       string
 	TokenLifetime time.Duration
 }
 
@@ -40,8 +41,19 @@ type TokenGenerator struct {
 	config Config
 }
 
-// NewTokenGenerator создаёт новый TokenGenerator
-func NewTokenGenerator(baseURL, appID, appSecret, issuer, audience string, tokenLifetime time.Duration) *TokenGenerator {
+// defaultSubject значение sub claim по умолчанию.
+// "*" разрешает любой XMPP-домен и совместим с настройкой
+// prosody enable_domain_verification = false. Используется,
+// если конкретный домен (например, meet.jitsi) не задан явно.
+const defaultSubject = "*"
+
+// NewTokenGenerator создаёт новый TokenGenerator.
+// subject задаёт значение JWT claim "sub". Если передана пустая строка —
+// используется wildcard "*".
+func NewTokenGenerator(baseURL, appID, appSecret, issuer, audience, subject string, tokenLifetime time.Duration) *TokenGenerator {
+	if subject == "" {
+		subject = defaultSubject
+	}
 	return &TokenGenerator{
 		config: Config{
 			BaseURL:       baseURL,
@@ -49,6 +61,7 @@ func NewTokenGenerator(baseURL, appID, appSecret, issuer, audience string, token
 			AppSecret:     appSecret,
 			Issuer:        issuer,
 			Audience:      audience,
+			Subject:       subject,
 			TokenLifetime: tokenLifetime,
 		},
 	}
@@ -62,8 +75,13 @@ func (g *TokenGenerator) GenerateToken(roomName string, user UserContext) (strin
 	claims := JitsiClaims{}
 	claims.Context.User = user
 	claims.Room = roomName
+	subject := g.config.Subject
+	if subject == "" {
+		subject = defaultSubject
+	}
 	claims.RegisteredClaims = jwt.RegisteredClaims{
 		Issuer:    g.config.Issuer,
+		Subject:   subject,
 		Audience:  jwt.ClaimStrings{g.config.Audience},
 		ExpiresAt: jwt.NewNumericDate(exp),
 		IssuedAt:  jwt.NewNumericDate(now),

@@ -168,6 +168,7 @@ func main() {
 		cfg.Jitsi.AppSecret,
 		cfg.Jitsi.Issuer,
 		cfg.Jitsi.Audience,
+		cfg.Jitsi.Subject,
 		cfg.Jitsi.TokenLifetime,
 	)
 

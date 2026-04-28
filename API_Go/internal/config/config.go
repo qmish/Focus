@@ -88,6 +88,7 @@ type JitsiConfig struct {
 	AppSecret     string
 	Issuer        string
 	Audience      string
+	Subject       string
 	TokenLifetime time.Duration
 }
 
@@ -191,6 +192,7 @@ func Load() *Config {
 			AppSecret:     getEnv("JITSI_APP_SECRET", ""),
 			Issuer:        getEnv("JITSI_ISSUER", "jitsi"),
 			Audience:      getEnv("JITSI_AUDIENCE", "jitsi"),
+			Subject:       getEnv("JITSI_SUBJECT", "*"),
 			TokenLifetime: getDurationEnv("JITSI_TOKEN_LIFETIME", 8*time.Hour),
 		},
 		Exchange: ExchangeConfig{

@@ -17,7 +17,7 @@ func TestNewTokenGenerator(t *testing.T) {
 	audience := "jitsi"
 	tokenLifetime := 8 * time.Hour
 
-	gen := NewTokenGenerator(baseURL, appID, appSecret, issuer, audience, tokenLifetime)
+	gen := NewTokenGenerator(baseURL, appID, appSecret, issuer, audience, "meet.jitsi", tokenLifetime)
 
 	require.NotNil(t, gen)
 	assert.Equal(t, baseURL, gen.config.BaseURL)
@@ -35,6 +35,7 @@ func TestGenerateToken(t *testing.T) {
 		"test-secret-key-12345",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -60,6 +61,7 @@ func TestGenerateTokenForUser(t *testing.T) {
 		"test-secret-key-12345",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -91,6 +93,7 @@ func TestGenerateTokenForModerator(t *testing.T) {
 		"test-secret-key-12345",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -116,6 +119,7 @@ func TestValidateToken(t *testing.T) {
 		"test-secret-key-12345",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -147,6 +151,7 @@ func TestValidateTokenInvalid(t *testing.T) {
 		"test-secret-key-12345",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -165,6 +170,7 @@ func TestValidateTokenWrongSecret(t *testing.T) {
 		"test-secret-key-12345",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -174,6 +180,7 @@ func TestValidateTokenWrongSecret(t *testing.T) {
 		"wrong-secret-key",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -200,6 +207,7 @@ func TestGenerateRoomURL(t *testing.T) {
 		"test-secret-key-12345",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -228,6 +236,7 @@ func TestGetBaseURL(t *testing.T) {
 		"secret",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -241,6 +250,7 @@ func TestSetBaseURL(t *testing.T) {
 		"secret",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
@@ -258,6 +268,7 @@ func TestTokenExpiration(t *testing.T) {
 		"test-secret-key-12345",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		1*time.Second,
 	)
 
@@ -285,6 +296,46 @@ func TestTokenExpiration(t *testing.T) {
 	assert.Nil(t, claims)
 }
 
+func TestGenerateTokenIncludesSubjectClaim(t *testing.T) {
+	t.Run("explicit subject is propagated into sub claim", func(t *testing.T) {
+		gen := NewTokenGenerator(
+			"https://meet.company.com",
+			"jitsi",
+			"test-secret-key-12345",
+			"jitsi",
+			"jitsi",
+			"meet.jitsi",
+			8*time.Hour,
+		)
+
+		token, err := gen.GenerateTokenForUser("room-1", uuid.New().String(), "User", "u@e.com", false)
+		require.NoError(t, err)
+
+		claims, err := gen.ValidateToken(token)
+		require.NoError(t, err)
+		assert.Equal(t, "meet.jitsi", claims.Subject)
+	})
+
+	t.Run("empty subject defaults to wildcard", func(t *testing.T) {
+		gen := NewTokenGenerator(
+			"https://meet.company.com",
+			"jitsi",
+			"test-secret-key-12345",
+			"jitsi",
+			"jitsi",
+			"",
+			8*time.Hour,
+		)
+
+		token, err := gen.GenerateTokenForUser("room-2", uuid.New().String(), "User", "u@e.com", false)
+		require.NoError(t, err)
+
+		claims, err := gen.ValidateToken(token)
+		require.NoError(t, err)
+		assert.Equal(t, "*", claims.Subject, "subject must be set so prosody mod_token_verification can read it")
+	})
+}
+
 func TestJitsiClaimsStructure(t *testing.T) {
 	gen := NewTokenGenerator(
 		"https://meet.company.com",
@@ -292,6 +343,7 @@ func TestJitsiClaimsStructure(t *testing.T) {
 		"test-secret-key-12345",
 		"jitsi",
 		"jitsi",
+		"meet.jitsi",
 		8*time.Hour,
 	)
 
