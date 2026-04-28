@@ -1228,10 +1228,17 @@ body { margin: 0; min-height: 100vh; }
   opacity: 0;
   transition: opacity 0.15s, color 0.15s;
 }
-.msg:hover .msg-emoji-btn {
+.msg:hover .msg-emoji-btn,
+.msg:focus-within .msg-emoji-btn,
+.msg--emoji-picker-open .msg-emoji-btn,
+.msg-emoji-btn.is-open,
+.msg-emoji-btn:focus-visible {
   opacity: 1;
 }
 .msg-emoji-btn:hover {
+  color: var(--accent);
+}
+.msg-emoji-btn.is-open {
   color: var(--accent);
 }
 
@@ -1249,7 +1256,9 @@ body { margin: 0; min-height: 100vh; }
   opacity: 0;
   transition: opacity 0.15s, color 0.15s, background 0.15s;
 }
-.msg:hover .msg-ctx-trigger {
+.msg:hover .msg-ctx-trigger,
+.msg:focus-within .msg-ctx-trigger,
+.msg--emoji-picker-open .msg-ctx-trigger {
   opacity: 1;
 }
 .msg-ctx-trigger:hover {
@@ -1335,19 +1344,20 @@ body { margin: 0; min-height: 100vh; }
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   padding: 6px 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  z-index: 50;
+  z-index: 10050;
 }
 .emoji-picker-item {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 1.2rem;
+  font-size: 1.35rem;
   padding: 4px 6px;
   border-radius: 6px;
   transition: background 0.12s;
   line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
 }
 .emoji-picker-item:hover {
   background: var(--bg-hover);
@@ -1379,8 +1389,9 @@ body { margin: 0; min-height: 100vh; }
   background: rgba(37, 99, 235, 0.1);
 }
 .reaction-chip-emoji {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
 }
 .reaction-chip-count {
   font-size: 0.75rem;

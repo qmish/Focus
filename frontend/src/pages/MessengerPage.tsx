@@ -429,16 +429,53 @@ export default function MessengerPage() {
   }, [editingMessage?.id, cancelEdit])
 
   const handleReaction = useCallback(async (messageId: string, emoji: string) => {
+    const uid = user?.id || ''
     const msg = messages.find(m => m.id === messageId)
     const existing = msg?.reactions_summary?.find(r => r.emoji === emoji)
-    const alreadyReacted = existing?.user_ids?.includes(user?.id || '')
+    const alreadyReacted = uid ? existing?.user_ids?.includes(uid) : false
+    const prevSummary = msg?.reactions_summary
+
+    const nextSummary = (() => {
+      const base = [...(msg?.reactions_summary || [])]
+      if (alreadyReacted) {
+        return base
+          .map(s =>
+            s.emoji !== emoji
+              ? s
+              : { ...s, count: s.count - 1, user_ids: s.user_ids.filter(id => id !== uid) }
+          )
+          .filter(s => s.count > 0)
+      }
+      const idx = base.findIndex(s => s.emoji === emoji)
+      if (idx >= 0) {
+        const s = base[idx]
+        if (s.user_ids.includes(uid)) return base
+        const copy = [...base]
+        copy[idx] = { ...s, count: s.count + 1, user_ids: [...s.user_ids, uid] }
+        return copy
+      }
+      if (!uid) return base
+      return [...base, { emoji, count: 1, user_ids: [uid] }]
+    })()
+
+    setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, reactions_summary: nextSummary } : m)))
+
     try {
       if (alreadyReacted) {
         await apiClient.delete(`/api/v1/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`)
       } else {
         await apiClient.post(`/api/v1/messages/${messageId}/reactions`, { emoji })
       }
-    } catch { /* WS will update state */ }
+    } catch {
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === messageId
+            ? { ...m, reactions_summary: prevSummary ? [...prevSummary] : [] }
+            : m
+        )
+      )
+      setError('Не удалось обновить реакцию')
+    }
   }, [messages, user?.id])
 
   const sendMessage = useCallback(async (e: React.FormEvent) => {

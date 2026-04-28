@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { Message } from '../store/roomsStore'
 import EmojiPicker from './EmojiPicker'
 import ReactionsBar from './ReactionsBar'
@@ -45,6 +45,9 @@ export default function MessageBubble({
   getInitials,
 }: MessageBubbleProps) {
   const [showPicker, setShowPicker] = useState(false)
+  const emojiBtnRef = useRef<HTMLButtonElement>(null)
+
+  const closeEmojiPicker = useCallback(() => setShowPicker(false), [])
 
   const renderContent = () => {
     if (msg.is_deleted) {
@@ -121,7 +124,8 @@ export default function MessageBubble({
           {!msg.is_deleted && (
             <div className="msg-actions">
               <button
-                className="msg-emoji-btn"
+                ref={emojiBtnRef}
+                className={`msg-emoji-btn${showPicker ? ' is-open' : ''}`}
                 onClick={() => setShowPicker(!showPicker)}
                 title="Реакция"
                 type="button"
@@ -160,7 +164,11 @@ export default function MessageBubble({
           )}
         </div>
         {showPicker && (
-          <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowPicker(false)} />
+          <EmojiPicker
+            onSelect={handleEmojiSelect}
+            onClose={closeEmojiPicker}
+            anchorRef={emojiBtnRef}
+          />
         )}
       </div>
     </div>

@@ -91,4 +91,37 @@ describe('MessageBubble', () => {
     const mentions = document.querySelectorAll('.mention')
     expect(mentions.length).toBeGreaterThanOrEqual(2)
   })
+
+  it('opens emoji picker on emoji button click and calls onReaction on emoji select', () => {
+    const onReaction = vi.fn()
+    render(<MessageBubble {...baseProps} message={baseMessage} onReaction={onReaction} />)
+    fireEvent.click(screen.getByTitle('Реакция'))
+    const picker = document.querySelector('.emoji-picker')
+    expect(picker).toBeTruthy()
+    const items = picker!.querySelectorAll('.emoji-picker-item')
+    expect(items.length).toBeGreaterThan(0)
+    fireEvent.click(items[0])
+    expect(onReaction).toHaveBeenCalledWith('msg-1', expect.any(String))
+  })
+
+  it('keeps emoji button highlighted while picker is open (is-open class)', () => {
+    render(<MessageBubble {...baseProps} message={baseMessage} />)
+    const btn = screen.getByTitle('Реакция')
+    expect(btn.className).not.toContain('is-open')
+    fireEvent.click(btn)
+    expect(btn.className).toContain('is-open')
+  })
+
+  it('renders existing reactions chips when reactions_summary is non-empty', () => {
+    const withReactions: Message = {
+      ...baseMessage,
+      reactions_summary: [
+        { emoji: '👍', count: 2, user_ids: ['user-1', 'user-2'] },
+        { emoji: '🔥', count: 1, user_ids: ['user-3'] },
+      ],
+    }
+    render(<MessageBubble {...baseProps} message={withReactions} />)
+    expect(screen.getByText('👍')).toBeTruthy()
+    expect(screen.getByText('🔥')).toBeTruthy()
+  })
 })
