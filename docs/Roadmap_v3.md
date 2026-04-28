@@ -500,17 +500,86 @@
 
 ---
 
+## Этап 6. Развёртывание stage-окружения и стабилизация
+
+Оценка: 1 спринт (фактически выполнено 28 апреля 2026)
+Приоритет: критический (блокировал доступ к мессенджеру)
+Зависимости: Этапы 1–4
+
+Сквозная задача: «запустить текущий проект полностью в кластере (Kaniko + Argo CD + Nexus), починить авторизацию (Keycloak SSO + локальная) и видеозвонки Jitsi».
+
+### 6.1 CI/CD и реестр образов
+
+- [x] Сборка образов через **Kaniko** в кластере (k3s) с пушем в **Nexus** (`registry.focus.local`)
+  - Манифесты: `k8s/kaniko-jobs.yaml` (api-go, frontend, frontend-admin)
+  - `hostAliases` для `registry.focus.local` → IP Nginx Ingress LoadBalancer (`10.204.41.11`), `--skip-tls-verify`, `--cache=true` через `registry.focus.local/focus/cache`
+  - Креды реестра — Secret `nexus-docker-config`, GitHub-токен — Secret `github-creds`
+- [x] **Argo CD** Application'ы (`k8s/argocd/*.yaml`) синхронизируют:
+  - `messenger-stage` ← `k8s/stage/`
+  - `jitsi` ← `k8s/jitsi-stage/`
+- [x] CI workflow `.github/workflows/ci-cd.yml` обновлён до Go 1.25, golangci-lint v2.5.0 (конфиг `API_Go/.golangci.yml` отключает несовместимые проверки)
+
+### 6.2 Деплой backend и фронтендов
+
+- [x] `messenger-stage`: деплои `api-go`, `frontend`, `frontend-admin`, `postgres`, `redis`, `nginx-ingress`
+  - Манифест: `k8s/stage/focus.yaml`
+  - Secret `focus-secrets` (DB, Keycloak, JWT, Jitsi, Exchange и т.д.)
+  - ConfigMap `frontend-admin-sso` для админки
+- [x] `NetworkPolicy` `allow-internal-namespace` в `messenger-stage` — фикс `502 Bad Gateway` между frontend и api-go (PR #7)
+- [x] `.dockerignore` в `frontend/` и `frontend-admin/` исправлены так, чтобы `.env.production` попадал в build-контекст Vite (исчезла надпись «SSO не настроен») (PR #8)
+
+### 6.3 Авторизация Keycloak SSO + локальная
+
+- [x] OIDC: разделение discovery URL (внутренний HTTP `keycloak.keycloak.svc.cluster.local`) и issuer URL (публичный `https://auth.focus.local`) через `oidc.InsecureIssuerURLContext`
+  - Файл: `API_Go/internal/auth/oidc.go`
+  - `KEYCLOAK_URL` = `https://auth.focus.local` фиксирует issuer mismatch (PR #11)
+- [x] `UserRepository.GetOrCreate`: при существовании пользователя по email обновляет `keycloak_id` вместо вставки дубликата (фикс «duplicate key value violates unique constraint») (PR #9)
+  - Покрыто тестами `TestUserRepository_GetOrCreate_LinksExistingByEmail`, `_CreatesNewWhenNoExisting`, `_IdempotentByKeycloakID`
+- [x] Локальный логин: `password_hash` для `admin@focus.local` и `chat@focus.local` синхронизирован с Keycloak (исправлен `401` на `/api/v1/auth/local/login`)
+- [x] В Keycloak созданы пользователи `chat@focus.local` (`Chat2026!`) и `admin@focus.local` (`Admin2026!`) с ролями `user`/`admin`
+
+### 6.4 Развёртывание Jitsi-стека
+
+- [x] Полный Jitsi-стек в namespace `jitsi`: `prosody`, `jicofo`, `jvb` (с `hostNetwork`), `jitsi-web` (PR #10)
+  - Манифесты: `k8s/jitsi-stage/jitsi.yaml`, `k8s/argocd/jitsi-application.yaml`
+  - `ENABLE_IPV6=0` в `jitsi-env` — фикс `socket() [::]:80 failed` для `jitsi-web` на k3s
+  - JVB: `nodeSelector` на ноду с публичным IP, `DOCKER_HOST_ADDRESS=10.204.41.11`, UDP/10000 через hostPort
+  - `NetworkPolicy` `jitsi-allow-internal` разрешает трафик от ingress-nginx, messenger-stage, нодовых CIDR (`10.204.41.0/24`) и pod CIDR (`10.42.0.0/16`)
+- [x] `Ingress jitsi-stage-ingress`: `meet.focus.local` → `jitsi-web:80`
+- [x] api-go: `JITSI_BASE_URL=https://meet.focus.local:30443`, `JITSI_APP_ID/ISSUER/AUDIENCE=jitsi`, `meet.focus.local` в `hostAliases`
+
+### 6.5 Hotfix-ы JWT для Jitsi
+
+- [x] **`sub` claim** добавлен в JWT (`mod_token_verification` в prosody читает `claims.sub` как XMPP-домен, при отсутствии падает на Lua-конкатенации) (PR #12)
+  - `JitsiConfig.Subject` (env `JITSI_SUBJECT`, default `*` — wildcard, совместим с `enable_domain_verification = false`)
+  - Тесты `TestGenerateTokenIncludesSubjectClaim` (явный subject и дефолт)
+- [x] **`aud` claim сериализуется как строка**, а не массив (`luajwtjitsi.lib.lua/verify_claim` сравнивает `claim == accepted` и не понимает массив; стандартный `jwt.RegisteredClaims` давал `["jitsi"]`) (PR #13)
+  - В `JitsiClaims` убран embedded `jwt.RegisteredClaims`, заведены собственные поля; реализован интерфейс `jwt.Claims`
+  - Тест `TestGenerateTokenAudienceIsJSONString` проверяет, что `aud` в JSON — именно строка
+- [x] Kaniko-ребилд `api-go:latest` после каждого фикса, `kubectl rollout restart deploy/api-go -n messenger-stage`
+
+### Критерии готовности этапа 6
+
+- [x] Все компоненты раскатаны в кластере через Argo CD из `master`
+- [x] Доступ к чату по `https://chat.focus.local:30443` через Keycloak SSO и локальный логин
+- [x] Доступ к админке по `https://admin.focus.local:30443` для глобального admin
+- [x] Видеозвонки Jitsi подключаются к XMPP/prosody без ошибок `connection.passwordRequired` / `invalid 'aud' claim` / `Извините, вам не разрешено присоединиться`
+- [x] CI/CD: dev → PR → master → Kaniko build → Nexus → Argo CD sync
+
+---
+
 ## Зависимости между этапами
 
 ```
 Этап 1 (Треды) ──► Этап 2 (Упоминания) ──► Этап 3 (Реакции) ──► Этап 4 (Редактирование)
                                                                           │
                                                                           ▼
-                                                                  Этап 5 (Мобильные)
+                                                              Этап 6 (Stage-деплой) ──► Этап 5 (Мобильные)
 ```
 
 Этапы 1–4 последовательные: каждый расширяет модель `Message`, WS-протокол и компонент `MessageBubble`.  
-Этап 5 зависит от завершения 1–4, чтобы мобильные приложения сразу включали полный чат-функционал.  
+Этап 6 (развёртывание в кластере, Jitsi/Keycloak hotfix-ы) выполняется после функционального этапа 4, чтобы выкатить на пользователей и стабилизировать stage-окружение.  
+Этап 5 зависит от завершения 1–4 и наличия рабочего stage (этап 6) для интеграционных проверок мобильных клиентов.  
 Фаза 5.4 (Push-инфраструктура) может выполняться параллельно с фазами 5.2/5.3.
 
 ---
@@ -531,4 +600,5 @@
 - [x] Этап 1.4–1.6: frontend треды (UI + WS)
 - [x] Этап 3.1–3.4: backend реакции (подключить существующий репозиторий к HTTP + WS)
 - [x] Этап 4.1–4.9: редактирование/удаление сообщений (24-часовое окно, гибрид-авторизация, WS-broadcast)
+- [x] Этап 6: развёртывание stage (Kaniko + Argo CD + Nexus), фикс Keycloak SSO/локального логина, фикс Jitsi JWT (`sub`, `aud` как строка)
 - [ ] Этап 5: мобильные приложения (iOS/Android через Tauri 2 Mobile)
