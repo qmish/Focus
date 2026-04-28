@@ -21,6 +21,14 @@ type Config struct {
 	Exchange  ExchangeConfig
 	Email     EmailConfig
 	Log       LogConfig
+	Messages  MessagesConfig
+}
+
+// MessagesConfig конфигурация поведения чат-сообщений
+type MessagesConfig struct {
+	// EditWindow ограничивает время, в течение которого автор может редактировать сообщение.
+	// 0 — без ограничения (редактировать можно в любое время).
+	EditWindow time.Duration
 }
 
 // AuthConfig конфигурация сессионных токенов API/WS
@@ -217,9 +225,30 @@ func Load() *Config {
 			Level:  getEnv("LOG_LEVEL", "info"),
 			Format: getEnv("LOG_FORMAT", "json"),
 		},
+		Messages: MessagesConfig{
+			EditWindow: getMessageEditWindow("MESSAGE_EDIT_WINDOW_HOURS", 24*time.Hour),
+		},
 	}
 
 	return cfg
+}
+
+// getMessageEditWindow читает окно редактирования сообщений в часах.
+// "0" или отрицательное значение — без ограничения.
+func getMessageEditWindow(key string, defaultValue time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return defaultValue
+	}
+	hours, err := strconv.Atoi(value)
+	if err != nil {
+		log.Printf("WARNING: invalid integer for %s=%q, using default %s: %v", key, value, defaultValue, err)
+		return defaultValue
+	}
+	if hours <= 0 {
+		return 0
+	}
+	return time.Duration(hours) * time.Hour
 }
 
 // ValidateSecurity проверяет минимальные security-инварианты для токенов и секретов.

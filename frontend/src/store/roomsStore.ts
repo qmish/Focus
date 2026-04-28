@@ -28,8 +28,11 @@ export interface Message {
     file_size?: number
     file_mime?: string
     edited?: boolean
+    edited_at?: string
+    edited_by?: string
     mentions?: string[]
   }
+  is_deleted?: boolean
   reactions_summary?: { emoji: string; count: number; user_ids: string[] }[]
   user?: {
     id: string

@@ -303,7 +303,7 @@
 
 ### 4.1 Backend: доработка UpdateMessage
 
-- [ ] В `UpdateMessage`: заполнять `EditedAt` и `EditedBy`
+- [x] В `UpdateMessage`: заполнять `EditedAt` и `EditedBy`
   ```go
   now := time.Now()
   userID, _ := uuid.Parse(claims.UserID)
@@ -311,41 +311,28 @@
   message.Metadata.EditedBy = &userID
   ```
   - Файл: `API_Go/internal/api/handlers/message_handler.go`
-- [ ] После `Update`: broadcast WS `message_updated` с полным обновлённым сообщением
-  ```go
-  wsPayload, _ := json.Marshal(message)
-  h.wsHub.BroadcastToRoom(message.RoomID.String(), websocket.WSMessage{
-      Type:    "message_updated",
-      Payload: wsPayload,
-  })
-  ```
+- [x] После `Update`: broadcast WS `message_updated` с полным обновлённым сообщением
+- [x] Окно редактирования 24 часа (`MESSAGE_EDIT_WINDOW_HOURS` ENV, default 24, 0 = unlimited): возврат `410 Gone` если истекло
+- [x] Валидация: пустой/слишком длинный (>10000) контент → `400`; не автор → `403`; уже удалено → `410`
 
 ### 4.2 Backend: доработка DeleteMessage
 
-- [ ] После `Delete`: broadcast WS `message_deleted`
-  ```go
-  payload, _ := json.Marshal(map[string]string{
-      "message_id": messageID.String(),
-      "room_id":    message.RoomID.String(),
-  })
-  h.wsHub.BroadcastToRoom(message.RoomID.String(), websocket.WSMessage{
-      Type:    "message_deleted",
-      Payload: payload,
-  })
-  ```
-  - Файл: `API_Go/internal/api/handlers/message_handler.go`
-- [ ] Разрешить админу/модератору удалять чужие сообщения:
-  - Проверять роль из `claims.Roles` или участника комнаты (`RoomParticipant.Role`)
-  - Если `role == "admin" || role == "moderator"` — разрешить удаление
+- [x] После `Delete`: broadcast WS `message_deleted` с `{message_id, room_id, thread_root_id, deleted_by}`
+- [x] Гибрид-авторизация удаления чужого сообщения:
+  - Автор сообщения — всегда
+  - Глобальный admin (`claims.Roles` содержит `admin`) — всегда
+  - Иначе: `RoomParticipant.Role IN (moderator, admin)` для конкретной комнаты через `RoomRepository.GetParticipant`
+- [x] Идемпотентность: повторное удаление уже удалённого → `204 No Content`
+- [x] Файл: `API_Go/internal/api/handlers/message_handler.go`
 
 ### 4.3 Backend: WebSocket типы
 
-- [ ] Добавить `MessageTypeUpdated = "message_updated"` и `MessageTypeDeleted = "message_deleted"` в `hub.go`
+- [x] Добавлены `MessageTypeMessageUpdated = "message_updated"` и `MessageTypeMessageDeleted = "message_deleted"` в `hub.go`
   - Файл: `API_Go/internal/websocket/hub.go`
 
 ### 4.4 Frontend: типы и store
 
-- [ ] Расширить `Message` интерфейс:
+- [x] Расширен `Message` интерфейс:
   ```typescript
   metadata?: {
     ...
@@ -353,54 +340,67 @@
     edited_at?: string
     edited_by?: string
   }
+  is_deleted?: boolean
   ```
   - Файл: `frontend/src/store/roomsStore.ts`
 
 ### 4.5 Frontend: контекстное меню
 
-- [ ] Компонент `MessageContextMenu`:
+- [x] Компонент `MessageContextMenu`:
   - Файл: `frontend/src/components/MessageContextMenu.tsx` (новый)
-  - Триггер: кнопка `...` при hover на `MessageBubble` (для своих сообщений)
-  - Пункты: «Редактировать», «Удалить», «Ответить в треде» (переиспользовать из этапа 1)
-  - Для админа/модератора: «Удалить» доступно и для чужих сообщений
+  - Триггер: кнопка `…` при hover на `MessageBubble`
+  - Пункты: «Редактировать» (только автор и не истёк edit-window), «Удалить», «Ответить в треде»
+  - Для глобального admin: «Удалить» доступно и для чужих сообщений (room-moderator проверяется backend-ом, при 403 показывается toast)
+  - Закрытие по клику вне и Escape
 
 ### 4.6 Frontend: режим редактирования
 
-- [ ] При нажатии «Редактировать»:
-  - Заполнить поле ввода текстом сообщения
-  - Показать индикатор «Редактирование сообщения» над полем ввода (с кнопкой отмены)
-  - При отправке: `PUT /api/v1/messages/{id}` вместо `POST /api/v1/messages`
-  - После успешного обновления: выйти из режима редактирования
-- [ ] Метка «(ред.)» рядом со временем сообщения, если `metadata.edited === true`
+- [x] При нажатии «Редактировать»:
+  - Заполняется поле ввода текстом сообщения
+  - Показывается индикатор «Редактирование сообщения» над полем ввода с кнопкой «Отмена»
+  - При отправке: `PUT /api/v1/messages/{id}` вместо `POST`
+  - После успешного обновления: выход из режима редактирования
+- [x] Метка «(ред.)» рядом со временем сообщения, если `metadata.edited === true`
+- [x] Обработка `410 Gone` на edit: показ ошибки «Истёк срок редактирования сообщения (24 часа)»
 
 ### 4.7 Frontend: удаление
 
-- [ ] При нажатии «Удалить»: модалка подтверждения «Удалить сообщение?»
-- [ ] При подтверждении: `DELETE /api/v1/messages/{id}`
-- [ ] Анимация удаления (fade-out)
+- [x] При нажатии «Удалить»: модалка подтверждения «Удалить сообщение?» (`window.confirm`)
+- [x] При подтверждении: `DELETE /api/v1/messages/{id}`
+- [x] При 403: показ ошибки «Доступ запрещён: нельзя удалить это сообщение»
 
 ### 4.8 Frontend: WebSocket
 
-- [ ] Обработка `message_updated`:
-  - Найти сообщение в `messages` state по `id`, заменить на обновлённое
-- [ ] Обработка `message_deleted`:
-  - Убрать сообщение из `messages` state по `message_id` (или показать «Сообщение удалено»)
+- [x] Обработка `message_updated`: находит сообщение в `messages`/`threadReplies`/`activeThread` по `id`, мерджит с обновлёнными полями
+- [x] Обработка `message_deleted`: помечает сообщение как `is_deleted = true`, очищает контент; если был thread-ответом — уменьшает `thread_count` корня
 
 ### 4.9 Тестирование
 
-- [ ] Backend: unit-тест — `UpdateMessage` ставит `EditedAt`/`EditedBy`, broadcast WS
-- [ ] Backend: unit-тест — `DeleteMessage` broadcast `message_deleted`
-- [ ] Backend: API e2e — редактировать → проверить `edited`, удалить → проверить `is_deleted`
-- [ ] Backend: API e2e — модератор удаляет чужое сообщение
-- [ ] Frontend: проверить контекстное меню, режим редактирования, удаление с подтверждением
+- [x] Backend unit (без БД): `TestUpdateMessage_InvalidID/_Unauthorized/_EmptyContent/_TooLongContent`, `TestDeleteMessage_InvalidID/_Unauthorized`
+- [x] Backend integration (PostgreSQL, skip если недоступна):
+  - `TestUpdateMessage_Success_SetsEditedFields_Integration` — проверяет content/Edited/EditedAt/EditedBy
+  - `TestUpdateMessage_NotAuthor_Returns403_Integration`
+  - `TestUpdateMessage_NotFound_Integration`
+  - `TestUpdateMessage_EditWindowExpired_Returns410_Integration`
+  - `TestUpdateMessage_NoLimitWhenWindowZero_Integration`
+  - `TestDeleteMessage_Author_Success_Integration`
+  - `TestDeleteMessage_GlobalAdmin_DeletesOthers_Integration`
+  - `TestDeleteMessage_RoomModerator_DeletesOthers_Integration`
+  - `TestDeleteMessage_RoomAdmin_DeletesOthers_Integration`
+  - `TestDeleteMessage_RegularUser_Forbidden_Integration`
+  - `TestDeleteMessage_NotFound_Integration`
+  - `TestDeleteMessage_AlreadyDeleted_Idempotent_Integration`
+- [x] Backend models: `TestMetadataEditedAtSerialization`, `TestMetadataEditedBySerialization`, `TestMetadataEditedFieldsAbsentWhenNil`
+- [x] Frontend: `MessageContextMenu.test.tsx` (11 тестов), `MessageBubble.test.tsx` (10 тестов)
+- [x] Frontend: build (`npm run build`) проходит без TS-ошибок
 
 ### Критерии готовности этапа 4
 
-- [ ] Пользователь может редактировать свои сообщения, отображается метка «(ред.)»
-- [ ] Пользователь может удалять свои сообщения с подтверждением
-- [ ] Админ/модератор может удалять чужие сообщения
-- [ ] Изменения и удаления транслируются через WS в реальном времени
-- [ ] `EditedAt` и `EditedBy` корректно заполняются в metadata
+- [x] Пользователь может редактировать свои сообщения в течение 24 часов (`MESSAGE_EDIT_WINDOW_HOURS`), отображается метка «(ред.)»
+- [x] Пользователь может удалять свои сообщения с подтверждением
+- [x] Админ (глобальный) и модератор/админ комнаты могут удалять чужие сообщения
+- [x] Изменения и удаления транслируются через WS в реальном времени
+- [x] `EditedAt` и `EditedBy` корректно заполняются в metadata
 
 ---
 
@@ -527,6 +527,8 @@
 
 ## Быстрый трек (ближайший спринт)
 
-- [ ] Этап 1.1–1.3: backend треды (модель + API + WS)
-- [ ] Этап 1.4–1.6: frontend треды (UI + WS)
-- [ ] Этап 3.1–3.4: backend реакции (подключить существующий репозиторий к HTTP + WS)
+- [x] Этап 1.1–1.3: backend треды (модель + API + WS)
+- [x] Этап 1.4–1.6: frontend треды (UI + WS)
+- [x] Этап 3.1–3.4: backend реакции (подключить существующий репозиторий к HTTP + WS)
+- [x] Этап 4.1–4.9: редактирование/удаление сообщений (24-часовое окно, гибрид-авторизация, WS-broadcast)
+- [ ] Этап 5: мобильные приложения (iOS/Android через Tauri 2 Mobile)

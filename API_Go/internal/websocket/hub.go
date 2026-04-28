@@ -33,6 +33,8 @@ const (
 	MessageTypeMention        MessageType = "mention"
 	MessageTypeReactionAdded  MessageType = "reaction_added"
 	MessageTypeReactionRemoved MessageType = "reaction_removed"
+	MessageTypeMessageUpdated MessageType = "message_updated"
+	MessageTypeMessageDeleted MessageType = "message_deleted"
 )
 
 // WSMessage сообщение WebSocket

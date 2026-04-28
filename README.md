@@ -144,10 +144,24 @@ Focus/
 └── docker-compose.yml       # Локальное окружение
 ```
 
+## ⚙️ Ключевые ENV-переменные
+
+| Переменная | Default | Описание |
+|------------|---------|----------|
+| `SESSION_SECRET` | (required) | Секрет для подписи session JWT |
+| `JITSI_APP_SECRET` | (required) | Секрет для Jitsi JWT (не должен совпадать с `SESSION_SECRET`) |
+| `AUTH_SESSION_TOKEN_LIFETIME` | `24h` | Время жизни session токена |
+| `WS_ALLOWED_ORIGINS` | `localhost:*` | Разрешённые origin для WebSocket |
+| `WS_STRICT_ROOM_ACCESS` | `true` (prod) | Fail-closed авторизация в комнаты по WS |
+| `MESSAGE_EDIT_WINDOW_HOURS` | `24` | Окно редактирования сообщений в часах (`0` — без ограничения) |
+| `EXCHANGE_PROVIDER` | `ews` | Провайдер календаря (`ews` для on-prem) |
+
+Полный список — в [`.env.example`](./.env.example) и [`API_Go/internal/config/config.go`](./API_Go/internal/config/config.go).
+
 ## 📈 Актуальный статус
 
-**Последний релиз:** v0.5.19 (25 марта 2026 г.)  
-**Источник правды по плану:** `docs/Roadmap_v2.md`
+**Последний релиз:** Этап 4 Roadmap v3 (28 апреля 2026 г.) — редактирование/удаление сообщений с 24-часовым окном, гибрид-авторизацией и WS-broadcast.  
+**Источник правды по плану:** `docs/Roadmap_v3.md` (закрытие критических разрывов из gap-анализа)
 
 ### Что уже реализовано
 

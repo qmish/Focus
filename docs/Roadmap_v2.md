@@ -87,7 +87,7 @@
 
 ### 2.3 Завершение TODO-критики в backend
 - [x] Реализовать TODO по `admin conferences` (получение активных конференций и завершение через backend room lifecycle).
-- [x] Реализовать временные баны в admin API (`banned_until`, валидация `duration_hours`, очистка срока при unban).
+- [x] Реализовать временные баны в admin API (`banned_until`, валидация `duration_hours`, оне тка срока при unban).
 - [x] Реализовать TODO по `calendar cancellation notification`.
 - [x] Закрыть технические TODO по auth/logout flow.
 

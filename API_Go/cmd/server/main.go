@@ -216,6 +216,8 @@ func main() {
 	authHandler.SetSessionRevocationRepository(sessionRevocationRepo)
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
 	messageHandler := handlers.NewMessageHandler(messageRepo, userRepo, wsHub, botEngine)
+	messageHandler.SetRoomRepository(roomRepo)
+	messageHandler.SetEditWindow(cfg.Messages.EditWindow)
 	reactionHandler := handlers.NewReactionHandler(messageRepo, wsHub)
 	uploadDir := os.Getenv("UPLOAD_DIR")
 	if uploadDir == "" {

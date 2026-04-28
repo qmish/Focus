@@ -72,10 +72,44 @@ func seedTestRoom(t *testing.T, db *gorm.DB, id, creatorID uuid.UUID) {
 }
 
 func withClaimsFor(req *http.Request, userID string) *http.Request {
+	return withClaimsForRoles(req, userID, []string{"user"})
+}
+
+func withClaimsForRoles(req *http.Request, userID string, roles []string) *http.Request {
 	ctx := context.WithValue(req.Context(), auth.ContextKeyUserClaims, &auth.SessionClaims{
-		UserID: userID, Email: "test@test-thread.com", Name: "Test", Roles: []string{"user"},
+		UserID: userID, Email: "test@test-thread.com", Name: "Test", Roles: roles,
 	})
 	return req.WithContext(ctx)
+}
+
+// setupHandlerWithRoomRepo возвращает хендлер с привязанным RoomRepository (для тестов прав удаления).
+func setupHandlerWithRoomRepo(t *testing.T) (*MessageHandler, *gorm.DB) {
+	t.Helper()
+	db := getTestDB(t)
+	msgRepo := repository.NewMessageRepository(db)
+	userRepo := repository.NewUserRepository(db)
+	roomRepo := repository.NewRoomRepository(db)
+	wsHub := websocket.NewHub(zap.NewNop())
+	go wsHub.Run()
+	h := NewMessageHandler(msgRepo, userRepo, wsHub, nil)
+	h.SetRoomRepository(roomRepo)
+	return h, db
+}
+
+// addRoomParticipant добавляет участника в комнату с указанной ролью (для тестов).
+func addRoomParticipant(t *testing.T, db *gorm.DB, roomID, userID uuid.UUID, role models.ParticipantRole) {
+	t.Helper()
+	require.NoError(t, db.Create(models.NewRoomParticipant(roomID, userID, role)).Error)
+}
+
+// createMessageInDB создаёт сообщение напрямую в БД (без HTTP), позволяя задать createdAt.
+func createMessageInDB(t *testing.T, db *gorm.DB, roomID, userID uuid.UUID, content string, createdAt time.Time) *models.Message {
+	t.Helper()
+	msg := models.NewMessage(roomID, userID, content, models.MessageTypeText)
+	msg.CreatedAt = createdAt
+	msg.UpdatedAt = createdAt
+	require.NoError(t, db.Create(msg).Error)
+	return msg
 }
 
 // --- Unit tests (no DB required) ---
@@ -320,4 +354,348 @@ func TestGetThread_NotFound_Integration(t *testing.T) {
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+// --- Этап 4: UpdateMessage / DeleteMessage ---
+
+// Unit-тесты UpdateMessage (без БД, до обращения к репозиторию)
+
+func TestUpdateMessage_InvalidID(t *testing.T) {
+	handler := newTestHandler()
+	router := chi.NewRouter()
+	router.Put("/messages/{id}", handler.UpdateMessage)
+
+	req := httptest.NewRequest(http.MethodPut, "/messages/not-uuid", strings.NewReader(`{"content":"x"}`))
+	req = withClaimsFor(req, uuid.New().String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestUpdateMessage_Unauthorized(t *testing.T) {
+	handler := newTestHandler()
+	router := chi.NewRouter()
+	router.Put("/messages/{id}", handler.UpdateMessage)
+
+	req := httptest.NewRequest(http.MethodPut, "/messages/"+uuid.New().String(), strings.NewReader(`{"content":"x"}`))
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
+func TestUpdateMessage_EmptyContent(t *testing.T) {
+	handler := newTestHandler()
+	router := chi.NewRouter()
+	router.Put("/messages/{id}", handler.UpdateMessage)
+
+	req := httptest.NewRequest(http.MethodPut, "/messages/"+uuid.New().String(), strings.NewReader(`{"content":""}`))
+	req = withClaimsFor(req, uuid.New().String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestUpdateMessage_TooLongContent(t *testing.T) {
+	handler := newTestHandler()
+	router := chi.NewRouter()
+	router.Put("/messages/{id}", handler.UpdateMessage)
+
+	long := strings.Repeat("x", 10001)
+	req := httptest.NewRequest(http.MethodPut, "/messages/"+uuid.New().String(),
+		strings.NewReader(`{"content":"`+long+`"}`))
+	req = withClaimsFor(req, uuid.New().String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+// Unit-тесты DeleteMessage (без БД)
+
+func TestDeleteMessage_InvalidID(t *testing.T) {
+	handler := newTestHandler()
+	router := chi.NewRouter()
+	router.Delete("/messages/{id}", handler.DeleteMessage)
+
+	req := httptest.NewRequest(http.MethodDelete, "/messages/not-uuid", nil)
+	req = withClaimsFor(req, uuid.New().String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestDeleteMessage_Unauthorized(t *testing.T) {
+	handler := newTestHandler()
+	router := chi.NewRouter()
+	router.Delete("/messages/{id}", handler.DeleteMessage)
+
+	req := httptest.NewRequest(http.MethodDelete, "/messages/"+uuid.New().String(), nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
+// Integration-тесты UpdateMessage (требуют PostgreSQL)
+
+func TestUpdateMessage_Success_SetsEditedFields_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	userID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, userID)
+	seedTestRoom(t, db, roomID, userID)
+
+	original := createMessageInDB(t, db, roomID, userID, "original content", time.Now())
+
+	router := chi.NewRouter()
+	router.Put("/messages/{id}", handler.UpdateMessage)
+
+	body := `{"content":"updated content"}`
+	req := httptest.NewRequest(http.MethodPut, "/messages/"+original.ID.String(), strings.NewReader(body))
+	req = withClaimsFor(req, userID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var updated models.Message
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &updated))
+	assert.Equal(t, "updated content", updated.Content)
+	require.NotNil(t, updated.Metadata.Edited)
+	assert.True(t, *updated.Metadata.Edited)
+	require.NotNil(t, updated.Metadata.EditedAt)
+	require.NotNil(t, updated.Metadata.EditedBy)
+	assert.Equal(t, userID, *updated.Metadata.EditedBy)
+}
+
+func TestUpdateMessage_NotAuthor_Returns403_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	authorID := uuid.New()
+	otherID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, authorID)
+	seedTestUser(t, db, otherID)
+	seedTestRoom(t, db, roomID, authorID)
+
+	original := createMessageInDB(t, db, roomID, authorID, "original", time.Now())
+
+	router := chi.NewRouter()
+	router.Put("/messages/{id}", handler.UpdateMessage)
+
+	req := httptest.NewRequest(http.MethodPut, "/messages/"+original.ID.String(), strings.NewReader(`{"content":"hijack"}`))
+	req = withClaimsFor(req, otherID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+}
+
+func TestUpdateMessage_NotFound_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	userID := uuid.New()
+	seedTestUser(t, db, userID)
+
+	router := chi.NewRouter()
+	router.Put("/messages/{id}", handler.UpdateMessage)
+
+	req := httptest.NewRequest(http.MethodPut, "/messages/"+uuid.New().String(), strings.NewReader(`{"content":"x"}`))
+	req = withClaimsFor(req, userID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestUpdateMessage_EditWindowExpired_Returns410_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	handler.SetEditWindow(50 * time.Millisecond)
+	userID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, userID)
+	seedTestRoom(t, db, roomID, userID)
+
+	old := createMessageInDB(t, db, roomID, userID, "old content", time.Now().Add(-1*time.Hour))
+
+	router := chi.NewRouter()
+	router.Put("/messages/{id}", handler.UpdateMessage)
+
+	req := httptest.NewRequest(http.MethodPut, "/messages/"+old.ID.String(), strings.NewReader(`{"content":"too late"}`))
+	req = withClaimsFor(req, userID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusGone, rr.Code)
+}
+
+func TestUpdateMessage_NoLimitWhenWindowZero_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	handler.SetEditWindow(0)
+	userID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, userID)
+	seedTestRoom(t, db, roomID, userID)
+
+	old := createMessageInDB(t, db, roomID, userID, "old content", time.Now().Add(-72*time.Hour))
+
+	router := chi.NewRouter()
+	router.Put("/messages/{id}", handler.UpdateMessage)
+
+	req := httptest.NewRequest(http.MethodPut, "/messages/"+old.ID.String(), strings.NewReader(`{"content":"still editable"}`))
+	req = withClaimsFor(req, userID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+// Integration-тесты DeleteMessage (требуют PostgreSQL)
+
+func TestDeleteMessage_Author_Success_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	userID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, userID)
+	seedTestRoom(t, db, roomID, userID)
+
+	msg := createMessageInDB(t, db, roomID, userID, "to delete", time.Now())
+
+	router := chi.NewRouter()
+	router.Delete("/messages/{id}", handler.DeleteMessage)
+
+	req := httptest.NewRequest(http.MethodDelete, "/messages/"+msg.ID.String(), nil)
+	req = withClaimsFor(req, userID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+
+	var reloaded models.Message
+	require.NoError(t, db.First(&reloaded, "id = ?", msg.ID).Error)
+	assert.True(t, reloaded.IsDeleted)
+}
+
+func TestDeleteMessage_GlobalAdmin_DeletesOthers_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	authorID := uuid.New()
+	adminID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, authorID)
+	seedTestUser(t, db, adminID)
+	seedTestRoom(t, db, roomID, authorID)
+
+	msg := createMessageInDB(t, db, roomID, authorID, "any user msg", time.Now())
+
+	router := chi.NewRouter()
+	router.Delete("/messages/{id}", handler.DeleteMessage)
+
+	req := httptest.NewRequest(http.MethodDelete, "/messages/"+msg.ID.String(), nil)
+	req = withClaimsForRoles(req, adminID.String(), []string{"user", "admin"})
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+
+	var reloaded models.Message
+	require.NoError(t, db.First(&reloaded, "id = ?", msg.ID).Error)
+	assert.True(t, reloaded.IsDeleted)
+}
+
+func TestDeleteMessage_RoomModerator_DeletesOthers_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	authorID := uuid.New()
+	moderatorID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, authorID)
+	seedTestUser(t, db, moderatorID)
+	seedTestRoom(t, db, roomID, authorID)
+	addRoomParticipant(t, db, roomID, moderatorID, models.ParticipantRoleModerator)
+
+	msg := createMessageInDB(t, db, roomID, authorID, "to be moderated", time.Now())
+
+	router := chi.NewRouter()
+	router.Delete("/messages/{id}", handler.DeleteMessage)
+
+	req := httptest.NewRequest(http.MethodDelete, "/messages/"+msg.ID.String(), nil)
+	req = withClaimsFor(req, moderatorID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+
+	var reloaded models.Message
+	require.NoError(t, db.First(&reloaded, "id = ?", msg.ID).Error)
+	assert.True(t, reloaded.IsDeleted)
+}
+
+func TestDeleteMessage_RoomAdmin_DeletesOthers_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	authorID := uuid.New()
+	adminInRoomID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, authorID)
+	seedTestUser(t, db, adminInRoomID)
+	seedTestRoom(t, db, roomID, authorID)
+	addRoomParticipant(t, db, roomID, adminInRoomID, models.ParticipantRoleAdmin)
+
+	msg := createMessageInDB(t, db, roomID, authorID, "to be admin-deleted", time.Now())
+
+	router := chi.NewRouter()
+	router.Delete("/messages/{id}", handler.DeleteMessage)
+
+	req := httptest.NewRequest(http.MethodDelete, "/messages/"+msg.ID.String(), nil)
+	req = withClaimsFor(req, adminInRoomID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+}
+
+func TestDeleteMessage_RegularUser_Forbidden_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	authorID := uuid.New()
+	memberID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, authorID)
+	seedTestUser(t, db, memberID)
+	seedTestRoom(t, db, roomID, authorID)
+	addRoomParticipant(t, db, roomID, memberID, models.ParticipantRoleMember)
+
+	msg := createMessageInDB(t, db, roomID, authorID, "members can't delete this", time.Now())
+
+	router := chi.NewRouter()
+	router.Delete("/messages/{id}", handler.DeleteMessage)
+
+	req := httptest.NewRequest(http.MethodDelete, "/messages/"+msg.ID.String(), nil)
+	req = withClaimsFor(req, memberID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+
+	var reloaded models.Message
+	require.NoError(t, db.First(&reloaded, "id = ?", msg.ID).Error)
+	assert.False(t, reloaded.IsDeleted, "regular member must not be able to delete others' messages")
+}
+
+func TestDeleteMessage_NotFound_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	userID := uuid.New()
+	seedTestUser(t, db, userID)
+
+	router := chi.NewRouter()
+	router.Delete("/messages/{id}", handler.DeleteMessage)
+
+	req := httptest.NewRequest(http.MethodDelete, "/messages/"+uuid.New().String(), nil)
+	req = withClaimsFor(req, userID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestDeleteMessage_AlreadyDeleted_Idempotent_Integration(t *testing.T) {
+	handler, db := setupHandlerWithRoomRepo(t)
+	userID := uuid.New()
+	roomID := uuid.New()
+	seedTestUser(t, db, userID)
+	seedTestRoom(t, db, roomID, userID)
+
+	msg := createMessageInDB(t, db, roomID, userID, "soft-deleted already", time.Now())
+	require.NoError(t, db.Model(&models.Message{}).Where("id = ?", msg.ID).Update("is_deleted", true).Error)
+
+	router := chi.NewRouter()
+	router.Delete("/messages/{id}", handler.DeleteMessage)
+
+	req := httptest.NewRequest(http.MethodDelete, "/messages/"+msg.ID.String(), nil)
+	req = withClaimsFor(req, userID.String())
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
 }

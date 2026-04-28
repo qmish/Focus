@@ -2,9 +2,11 @@ package models
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewMessage(t *testing.T) {
@@ -165,6 +167,57 @@ func TestMetadataEmptyMentions(t *testing.T) {
 	err = decoded.Scan(val)
 	assert.NoError(t, err)
 	assert.Nil(t, decoded.Mentions)
+}
+
+// --- Этап 4: сериализация полей редактирования ---
+
+func TestMetadataEditedAtSerialization(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	edited := true
+	meta := Metadata{
+		Edited:   &edited,
+		EditedAt: &now,
+	}
+
+	val, err := meta.Value()
+	require.NoError(t, err)
+	require.NotNil(t, val)
+
+	var decoded Metadata
+	require.NoError(t, decoded.Scan(val))
+	require.NotNil(t, decoded.Edited)
+	assert.True(t, *decoded.Edited)
+	require.NotNil(t, decoded.EditedAt)
+	assert.True(t, decoded.EditedAt.Equal(now), "EditedAt must round-trip via JSON serialization")
+}
+
+func TestMetadataEditedBySerialization(t *testing.T) {
+	editorID := uuid.New()
+	edited := true
+	meta := Metadata{
+		Edited:   &edited,
+		EditedBy: &editorID,
+	}
+
+	val, err := meta.Value()
+	require.NoError(t, err)
+
+	var decoded Metadata
+	require.NoError(t, decoded.Scan(val))
+	require.NotNil(t, decoded.EditedBy)
+	assert.Equal(t, editorID, *decoded.EditedBy)
+}
+
+func TestMetadataEditedFieldsAbsentWhenNil(t *testing.T) {
+	meta := Metadata{}
+	val, err := meta.Value()
+	require.NoError(t, err)
+
+	var decoded Metadata
+	require.NoError(t, decoded.Scan(val))
+	assert.Nil(t, decoded.Edited)
+	assert.Nil(t, decoded.EditedAt)
+	assert.Nil(t, decoded.EditedBy)
 }
 
 func boolPtr(b bool) *bool {
