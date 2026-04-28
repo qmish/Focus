@@ -6,6 +6,8 @@ import { apiClient } from '../lib/apiClient'
 import { buildWebSocketURL, mergeMessageList } from '../lib/roomRealtime'
 import { JitsiMeeting } from '../components/JitsiMeeting'
 import ProfileModal from '../components/ProfileModal'
+import MessageBubble from '../components/MessageBubble'
+import ThreadPanel from '../components/ThreadPanel'
 import { JITSI_DOMAIN } from '../lib/config'
 
 interface ScheduledMeeting {
@@ -59,6 +61,8 @@ export default function MessengerPage() {
   const [jitsiBranding, setJitsiBranding] = useState<Record<string, unknown> | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
+  const [activeThread, setActiveThread] = useState<Message | null>(null)
+  const [threadReplies, setThreadReplies] = useState<Message[]>([])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -94,6 +98,7 @@ export default function MessengerPage() {
       setCurrentRoom(null)
       setMessages([])
       setShowVideo(false)
+      setActiveThread(null)
     }
   }, [roomId])
 
@@ -135,6 +140,18 @@ export default function MessengerPage() {
                   }).catch(() => {})
                 })
               }
+            }
+            if (data.type === 'thread_reply' && data.payload?.room_id === roomId) {
+              const threadRootId = data.payload.thread_root_id
+              setMessages(prev =>
+                prev.map(m => m.id === threadRootId ? { ...m, thread_count: (m.thread_count ?? 0) + 1 } : m)
+              )
+              setActiveThread(prev => {
+                if (prev && prev.id === threadRootId) {
+                  setThreadReplies(r => mergeMessageList(r, data.payload))
+                }
+                return prev
+              })
             }
           } catch (err) { console.error('WS parse error:', err) }
         }
@@ -248,6 +265,21 @@ export default function MessengerPage() {
       } catch { /* silent */ }
     }, delayMs)
   }, [])
+
+  const openThread = useCallback((msg: Message) => {
+    setActiveThread(msg)
+    setThreadReplies([])
+  }, [])
+
+  const sendThreadReply = useCallback(async (content: string, threadRootId: string) => {
+    if (!roomId) return
+    await apiClient.post<Message>('/api/v1/messages', {
+      room_id: roomId,
+      content,
+      type: 'text',
+      thread_root_id: threadRootId,
+    })
+  }, [roomId])
 
   const sendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -374,41 +406,6 @@ export default function MessengerPage() {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  const renderMessageContent = (msg: Message) => {
-    const meta = msg.metadata
-    if ((msg.type === 'image') && meta?.file_id) {
-      const url = `/api/v1/files/${meta.file_id}?inline=1`
-      return (
-        <div className="msg-attachment">
-          <a href={url} target="_blank" rel="noopener noreferrer">
-            <img src={url} alt={meta.file_name || 'image'} className="msg-image" />
-          </a>
-          {msg.content && msg.content !== meta.file_name && (
-            <div className="msg-text">{msg.content}</div>
-          )}
-        </div>
-      )
-    }
-    if (msg.type === 'file' && meta?.file_id) {
-      const url = `/api/v1/files/${meta.file_id}`
-      return (
-        <div className="msg-attachment">
-          <a href={url} className="msg-file-link" download>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
-            <div className="msg-file-info">
-              <span className="msg-file-name">{meta.file_name}</span>
-              {meta.file_size && meta.file_size > 0 && <span className="msg-file-size">{formatFileSize(meta.file_size)}</span>}
-            </div>
-          </a>
-          {msg.content && msg.content !== meta.file_name && (
-            <div className="msg-text">{msg.content}</div>
-          )}
-        </div>
-      )
-    }
-    return <div className="msg-text">{msg.content}</div>
   }
 
   if (showVideo && roomId && jitsiJWT) {
@@ -620,21 +617,17 @@ export default function MessengerPage() {
                   <p>Нет сообщений. Начните диалог!</p>
                 </div>
               ) : (
-                messages.map(msg => {
-                  const isMine = msg.user_id === user?.id
-                  return (
-                    <div key={msg.id} className={`msg ${isMine ? 'msg-mine' : 'msg-other'}`}>
-                      {!isMine && (
-                        <div className="msg-avatar">{getInitials(msg.user?.name)}</div>
-                      )}
-                      <div className="msg-bubble">
-                        {!isMine && <div className="msg-author">{msg.user?.name || 'Пользователь'}</div>}
-                        {renderMessageContent(msg)}
-                        <div className="msg-time">{formatTime(msg.created_at)}</div>
-                      </div>
-                    </div>
-                  )
-                })
+                messages.map(msg => (
+                  <MessageBubble
+                    key={msg.id}
+                    message={msg}
+                    isMine={msg.user_id === user?.id}
+                    onReplyInThread={openThread}
+                    formatTime={formatTime}
+                    formatFileSize={formatFileSize}
+                    getInitials={getInitials}
+                  />
+                ))
               )}
               <div ref={messagesEndRef} />
             </div>
@@ -684,6 +677,18 @@ export default function MessengerPage() {
           </>
         )}
       </main>
+
+      {activeThread && roomId && (
+        <ThreadPanel
+          rootMessage={activeThread}
+          currentUserId={user?.id}
+          onClose={() => setActiveThread(null)}
+          onSendReply={sendThreadReply}
+          threadReplies={threadReplies}
+          formatTime={formatTime}
+          getInitials={getInitials}
+        />
+      )}
 
       {showCreateModal && renderCreateModal()}
       {showScheduleModal && renderScheduleModal()}

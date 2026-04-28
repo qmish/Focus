@@ -68,11 +68,21 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 		messages[i], messages[j] = messages[j], messages[i]
 	}
 
-	// Проверяем, есть ли ещё сообщения
+	type messageWithThread struct {
+		*models.Message
+		ThreadCount int64 `json:"thread_count"`
+	}
+
+	enriched := make([]messageWithThread, 0, len(messages))
+	for _, msg := range messages {
+		tc, _ := h.msgRepo.CountThreadReplies(r.Context(), msg.ID)
+		enriched = append(enriched, messageWithThread{Message: msg, ThreadCount: tc})
+	}
+
 	hasMore := len(messages) == limit
 
 	response := map[string]interface{}{
-		"data":        messages,
+		"data":        enriched,
 		"has_more":    hasMore,
 		"next_cursor": "",
 	}
@@ -84,11 +94,12 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 // CreateMessage POST /api/v1/messages
 func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RoomID    string          `json:"room_id"`
-		Content   string          `json:"content"`
-		Type      string          `json:"type"`
-		ReplyToID string          `json:"reply_to_id"`
-		Metadata  json.RawMessage `json:"metadata"`
+		RoomID       string          `json:"room_id"`
+		Content      string          `json:"content"`
+		Type         string          `json:"type"`
+		ReplyToID    string          `json:"reply_to_id"`
+		ThreadRootID string          `json:"thread_root_id"`
+		Metadata     json.RawMessage `json:"metadata"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -156,16 +167,33 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Обрабатываем thread_root_id
+	if req.ThreadRootID != "" {
+		threadRootID, err := uuid.Parse(req.ThreadRootID)
+		if err == nil {
+			message.ThreadRootID = &threadRootID
+		}
+	}
+
 	// Сохраняем сообщение в БД
 	if err := h.msgRepo.Create(r.Context(), message); err != nil {
 		http.Error(w, "Не удалось создать сообщение", http.StatusInternalServerError)
 		return
 	}
 
-	// Рассылаем сообщение через WebSocket (proper JSON marshal for safety)
+	// Подгружаем User для ответа
+	created, _ := h.msgRepo.GetByID(r.Context(), message.ID)
+	if created != nil {
+		message = created
+	}
+
 	wsPayload, _ := json.Marshal(message)
+	wsType := websocket.MessageTypeMessage
+	if message.ThreadRootID != nil {
+		wsType = websocket.MessageTypeThreadReply
+	}
 	h.wsHub.BroadcastToRoom(roomID.String(), websocket.WSMessage{
-		Type:    websocket.MessageTypeMessage,
+		Type:    wsType,
 		Payload: wsPayload,
 	})
 
@@ -251,6 +279,50 @@ func (h *MessageHandler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(message)
+}
+
+// GetThread GET /api/v1/messages/{id}/thread
+func (h *MessageHandler) GetThread(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	rootID, err := uuid.Parse(id)
+	if err != nil {
+		http.Error(w, "Некорректный идентификатор сообщения", http.StatusBadRequest)
+		return
+	}
+
+	rootMsg, err := h.msgRepo.GetByID(r.Context(), rootID)
+	if err != nil {
+		if err == repository.ErrMessageNotFound {
+			http.Error(w, "Сообщение не найдено", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Не удалось получить сообщение", http.StatusInternalServerError)
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 200 {
+		limit = 50
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if offset < 0 {
+		offset = 0
+	}
+
+	replies, err := h.msgRepo.GetThreadMessages(r.Context(), rootID, limit, offset)
+	if err != nil {
+		http.Error(w, "Не удалось получить ответы треда", http.StatusInternalServerError)
+		return
+	}
+
+	total, _ := h.msgRepo.CountThreadReplies(r.Context(), rootID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"root":    rootMsg,
+		"replies": replies,
+		"total":   total,
+	})
 }
 
 // DeleteMessage DELETE /api/v1/messages/{id}

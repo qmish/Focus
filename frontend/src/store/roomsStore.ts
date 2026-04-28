@@ -18,6 +18,8 @@ export interface Message {
   user_id: string
   content: string
   type: 'text' | 'image' | 'file' | 'system'
+  thread_root_id?: string
+  thread_count?: number
   created_at: string
   updated_at: string
   metadata?: {

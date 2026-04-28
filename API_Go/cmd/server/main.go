@@ -417,6 +417,7 @@ func main() {
 					r.Get("/", messageHandler.GetMessage)
 					r.Put("/", messageHandler.UpdateMessage)
 					r.Delete("/", messageHandler.DeleteMessage)
+					r.Get("/thread", messageHandler.GetThread)
 				})
 			})
 

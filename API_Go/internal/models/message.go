@@ -26,16 +26,18 @@ type Message struct {
 	UserID    uuid.UUID   `gorm:"type:uuid;not null" json:"user_id"`
 	Content   string      `gorm:"type:text;not null" json:"content"`
 	Type      MessageType `gorm:"type:varchar(20);not null" json:"type"`
-	ReplyToID *uuid.UUID  `gorm:"type:uuid" json:"reply_to_id,omitempty"`
-	Metadata  Metadata    `gorm:"type:jsonb" json:"metadata"`
-	IsDeleted bool        `gorm:"not null;default:false" json:"is_deleted"`
-	CreatedAt time.Time   `gorm:"index:idx_room_created" json:"created_at"`
-	UpdatedAt time.Time   `json:"updated_at"`
+	ReplyToID    *uuid.UUID  `gorm:"type:uuid" json:"reply_to_id,omitempty"`
+	ThreadRootID *uuid.UUID  `gorm:"type:uuid;index:idx_thread_root" json:"thread_root_id,omitempty"`
+	Metadata     Metadata    `gorm:"type:jsonb" json:"metadata"`
+	IsDeleted    bool        `gorm:"not null;default:false" json:"is_deleted"`
+	CreatedAt    time.Time   `gorm:"index:idx_room_created" json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
 
-	Room      *Room             `gorm:"foreignKey:RoomID" json:"room,omitempty"`
-	User      *User             `gorm:"foreignKey:UserID" json:"user,omitempty"`
-	ReplyTo   *Message          `gorm:"foreignKey:ReplyToID" json:"reply_to,omitempty"`
-	Reactions []MessageReaction `gorm:"foreignKey:MessageID" json:"reactions,omitempty"`
+	Room       *Room             `gorm:"foreignKey:RoomID" json:"room,omitempty"`
+	User       *User             `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	ReplyTo    *Message          `gorm:"foreignKey:ReplyToID" json:"reply_to,omitempty"`
+	ThreadRoot *Message          `gorm:"foreignKey:ThreadRootID" json:"thread_root,omitempty"`
+	Reactions  []MessageReaction `gorm:"foreignKey:MessageID" json:"reactions,omitempty"`
 }
 
 // Metadata метаданные сообщения
