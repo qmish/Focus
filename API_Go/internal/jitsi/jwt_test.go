@@ -1,6 +1,9 @@
 package jitsi
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -140,7 +143,7 @@ func TestValidateToken(t *testing.T) {
 	assert.NotNil(t, claims)
 	assert.Equal(t, roomName, claims.Room)
 	assert.Equal(t, "jitsi", claims.Issuer)
-	assert.Equal(t, "jitsi", claims.Audience[0])
+	assert.Equal(t, "jitsi", claims.Audience)
 	assert.False(t, claims.Context.User.Moderator)
 }
 
@@ -294,6 +297,41 @@ func TestTokenExpiration(t *testing.T) {
 	claims, err = gen.ValidateToken(token)
 	assert.Error(t, err)
 	assert.Nil(t, claims)
+}
+
+func TestGenerateTokenAudienceIsJSONString(t *testing.T) {
+	// luajwtjitsi.lib.lua сравнивает aud через равенство строк,
+	// поэтому aud в JWT обязан быть строкой, а не массивом.
+	gen := NewTokenGenerator(
+		"https://meet.company.com",
+		"jitsi",
+		"test-secret-key-12345",
+		"jitsi",
+		"jitsi",
+		"meet.jitsi",
+		8*time.Hour,
+	)
+
+	token, err := gen.GenerateTokenForUser("room", uuid.New().String(), "User", "u@e.com", false)
+	require.NoError(t, err)
+
+	parts := strings.Split(token, ".")
+	require.Len(t, parts, 3, "JWT must have 3 segments")
+
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	require.NoError(t, err)
+
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(payload, &raw))
+
+	audRaw, ok := raw["aud"]
+	require.True(t, ok, "aud claim must be present")
+	require.Equal(t, byte('"'), audRaw[0],
+		"aud must be a JSON string (luajwtjitsi expects string equality), got: %s", audRaw)
+
+	var audStr string
+	require.NoError(t, json.Unmarshal(audRaw, &audStr))
+	assert.Equal(t, "jitsi", audStr)
 }
 
 func TestGenerateTokenIncludesSubjectClaim(t *testing.T) {
