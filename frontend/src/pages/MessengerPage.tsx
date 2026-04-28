@@ -169,6 +169,32 @@ export default function MessengerPage() {
                 Notification.requestPermission()
               }
             }
+            if (data.type === 'reaction_added' && data.payload) {
+              const { message_id, user_id: ruid, emoji } = data.payload
+              setMessages(prev => prev.map(m => {
+                if (m.id !== message_id) return m
+                const summary = [...(m.reactions_summary || [])]
+                const idx = summary.findIndex(s => s.emoji === emoji)
+                if (idx >= 0) {
+                  if (!summary[idx].user_ids.includes(ruid)) {
+                    summary[idx] = { ...summary[idx], count: summary[idx].count + 1, user_ids: [...summary[idx].user_ids, ruid] }
+                  }
+                } else {
+                  summary.push({ emoji, count: 1, user_ids: [ruid] })
+                }
+                return { ...m, reactions_summary: summary }
+              }))
+            }
+            if (data.type === 'reaction_removed' && data.payload) {
+              const { message_id, user_id: ruid, emoji } = data.payload
+              setMessages(prev => prev.map(m => {
+                if (m.id !== message_id) return m
+                const summary = (m.reactions_summary || [])
+                  .map(s => s.emoji !== emoji ? s : { ...s, count: s.count - 1, user_ids: s.user_ids.filter(id => id !== ruid) })
+                  .filter(s => s.count > 0)
+                return { ...m, reactions_summary: summary }
+              }))
+            }
           } catch (err) { console.error('WS parse error:', err) }
         }
 
@@ -325,6 +351,19 @@ export default function MessengerPage() {
     setMentionQuery('')
     chatInputRef.current?.focus()
   }, [messageInput, mentionCursorPos])
+
+  const handleReaction = useCallback(async (messageId: string, emoji: string) => {
+    const msg = messages.find(m => m.id === messageId)
+    const existing = msg?.reactions_summary?.find(r => r.emoji === emoji)
+    const alreadyReacted = existing?.user_ids?.includes(user?.id || '')
+    try {
+      if (alreadyReacted) {
+        await apiClient.delete(`/api/v1/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`)
+      } else {
+        await apiClient.post(`/api/v1/messages/${messageId}/reactions`, { emoji })
+      }
+    } catch { /* WS will update state */ }
+  }, [messages, user?.id])
 
   const sendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -667,7 +706,9 @@ export default function MessengerPage() {
                     key={msg.id}
                     message={msg}
                     isMine={msg.user_id === user?.id}
+                    currentUserId={user?.id}
                     onReplyInThread={openThread}
+                    onReaction={handleReaction}
                     formatTime={formatTime}
                     formatFileSize={formatFileSize}
                     getInitials={getInitials}

@@ -49,6 +49,7 @@ func (r *MessageRepository) GetByRoomID(ctx context.Context, roomID uuid.UUID, l
 	err := r.db.WithContext(ctx).
 		Where("room_id = ? AND is_deleted = ? AND thread_root_id IS NULL", roomID, false).
 		Preload("User").
+		Preload("Reactions").
 		Order("created_at DESC").
 		Limit(limit).
 		Offset(offset).
@@ -61,6 +62,7 @@ func (r *MessageRepository) GetByRoomIDWithCursor(ctx context.Context, roomID uu
 	query := r.db.WithContext(ctx).
 		Where("room_id = ? AND is_deleted = ? AND thread_root_id IS NULL", roomID, false).
 		Preload("User").
+		Preload("Reactions").
 		Order("created_at DESC").
 		Limit(limit)
 
