@@ -118,6 +118,7 @@ spec:
         - auth.focus.local
         - registry.focus.local
         - chat.focus.local
+        - meet.focus.local
       containers:
       - name: api-go
         image: registry.focus.local/focus/api-go:latest
@@ -172,7 +173,13 @@ spec:
               name: focus-secrets
               key: keycloak-client-secret
         - name: JITSI_BASE_URL
-          value: https://meet-stage.company.com
+          value: https://meet.focus.local:30443
+        - name: JITSI_APP_ID
+          value: jitsi
+        - name: JITSI_ISSUER
+          value: jitsi
+        - name: JITSI_AUDIENCE
+          value: jitsi
         - name: JITSI_APP_SECRET
           valueFrom:
             secretKeyRef:

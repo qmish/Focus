@@ -1,0 +1,342 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jitsi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jitsi-env
+  namespace: jitsi
+data:
+  PUBLIC_URL: "https://meet.focus.local:30443"
+  TZ: "Europe/Moscow"
+  XMPP_DOMAIN: "meet.jitsi"
+  XMPP_AUTH_DOMAIN: "auth.meet.jitsi"
+  XMPP_GUEST_DOMAIN: "guest.meet.jitsi"
+  XMPP_MUC_DOMAIN: "muc.meet.jitsi"
+  XMPP_INTERNAL_MUC_DOMAIN: "internal-muc.meet.jitsi"
+  XMPP_RECORDER_DOMAIN: "recorder.meet.jitsi"
+  XMPP_SERVER: "prosody.jitsi.svc.cluster.local"
+  XMPP_PORT: "5222"
+  XMPP_BOSH_URL_BASE: "http://prosody.jitsi.svc.cluster.local:5280"
+  JICOFO_AUTH_USER: "focus"
+  JVB_AUTH_USER: "jvb"
+  JVB_BREWERY_MUC: "jvbbrewery"
+  JVB_PORT: "10000"
+  JVB_TCP_HARVESTER_DISABLED: "true"
+  ENABLE_AUTH: "1"
+  ENABLE_GUESTS: "0"
+  AUTH_TYPE: "jwt"
+  JWT_APP_ID: "jitsi"
+  JWT_ACCEPTED_ISSUERS: "jitsi"
+  JWT_ACCEPTED_AUDIENCES: "jitsi"
+  JWT_ALLOW_EMPTY: "0"
+  ENABLE_LETSENCRYPT: "0"
+  DISABLE_HTTPS: "1"
+  ENABLE_HTTP_REDIRECT: "0"
+  ENABLE_TRANSCRIPTIONS: "0"
+  ENABLE_RECORDING: "0"
+  ENABLE_IPV6: "0"
+  ENABLE_LOBBY: "1"
+  ENABLE_BREAKOUT_ROOMS: "1"
+  ENABLE_PREJOIN_PAGE: "0"
+  ENABLE_WELCOME_PAGE: "0"
+  ENABLE_CLOSE_PAGE: "0"
+---
+# Prosody (XMPP server) — единственная точка координации Jitsi
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prosody
+  namespace: jitsi
+  labels:
+    app: prosody
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prosody
+  template:
+    metadata:
+      labels:
+        app: prosody
+    spec:
+      containers:
+        - name: prosody
+          image: jitsi/prosody:stable-9646
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: xmpp
+              containerPort: 5222
+            - name: http
+              containerPort: 5280
+          envFrom:
+            - configMapRef:
+                name: jitsi-env
+          env:
+            - name: JICOFO_COMPONENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jitsi-secrets
+                  key: JICOFO_COMPONENT_SECRET
+            - name: JICOFO_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jitsi-secrets
+                  key: JICOFO_COMPONENT_SECRET
+            - name: JVB_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jitsi-secrets
+                  key: JVB_AUTH_PASSWORD
+            - name: JWT_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jitsi-secrets
+                  key: JWT_APP_SECRET
+          readinessProbe:
+            tcpSocket:
+              port: 5222
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 5222
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+---
+# Service prosody (уже существует, но описываем для идемпотентности)
+apiVersion: v1
+kind: Service
+metadata:
+  name: prosody
+  namespace: jitsi
+spec:
+  selector:
+    app: prosody
+  ports:
+    - name: xmpp
+      port: 5222
+      targetPort: 5222
+    - name: http
+      port: 5280
+      targetPort: 5280
+---
+# Jicofo (Jitsi Conference Focus)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jicofo
+  namespace: jitsi
+  labels:
+    app: jicofo
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jicofo
+  template:
+    metadata:
+      labels:
+        app: jicofo
+    spec:
+      containers:
+        - name: jicofo
+          image: jitsi/jicofo:stable-9646
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: jitsi-env
+          env:
+            - name: JICOFO_COMPONENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jitsi-secrets
+                  key: JICOFO_COMPONENT_SECRET
+            - name: JICOFO_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jitsi-secrets
+                  key: JICOFO_COMPONENT_SECRET
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+---
+# JVB (Jitsi Videobridge) — медиа-сервер. Использует hostNetwork, чтобы UDP/10000
+# был доступен напрямую на ноде без двойной NAT-трансляции.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jvb
+  namespace: jitsi
+  labels:
+    app: jvb
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jvb
+  template:
+    metadata:
+      labels:
+        app: jvb
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: t4-k3s-mkuryatnikov-05-fts
+      containers:
+        - name: jvb
+          image: jitsi/jvb:stable-9646
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: media
+              containerPort: 10000
+              protocol: UDP
+              hostPort: 10000
+            - name: colibri
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: jitsi-env
+          env:
+            - name: DOCKER_HOST_ADDRESS
+              value: "10.204.41.11"
+            - name: JVB_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jitsi-secrets
+                  key: JVB_AUTH_PASSWORD
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 2
+              memory: 2Gi
+---
+# Jitsi Web (frontend для конференций)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jitsi-web
+  namespace: jitsi
+  labels:
+    app: jitsi-web
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: jitsi-web
+  template:
+    metadata:
+      labels:
+        app: jitsi-web
+    spec:
+      containers:
+        - name: web
+          image: jitsi/web:stable-9646
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: jitsi-env
+          env:
+            - name: JWT_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jitsi-secrets
+                  key: JWT_APP_SECRET
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1
+              memory: 512Mi
+---
+# Сетевые политики: разрешить трафик внутри namespace и из ingress-nginx,
+# а также egress в kube-system (DNS) и наружу для NAT-relay candidates.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jitsi-allow-internal
+  namespace: jitsi
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: messenger-stage
+        # Разрешаем трафик с самих нод кластера (нужно для JVB pod-а,
+        # запущенного с hostNetwork: true — он соединяется с prosody через
+        # ClusterIP, но source-IP пакетов = IP ноды).
+        - ipBlock:
+            cidr: 10.204.41.0/24
+        # А также с pod CIDR кластера на случай sidecar/init.
+        - ipBlock:
+            cidr: 10.42.0.0/16
+  egress:
+    - to:
+        - podSelector: {}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16
