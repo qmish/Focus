@@ -7,7 +7,10 @@ interface ThreadPanelProps {
   currentUserId?: string
   onClose: () => void
   onSendReply: (content: string, threadRootId: string) => Promise<void>
+  /** Ответы треда из родителя (единственный источник правды для списка) */
   threadReplies: Message[]
+  /** Вызвать после GET /thread — rootId + список с сервера (родитель мёржит с локальными ответами) */
+  onThreadSynced: (rootId: string, replies: Message[]) => void
   formatTime: (dateStr: string) => string
   getInitials: (name?: string) => string
 }
@@ -18,40 +21,40 @@ export default function ThreadPanel({
   onClose,
   onSendReply,
   threadReplies,
+  onThreadSynced,
   formatTime,
   getInitials,
 }: ThreadPanelProps) {
   const [replyInput, setReplyInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [replies, setReplies] = useState<Message[]>(threadReplies)
   const [loading, setLoading] = useState(false)
   const repliesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    loadThread()
-  }, [rootMessage.id])
-
-  useEffect(() => {
-    setReplies(threadReplies)
-  }, [threadReplies])
+    let cancelled = false
+    const rid = rootMessage.id
+    ;(async () => {
+      setLoading(true)
+      try {
+        const data = await apiClient.get<{ root: Message; replies: Message[]; total: number }>(
+          `/api/v1/messages/${rid}/thread`
+        )
+        if (cancelled) return
+        onThreadSynced(rid, data.replies || [])
+      } catch {
+        if (!cancelled) onThreadSynced(rid, [])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [rootMessage.id, onThreadSynced])
 
   useEffect(() => {
     repliesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [replies])
-
-  const loadThread = async () => {
-    setLoading(true)
-    try {
-      const data = await apiClient.get<{ root: Message; replies: Message[]; total: number }>(
-        `/api/v1/messages/${rootMessage.id}/thread`
-      )
-      setReplies(data.replies || [])
-    } catch {
-      /* silent */
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [threadReplies])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -91,16 +94,16 @@ export default function ThreadPanel({
       </div>
 
       <div className="thread-panel-divider">
-        <span>{replies.length} {replies.length === 1 ? 'ответ' : 'ответов'}</span>
+        <span>{threadReplies.length} {threadReplies.length === 1 ? 'ответ' : 'ответов'}</span>
       </div>
 
       <div className="thread-panel-replies">
         {loading ? (
           <div className="thread-panel-loading">Загрузка...</div>
-        ) : replies.length === 0 ? (
+        ) : threadReplies.length === 0 ? (
           <div className="thread-panel-empty">Нет ответов. Начните обсуждение!</div>
         ) : (
-          replies.map(reply => {
+          threadReplies.map(reply => {
             const isMine = reply.user_id === currentUserId
             return (
               <div key={reply.id} className={`msg ${isMine ? 'msg-mine' : 'msg-other'}`}>

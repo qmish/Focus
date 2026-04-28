@@ -168,15 +168,21 @@ export default function MessengerPage() {
               }
             }
             if (data.type === 'thread_reply' && data.payload?.room_id === roomId) {
-              const threadRootId = data.payload.thread_root_id
-              setMessages(prev =>
-                prev.map(m => m.id === threadRootId ? { ...m, thread_count: (m.thread_count ?? 0) + 1 } : m)
-              )
-              setActiveThread(prev => {
-                if (prev && prev.id === threadRootId) {
-                  setThreadReplies(r => mergeMessageList(r, data.payload))
+              const threadRootId = data.payload.thread_root_id as string
+              const incoming = data.payload as Message
+              setThreadReplies(prev => {
+                const had = prev.some(m => m.id === incoming.id)
+                const next = mergeMessageList(prev, incoming)
+                if (!had) {
+                  setMessages(mprev =>
+                    mprev.map(m =>
+                      m.id === threadRootId
+                        ? { ...m, thread_count: (m.thread_count ?? 0) + 1 }
+                        : m
+                    )
+                  )
                 }
-                return prev
+                return next
               })
             }
             if (data.type === 'mention' && data.payload) {
@@ -361,14 +367,40 @@ export default function MessengerPage() {
     setThreadReplies([])
   }, [])
 
+  const onThreadSynced = useCallback((rootId: string, replies: Message[]) => {
+    setThreadReplies(prev => {
+      const server = replies || []
+      const ids = new Set(server.map(m => m.id))
+      const extra = prev.filter(
+        m => m.thread_root_id === rootId && !ids.has(m.id)
+      )
+      const merged = [...server, ...extra]
+      merged.sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+      return merged
+    })
+  }, [])
+
   const sendThreadReply = useCallback(async (content: string, threadRootId: string) => {
     if (!roomId) return
-    await apiClient.post<Message>('/api/v1/messages', {
-      room_id: roomId,
-      content,
-      type: 'text',
-      thread_root_id: threadRootId,
-    })
+    try {
+      const created = await apiClient.post<Message>('/api/v1/messages', {
+        room_id: roomId,
+        content,
+        type: 'text',
+        thread_root_id: threadRootId,
+      })
+      setThreadReplies(prev => mergeMessageList(prev, created))
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === threadRootId ? { ...m, thread_count: (m.thread_count ?? 0) + 1 } : m
+        )
+      )
+    } catch {
+      setError('Не удалось отправить ответ в треде')
+      throw new Error('thread reply failed')
+    }
   }, [roomId])
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -938,6 +970,7 @@ export default function MessengerPage() {
           onClose={() => setActiveThread(null)}
           onSendReply={sendThreadReply}
           threadReplies={threadReplies}
+          onThreadSynced={onThreadSynced}
           formatTime={formatTime}
           getInitials={getInitials}
         />
