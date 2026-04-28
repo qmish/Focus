@@ -30,6 +30,7 @@ const (
 	MessageTypeUserLeft    MessageType = "user_left"
 	MessageTypeError       MessageType = "error"
 	MessageTypeThreadReply MessageType = "thread_reply"
+	MessageTypeMention     MessageType = "mention"
 )
 
 // WSMessage сообщение WebSocket
@@ -263,6 +264,24 @@ func (h *Hub) unsubscribeFromRoom(client *Client, roomID string) {
 		h.logger.Debug("client unsubscribed from room",
 			zap.String("client_id", client.ID),
 			zap.String("room_id", roomID))
+	}
+}
+
+// SendToUser отправляет сообщение всем WS-сессиям конкретного пользователя
+func (h *Hub) SendToUser(userID string, msg WSMessage) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, client := range h.Clients {
+		if client.UserID == userID {
+			select {
+			case client.Send <- data:
+			default:
+			}
+		}
 	}
 }
 

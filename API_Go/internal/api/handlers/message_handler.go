@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -14,17 +15,21 @@ import (
 	"github.com/qmish/focus-api/internal/websocket"
 )
 
+var mentionRegex = regexp.MustCompile(`@(\w+)`)
+
 // MessageHandler обработчики для messages
 type MessageHandler struct {
-	msgRepo    *repository.MessageRepository
-	wsHub      *websocket.Hub
-	botEngine  *bots.BotEngine
+	msgRepo   *repository.MessageRepository
+	userRepo  *repository.UserRepository
+	wsHub     *websocket.Hub
+	botEngine *bots.BotEngine
 }
 
 // NewMessageHandler создаёт новый MessageHandler
-func NewMessageHandler(msgRepo *repository.MessageRepository, wsHub *websocket.Hub, botEngine *bots.BotEngine) *MessageHandler {
+func NewMessageHandler(msgRepo *repository.MessageRepository, userRepo *repository.UserRepository, wsHub *websocket.Hub, botEngine *bots.BotEngine) *MessageHandler {
 	return &MessageHandler{
 		msgRepo:   msgRepo,
+		userRepo:  userRepo,
 		wsHub:     wsHub,
 		botEngine: botEngine,
 	}
@@ -181,6 +186,31 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Парсинг @mentions
+	if h.userRepo != nil && req.Content != "" {
+		matches := mentionRegex.FindAllStringSubmatch(req.Content, -1)
+		if len(matches) > 0 {
+			names := make([]string, 0, len(matches))
+			seen := make(map[string]bool)
+			for _, m := range matches {
+				name := m[1]
+				if !seen[name] {
+					seen[name] = true
+					names = append(names, name)
+				}
+			}
+			mentionedUsers, err := h.userRepo.FindByNames(r.Context(), names)
+			if err == nil && len(mentionedUsers) > 0 {
+				mentionIDs := make([]string, 0, len(mentionedUsers))
+				for _, u := range mentionedUsers {
+					mentionIDs = append(mentionIDs, u.ID.String())
+				}
+				message.Metadata.Mentions = mentionIDs
+				_ = h.msgRepo.Update(r.Context(), message)
+			}
+		}
+	}
+
 	// Подгружаем User для ответа
 	created, _ := h.msgRepo.GetByID(r.Context(), message.ID)
 	if created != nil {
@@ -196,6 +226,29 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		Type:    wsType,
 		Payload: wsPayload,
 	})
+
+	// Отправка персональных WS-уведомлений об упоминании
+	if len(message.Metadata.Mentions) > 0 {
+		contentPreview := req.Content
+		if len(contentPreview) > 100 {
+			contentPreview = contentPreview[:100] + "..."
+		}
+		for _, mentionedUID := range message.Metadata.Mentions {
+			if mentionedUID == userID.String() {
+				continue
+			}
+			mentionPayload, _ := json.Marshal(map[string]string{
+				"room_id":         roomID.String(),
+				"message_id":      message.ID.String(),
+				"mentioned_by":    userID.String(),
+				"content_preview": contentPreview,
+			})
+			h.wsHub.SendToUser(mentionedUID, websocket.WSMessage{
+				Type:    websocket.MessageTypeMention,
+				Payload: mentionPayload,
+			})
+		}
+	}
 
 	if h.botEngine != nil {
 		_ = h.botEngine.HandleMessage(r.Context(), roomID.String(), userID.String(), req.Content)

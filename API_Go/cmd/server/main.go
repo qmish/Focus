@@ -215,7 +215,7 @@ func main() {
 	authHandler.SetAuthAuditRepository(authAuditRepo)
 	authHandler.SetSessionRevocationRepository(sessionRevocationRepo)
 	roomHandler := handlers.NewRoomHandler(roomRepo, userRepo, jitsiGen)
-	messageHandler := handlers.NewMessageHandler(messageRepo, wsHub, botEngine)
+	messageHandler := handlers.NewMessageHandler(messageRepo, userRepo, wsHub, botEngine)
 	uploadDir := os.Getenv("UPLOAD_DIR")
 	if uploadDir == "" {
 		uploadDir = "/data/uploads"
@@ -396,6 +396,10 @@ func main() {
 			// User info
 			r.Get("/auth/me", authHandler.Me)
 			r.Put("/auth/profile", authHandler.UpdateProfile)
+
+			// Users search (for @mentions autocomplete)
+			userHandler := handlers.NewUserHandler(userRepo)
+			r.Get("/users/search", userHandler.SearchUsers)
 
 			// Rooms
 			r.Route("/rooms", func(r chi.Router) {
