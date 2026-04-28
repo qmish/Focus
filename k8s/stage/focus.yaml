@@ -159,8 +159,13 @@ spec:
             secretKeyRef:
               name: focus-secrets
               key: redis-password
+        # Публичный URL — используется как expected issuer для проверки токенов,
+        # выданных фронту через ingress (Keycloak подставляет схему запроса
+        # в iss, поэтому здесь обязательно https).
         - name: KEYCLOAK_URL
-          value: http://auth.focus.local
+          value: https://auth.focus.local
+        # Внутренний URL — используется только для OIDC discovery / JWKS,
+        # чтобы api-go не зависел от ingress и self-signed сертификата.
         - name: KEYCLOAK_INTERNAL_URL
           value: http://keycloak.keycloak.svc.cluster.local
         - name: KEYCLOAK_REALM
