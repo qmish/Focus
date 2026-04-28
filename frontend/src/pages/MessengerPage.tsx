@@ -10,6 +10,9 @@ import ProfileModal from '../components/ProfileModal'
 import MessageBubble from '../components/MessageBubble'
 import ThreadPanel from '../components/ThreadPanel'
 import MentionPopup from '../components/MentionPopup'
+import RoomSidebar from '../components/RoomSidebar'
+import ChatHeader from '../components/ChatHeader'
+import { useSwipe } from '../hooks/useSwipe'
 import { JITSI_DOMAIN } from '../lib/config'
 
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -71,6 +74,7 @@ export default function MessengerPage() {
   const [showMentionPopup, setShowMentionPopup] = useState(false)
   const [mentionCursorPos, setMentionCursorPos] = useState(0)
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const chatInputRef = useRef<HTMLInputElement>(null)
 
   const isGlobalAdmin = useMemo(
@@ -637,13 +641,6 @@ export default function MessengerPage() {
     navigate(`/rooms/${room.id}`)
   }, [navigate])
 
-  const filteredRooms = useMemo(() =>
-    searchQuery
-      ? rooms.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      : rooms,
-    [rooms, searchQuery]
-  )
-
   const formatTime = (dateStr: string) => {
     return new Date(dateStr).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
   }
@@ -752,92 +749,41 @@ export default function MessengerPage() {
     )
   }
 
+  const swipeHandlers = useSwipe({
+    onSwipeRight: () => setIsSidebarOpen(true),
+    onSwipeLeft: () => setIsSidebarOpen(false),
+  })
+
   return (
-    <div className="messenger">
-      {/* Left sidebar - rooms list */}
-      <aside className="messenger-sidebar">
-        <div className="sidebar-top">
-          <div className="sidebar-brand">
-            <h1>Focus</h1>
-            <div className="sidebar-actions">
-              <button className="icon-btn" onClick={() => setShowScheduleModal(true)} title="Запланировать встречу">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              </button>
-              <button className="icon-btn" onClick={() => setShowCreateModal(true)} title="Новый чат">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              </button>
-            </div>
-          </div>
-          <div className="sidebar-search">
-            <input
-              type="text"
-              placeholder="Поиск..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-          </div>
-        </div>
+    <div className="messenger" {...swipeHandlers}>
+      <RoomSidebar
+        rooms={rooms}
+        activeRoomId={roomId}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onSelectRoom={selectRoom}
+        onCreateRoom={() => setShowCreateModal(true)}
+        onScheduleMeeting={() => setShowScheduleModal(true)}
+        onOpenScheduledMeeting={openScheduledMeeting}
+        onRefreshScheduled={fetchScheduledMeetings}
+        onProfileClick={() => setShowProfileModal(true)}
+        onLogout={logout}
+        onCloseMobile={() => setIsSidebarOpen(false)}
+        isMobileOpen={isSidebarOpen}
+        scheduledMeetings={scheduledMeetings}
+        isLoadingScheduled={isLoadingScheduled}
+        user={user}
+        getInitials={getInitials}
+      />
 
-        <div className="rooms-list">
-          <div className="scheduled-panel">
-            <div className="scheduled-panel-header">
-              <span>Запланированные</span>
-              <button type="button" className="scheduled-refresh" onClick={fetchScheduledMeetings} title="Обновить">↻</button>
-            </div>
-            {isLoadingScheduled ? (
-              <div className="scheduled-loading">Загрузка...</div>
-            ) : scheduledMeetings.length === 0 ? (
-              <div className="scheduled-empty">Нет встреч</div>
-            ) : (
-              scheduledMeetings.slice(0, 6).map(item => (
-                <div key={item.id} className="scheduled-item" onClick={() => openScheduledMeeting(item)}>
-                  <div className="scheduled-item-title">{item.subject}</div>
-                  <div className="scheduled-item-time">
-                    {new Date(item.start_time).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          {filteredRooms.length === 0 ? (
-            <div className="rooms-empty">
-              <p>Нет комнат</p>
-              <button onClick={() => setShowCreateModal(true)}>Создать</button>
-            </div>
-          ) : (
-            filteredRooms.map(room => (
-              <div
-                key={room.id}
-                className={`room-item ${room.id === roomId ? 'active' : ''}`}
-                onClick={() => selectRoom(room)}
-              >
-                <div className="room-item-avatar">
-                  {room.type === 'public' ? '#' : room.type === 'meeting' ? '📅' : '🔒'}
-                </div>
-                <div className="room-item-info">
-                  <span className="room-item-name">{room.name}</span>
-                  <span className="room-item-desc">{room.description || (room.type === 'public' ? 'Публичная комната' : room.type === 'private' ? 'Приватная' : 'Встреча')}</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+      {isSidebarOpen && (
+        <div
+          className="messenger-sidebar-backdrop"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
-        <div className="sidebar-bottom">
-          <div className="sidebar-user" onClick={() => setShowProfileModal(true)} style={{ cursor: 'pointer' }}>
-            <div className="sidebar-user-avatar">{getInitials(user?.name)}</div>
-            <div className="sidebar-user-info">
-              <span className="sidebar-user-name">{user?.name}</span>
-              <span className="sidebar-user-email">{user?.email}</span>
-            </div>
-          </div>
-          <button className="icon-btn logout-icon" onClick={logout} title="Выйти">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          </button>
-        </div>
-      </aside>
-
-      {/* Right panel - chat or empty state */}
       <main className="messenger-main">
         {!roomId ? (
           <div className="chat-empty">
@@ -849,22 +795,13 @@ export default function MessengerPage() {
           </div>
         ) : (
           <>
-            <div className="chat-header">
-              <div className="chat-header-info">
-                <h3>{currentRoom?.name || 'Загрузка...'}</h3>
-                <span className="chat-header-status">
-                  {wsConnected ? 'онлайн' : 'подключение...'}
-                </span>
-              </div>
-              <div className="chat-header-actions">
-                <button className="icon-btn" onClick={() => setShowVideo(true)} title="Видеозвонок">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                </button>
-                <button className="icon-btn" onClick={() => setShowRoomSettings(true)} title="Настройки">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-                </button>
-              </div>
-            </div>
+            <ChatHeader
+              roomName={currentRoom?.name}
+              wsConnected={wsConnected}
+              onVideoCall={() => setShowVideo(true)}
+              onSettings={() => setShowRoomSettings(true)}
+              onMenuClick={() => setIsSidebarOpen(o => !o)}
+            />
 
             <div className="chat-messages">
               {isLoadingMessages ? (
