@@ -3,6 +3,7 @@ import { useParams, useNavigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useRoomsStore, type Room, type Message } from '../store/roomsStore'
 import { apiClient } from '../lib/apiClient'
+import { ApiError } from '../lib/apiClientCore'
 import { buildWebSocketURL, mergeMessageList } from '../lib/roomRealtime'
 import { JitsiMeeting } from '../components/JitsiMeeting'
 import ProfileModal from '../components/ProfileModal'
@@ -10,6 +11,8 @@ import MessageBubble from '../components/MessageBubble'
 import ThreadPanel from '../components/ThreadPanel'
 import MentionPopup from '../components/MentionPopup'
 import { JITSI_DOMAIN } from '../lib/config'
+
+const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000
 
 interface ScheduledMeeting {
   id: string
@@ -67,7 +70,25 @@ export default function MessengerPage() {
   const [mentionQuery, setMentionQuery] = useState('')
   const [showMentionPopup, setShowMentionPopup] = useState(false)
   const [mentionCursorPos, setMentionCursorPos] = useState(0)
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null)
   const chatInputRef = useRef<HTMLInputElement>(null)
+
+  const isGlobalAdmin = useMemo(
+    () => Boolean(user?.roles?.includes('admin')),
+    [user?.roles]
+  )
+
+  const canEditMessage = useCallback((msg: Message) => {
+    if (msg.is_deleted) return false
+    if (msg.user_id !== user?.id) return false
+    if (msg.type !== 'text') return false
+    return Date.now() - new Date(msg.created_at).getTime() < EDIT_WINDOW_MS
+  }, [user?.id])
+
+  const canDeleteMessage = useCallback((msg: Message) => {
+    if (msg.is_deleted) return false
+    return msg.user_id === user?.id || isGlobalAdmin
+  }, [user?.id, isGlobalAdmin])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -194,6 +215,33 @@ export default function MessengerPage() {
                   .filter(s => s.count > 0)
                 return { ...m, reactions_summary: summary }
               }))
+            }
+            if (data.type === 'message_updated' && data.payload) {
+              const updated: Message = data.payload
+              if (updated.room_id !== roomId) return
+              setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m))
+              setThreadReplies(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m))
+              setActiveThread(prev =>
+                prev && prev.id === updated.id ? { ...prev, ...updated } : prev
+              )
+            }
+            if (data.type === 'message_deleted' && data.payload) {
+              const { message_id, room_id: rid, thread_root_id } = data.payload
+              if (rid !== roomId) return
+              setMessages(prev =>
+                prev.map(m => {
+                  if (m.id === message_id) {
+                    return { ...m, is_deleted: true, content: '' }
+                  }
+                  if (thread_root_id && m.id === thread_root_id) {
+                    return { ...m, thread_count: Math.max(0, (m.thread_count ?? 1) - 1) }
+                  }
+                  return m
+                })
+              )
+              setThreadReplies(prev =>
+                prev.map(m => m.id === message_id ? { ...m, is_deleted: true, content: '' } : m)
+              )
             }
           } catch (err) { console.error('WS parse error:', err) }
         }
@@ -352,6 +400,34 @@ export default function MessengerPage() {
     chatInputRef.current?.focus()
   }, [messageInput, mentionCursorPos])
 
+  const startEdit = useCallback((msg: Message) => {
+    setEditingMessage(msg)
+    setMessageInput(msg.content)
+    setError(null)
+    setTimeout(() => chatInputRef.current?.focus(), 0)
+  }, [])
+
+  const cancelEdit = useCallback(() => {
+    setEditingMessage(null)
+    setMessageInput('')
+    setError(null)
+  }, [])
+
+  const handleDeleteMessage = useCallback(async (msg: Message) => {
+    if (!confirm('Удалить сообщение?')) return
+    try {
+      await apiClient.delete(`/api/v1/messages/${msg.id}`)
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, is_deleted: true, content: '' } : m))
+      if (editingMessage?.id === msg.id) cancelEdit()
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setError('Доступ запрещён: нельзя удалить это сообщение')
+      } else {
+        setError('Не удалось удалить сообщение')
+      }
+    }
+  }, [editingMessage?.id, cancelEdit])
+
   const handleReaction = useCallback(async (messageId: string, emoji: string) => {
     const msg = messages.find(m => m.id === messageId)
     const existing = msg?.reactions_summary?.find(r => r.emoji === emoji)
@@ -369,6 +445,28 @@ export default function MessengerPage() {
     e.preventDefault()
     if (!roomId) return
     if (!messageInput.trim() && !pendingFile) return
+
+    if (editingMessage) {
+      const content = messageInput.trim()
+      if (!content) return
+      const editingId = editingMessage.id
+      try {
+        const updated = await apiClient.put<Message>(`/api/v1/messages/${editingId}`, { content })
+        setMessages(prev => prev.map(m => m.id === editingId ? { ...m, ...updated } : m))
+        setEditingMessage(null)
+        setMessageInput('')
+        setError(null)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 410) {
+          setError('Истёк срок редактирования сообщения (24 часа)')
+        } else if (err instanceof ApiError && err.status === 403) {
+          setError('Доступ запрещён: нельзя редактировать чужое сообщение')
+        } else {
+          setError('Не удалось обновить сообщение')
+        }
+      }
+      return
+    }
 
     if (pendingFile) {
       await sendFileMessage(pendingFile, messageInput.trim())
@@ -395,7 +493,7 @@ export default function MessengerPage() {
       setError('Не удалось отправить сообщение')
       setMessageInput(content)
     }
-  }, [roomId, messageInput, pendingFile, refreshMessages])
+  }, [roomId, messageInput, pendingFile, refreshMessages, editingMessage])
 
   const sendFileMessage = async (file: File, caption: string) => {
     if (!roomId) return
@@ -541,13 +639,19 @@ export default function MessengerPage() {
                 ) : (
                   messages.map(msg => {
                     const isMine = msg.user_id === user?.id
+                    const isEdited = msg.metadata?.edited === true && !msg.is_deleted
                     return (
                       <div key={msg.id} className={`msg ${isMine ? 'msg-mine' : 'msg-other'}`}>
                         {!isMine && <div className="msg-avatar">{getInitials(msg.user?.name)}</div>}
                         <div className="msg-bubble">
                           {!isMine && <div className="msg-author">{msg.user?.name || 'Пользователь'}</div>}
-                          <div className="msg-text">{msg.content}</div>
-                          <div className="msg-time">{formatTime(msg.created_at)}</div>
+                          {msg.is_deleted
+                            ? <div className="msg-text msg-deleted">Сообщение удалено</div>
+                            : <div className="msg-text">{msg.content}</div>}
+                          <div className="msg-time">
+                            {formatTime(msg.created_at)}
+                            {isEdited && <span className="msg-edited"> (ред.)</span>}
+                          </div>
                         </div>
                       </div>
                     )
@@ -707,8 +811,12 @@ export default function MessengerPage() {
                     message={msg}
                     isMine={msg.user_id === user?.id}
                     currentUserId={user?.id}
+                    canDelete={canDeleteMessage(msg)}
+                    canEdit={canEditMessage(msg)}
                     onReplyInThread={openThread}
                     onReaction={handleReaction}
+                    onEdit={startEdit}
+                    onDelete={handleDeleteMessage}
                     formatTime={formatTime}
                     formatFileSize={formatFileSize}
                     getInitials={getInitials}
@@ -729,6 +837,16 @@ export default function MessengerPage() {
                 <span className="file-preview-name">{pendingFile.name}</span>
                 <span className="file-preview-size">{formatFileSize(pendingFile.size)}</span>
                 <button className="file-preview-remove" onClick={() => setPendingFile(null)} type="button">&times;</button>
+              </div>
+            )}
+            {editingMessage && (
+              <div className="chat-edit-banner" role="status">
+                <span className="chat-edit-banner-text">
+                  Редактирование сообщения
+                </span>
+                <button type="button" className="chat-edit-banner-cancel" onClick={cancelEdit}>
+                  Отмена
+                </button>
               </div>
             )}
             <form onSubmit={sendMessage} className="chat-input-area">
@@ -761,7 +879,7 @@ export default function MessengerPage() {
                   type="text"
                   value={messageInput}
                   onChange={handleInputChange}
-                  placeholder={pendingFile ? 'Добавьте подпись...' : 'Введите сообщение...'}
+                  placeholder={editingMessage ? 'Редактируйте сообщение...' : pendingFile ? 'Добавьте подпись...' : 'Введите сообщение...'}
                   className="chat-input"
                 />
               </div>

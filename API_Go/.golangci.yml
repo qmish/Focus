@@ -1,0 +1,32 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  disable:
+    - errcheck
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - "-QF1007"
+        - "-S1001"
+        - "-ST1000"
+        - "-ST1020"
+        - "-ST1021"
+  exclusions:
+    rules:
+      - path: '_test\.go'
+        linters:
+          - errcheck
+          - staticcheck
+          - unused
+      - path: 'desktop_update_handler\.go'
+        linters:
+          - unused
+      - path: 'webhooks/webhooks\.go'
+        text: 'ineffectual assignment to deadLetterBody'
+        linters:
+          - ineffassign

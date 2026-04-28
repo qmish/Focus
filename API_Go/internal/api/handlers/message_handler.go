@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -19,10 +23,12 @@ var mentionRegex = regexp.MustCompile(`@(\w+)`)
 
 // MessageHandler обработчики для messages
 type MessageHandler struct {
-	msgRepo   *repository.MessageRepository
-	userRepo  *repository.UserRepository
-	wsHub     *websocket.Hub
-	botEngine *bots.BotEngine
+	msgRepo    *repository.MessageRepository
+	userRepo   *repository.UserRepository
+	roomRepo   *repository.RoomRepository
+	wsHub      *websocket.Hub
+	botEngine  *bots.BotEngine
+	editWindow time.Duration
 }
 
 // NewMessageHandler создаёт новый MessageHandler
@@ -33,6 +39,17 @@ func NewMessageHandler(msgRepo *repository.MessageRepository, userRepo *reposito
 		wsHub:     wsHub,
 		botEngine: botEngine,
 	}
+}
+
+// SetRoomRepository устанавливает репозиторий комнат для проверки ролей участников.
+func (h *MessageHandler) SetRoomRepository(roomRepo *repository.RoomRepository) {
+	h.roomRepo = roomRepo
+}
+
+// SetEditWindow задаёт временное окно для редактирования собственных сообщений.
+// duration <= 0 — без ограничения (редактировать можно в любое время).
+func (h *MessageHandler) SetEditWindow(window time.Duration) {
+	h.editWindow = window
 }
 
 // ListMessages GET /api/v1/messages
@@ -300,6 +317,12 @@ func (h *MessageHandler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil {
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
+		return
+	}
+
 	var req struct {
 		Content string `json:"content"`
 	}
@@ -308,20 +331,26 @@ func (h *MessageHandler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Некорректные данные запроса", http.StatusBadRequest)
 		return
 	}
+	if req.Content == "" {
+		http.Error(w, "Отсутствует содержимое", http.StatusBadRequest)
+		return
+	}
+	if len(req.Content) > 10000 {
+		http.Error(w, "Слишком длинное содержимое (макс. 10000 символов)", http.StatusBadRequest)
+		return
+	}
 
 	message, err := h.msgRepo.GetByID(r.Context(), messageID)
 	if err != nil {
-		if err == repository.ErrMessageNotFound {
+		if errors.Is(err, repository.ErrMessageNotFound) {
 			http.Error(w, "Сообщение не найдено", http.StatusNotFound)
 			return
 		}
 		http.Error(w, "Не удалось получить сообщение", http.StatusInternalServerError)
 		return
 	}
-
-	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil {
-		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
+	if message.IsDeleted {
+		http.Error(w, "Сообщение удалено", http.StatusGone)
 		return
 	}
 	if message.UserID.String() != claims.UserID {
@@ -329,14 +358,39 @@ func (h *MessageHandler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Обновляем содержимое
-	message.Content = req.Content
+	if h.editWindow > 0 && time.Since(message.CreatedAt) > h.editWindow {
+		http.Error(w, "Истёк срок редактирования сообщения", http.StatusGone)
+		return
+	}
+
+	editorID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusInternalServerError)
+		return
+	}
+
+	now := time.Now()
 	edited := true
+	message.Content = req.Content
 	message.Metadata.Edited = &edited
+	message.Metadata.EditedAt = &now
+	message.Metadata.EditedBy = &editorID
 
 	if err := h.msgRepo.Update(r.Context(), message); err != nil {
 		http.Error(w, "Не удалось обновить сообщение", http.StatusInternalServerError)
 		return
+	}
+
+	if reloaded, errReload := h.msgRepo.GetByID(r.Context(), messageID); errReload == nil && reloaded != nil {
+		message = reloaded
+	}
+
+	if h.wsHub != nil {
+		wsPayload, _ := json.Marshal(message)
+		h.wsHub.BroadcastToRoom(message.RoomID.String(), websocket.WSMessage{
+			Type:    websocket.MessageTypeMessageUpdated,
+			Payload: wsPayload,
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -396,23 +450,34 @@ func (h *MessageHandler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims := auth.GetUserClaimsFromContext(r.Context())
+	if claims == nil {
+		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
+		return
+	}
+
 	message, err := h.msgRepo.GetByID(r.Context(), messageID)
 	if err != nil {
-		if err == repository.ErrMessageNotFound {
+		if errors.Is(err, repository.ErrMessageNotFound) {
 			http.Error(w, "Сообщение не найдено", http.StatusNotFound)
 			return
 		}
 		http.Error(w, "Не удалось получить сообщение", http.StatusInternalServerError)
 		return
 	}
-
-	claims := auth.GetUserClaimsFromContext(r.Context())
-	if claims == nil {
-		http.Error(w, "Требуется авторизация", http.StatusUnauthorized)
+	if message.IsDeleted {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if message.UserID.String() != claims.UserID {
-		http.Error(w, "Доступ запрещён: вы не автор сообщения", http.StatusForbidden)
+
+	requesterID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		http.Error(w, "Некорректный идентификатор пользователя", http.StatusInternalServerError)
+		return
+	}
+
+	if !h.canDeleteMessage(r.Context(), claims, requesterID, message) {
+		http.Error(w, "Доступ запрещён", http.StatusForbidden)
 		return
 	}
 
@@ -421,5 +486,50 @@ func (h *MessageHandler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.wsHub != nil {
+		payload, _ := json.Marshal(map[string]string{
+			"message_id":     messageID.String(),
+			"room_id":        message.RoomID.String(),
+			"thread_root_id": optionalUUIDString(message.ThreadRootID),
+			"deleted_by":     requesterID.String(),
+		})
+		h.wsHub.BroadcastToRoom(message.RoomID.String(), websocket.WSMessage{
+			Type:    websocket.MessageTypeMessageDeleted,
+			Payload: payload,
+		})
+	}
+
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// canDeleteMessage реализует гибрид-авторизацию удаления:
+// 1) автор всегда может удалить своё сообщение;
+// 2) глобальный admin (claims.Roles содержит "admin") — всегда;
+// 3) иначе — moderator/admin в RoomParticipant для этой комнаты.
+func (h *MessageHandler) canDeleteMessage(ctx context.Context, claims *auth.SessionClaims, requesterID uuid.UUID, message *models.Message) bool {
+	if message.UserID == requesterID {
+		return true
+	}
+	if slices.Contains(claims.Roles, "admin") {
+		return true
+	}
+	if h.roomRepo == nil {
+		return false
+	}
+	participant, err := h.roomRepo.GetParticipant(ctx, message.RoomID, requesterID)
+	if err != nil || participant == nil {
+		return false
+	}
+	switch participant.Role {
+	case models.ParticipantRoleAdmin, models.ParticipantRoleModerator:
+		return true
+	}
+	return false
+}
+
+func optionalUUIDString(id *uuid.UUID) string {
+	if id == nil {
+		return ""
+	}
+	return id.String()
 }

@@ -7,6 +7,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// ptrToString — тестовый helper, оригинал был удалён в фазе очистки dead code.
+func ptrToString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func TestCalendarEventStruct(t *testing.T) {
 	now := time.Now()
 	event := CalendarEvent{

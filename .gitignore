@@ -75,3 +75,11 @@ crane-linux.tar.gz
 
 # Temp scripts
 tmp-frontend-stage.js
+
+# TLS certificates and keys (никогда не коммитить)
+*.pem
+*.crt
+*.cer
+*.key
+*.p12
+*.pfx
