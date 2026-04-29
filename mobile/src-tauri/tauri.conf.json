@@ -5,9 +5,7 @@
   "identifier": "com.focus.messenger.mobile",
   "build": {
     "frontendDist": "../../frontend/dist",
-    "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm --prefix ../../frontend run dev",
-    "beforeBuildCommand": "npm --prefix ../../frontend run build"
+    "devUrl": "http://localhost:1420"
   },
   "app": {
     "windows": [
