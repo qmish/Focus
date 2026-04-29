@@ -3,6 +3,7 @@ import type { Message } from '../store/roomsStore'
 import EmojiPicker from './EmojiPicker'
 import ReactionsBar from './ReactionsBar'
 import MessageContextMenu from './MessageContextMenu'
+import { useLongPress } from '../hooks/useLongPress'
 
 const mentionPattern = /(@\w+)/g
 
@@ -48,6 +49,9 @@ export default function MessageBubble({
   const emojiBtnRef = useRef<HTMLButtonElement>(null)
 
   const closeEmojiPicker = useCallback(() => setShowPicker(false), [])
+  const openPicker = useCallback(() => setShowPicker(true), [])
+
+  const longPressHandlers = useLongPress(openPicker, { delay: 450 })
 
   const renderContent = () => {
     if (msg.is_deleted) {
@@ -102,9 +106,11 @@ export default function MessageBubble({
   const isEdited = msg.metadata?.edited === true && !msg.is_deleted
 
   return (
-    <div className={`msg ${isMine ? 'msg-mine' : 'msg-other'}`}>
+    <div
+      className={`msg ${isMine ? 'msg-mine' : 'msg-other'}${showPicker ? ' msg--emoji-picker-open' : ''}`}
+    >
       {!isMine && <div className="msg-avatar">{getInitials(msg.user?.name)}</div>}
-      <div className="msg-bubble">
+      <div className="msg-bubble" {...longPressHandlers}>
         {!isMine && <div className="msg-author">{msg.user?.name || 'Пользователь'}</div>}
         {renderContent()}
         {!msg.is_deleted && (
