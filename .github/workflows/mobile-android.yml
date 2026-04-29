@@ -115,5 +115,4 @@ jobs:
           retention-days: 14
 
       - name: Run mobile crate tests
-        working-directory: mobile/src-tauri
-        run: cargo test
+        run: cargo test -p focus-mobile --lib
