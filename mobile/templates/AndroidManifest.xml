@@ -43,7 +43,7 @@
             android:exported="true"
             android:label="@string/main_activity_title"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.focus_mobile.NoActionBar"
+            android:theme="@style/Theme.focus_mobile"
             android:windowSoftInputMode="adjustResize">
 
             <intent-filter>

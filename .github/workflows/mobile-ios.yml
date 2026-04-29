@@ -66,5 +66,4 @@ jobs:
             cargo tauri ios build --debug --target x86_64-apple-ios
 
       - name: Run mobile crate tests
-        working-directory: mobile/src-tauri
-        run: cargo test
+        run: cargo test -p focus-mobile --lib
