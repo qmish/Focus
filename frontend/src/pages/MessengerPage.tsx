@@ -86,6 +86,14 @@ export default function MessengerPage() {
   const [isInChatSearchOpen, setIsInChatSearchOpen] = useState(false)
   const chatInputRef = useRef<HTMLInputElement>(null)
 
+  // ВАЖНО: useSwipe должен вызываться безусловно (Rules of Hooks).
+  // Иначе при `showVideo && roomId && jitsiJWT` срабатывает early-return
+  // ниже и React падает с error #300 «Rendered fewer hooks than expected».
+  const swipeHandlers = useSwipe({
+    onSwipeRight: () => setIsSidebarOpen(true),
+    onSwipeLeft: () => setIsSidebarOpen(false),
+  })
+
   const isGlobalAdmin = useMemo(
     () => Boolean(user?.roles?.includes('admin')),
     [user?.roles]
@@ -794,11 +802,6 @@ export default function MessengerPage() {
       </div>
     )
   }
-
-  const swipeHandlers = useSwipe({
-    onSwipeRight: () => setIsSidebarOpen(true),
-    onSwipeLeft: () => setIsSidebarOpen(false),
-  })
 
   return (
     <div className="messenger" {...swipeHandlers}>
