@@ -1,0 +1,36 @@
+[package]
+name = "focus-mobile"
+version = "0.1.0"
+description = "Focus Messenger Mobile (Android / iOS)"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "focus_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# core Tauri
+tauri = { version = "2" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+
+# плагины, поддерживающие mobile-таргеты
+tauri-plugin-notification = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-store = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-os = "2"
+
+# для PKCE OAuth-клиента
+base64 = "0.22"
+rand = "0.8"
+sha2 = "0.10"
+urlencoding = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["sync", "rt"] }

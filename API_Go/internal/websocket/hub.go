@@ -289,6 +289,19 @@ func (h *Hub) SendToUser(userID string, msg WSMessage) {
 	}
 }
 
+// IsUserOnline возвращает true, если у пользователя есть хотя бы одна WS-сессия.
+// Используется push-сервисом для определения, нужно ли слать push-уведомление.
+func (h *Hub) IsUserOnline(userID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, client := range h.Clients {
+		if client.UserID == userID {
+			return true
+		}
+	}
+	return false
+}
+
 // BroadcastToRoom рассылает сообщение в комнату
 func (h *Hub) BroadcastToRoom(roomID string, msg WSMessage) {
 	data, err := json.Marshal(msg)

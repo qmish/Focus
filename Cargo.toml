@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "desktop/src-tauri",
+    "mobile/src-tauri",
+]
+# По умолчанию `cargo build` без аргументов собирает только desktop;
+# mobile-крейт собирается через `cargo build -p focus-mobile` или через
+# `cd mobile && cargo tauri android build`/`ios build`.
+default-members = ["desktop/src-tauri"]
+
+[workspace.package]
+edition = "2021"
+authors = ["Focus Team"]
+license = "Proprietary"
+
+# Профили релизной сборки общие для всех клиентов.
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

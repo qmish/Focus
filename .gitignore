@@ -83,3 +83,9 @@ tmp-frontend-stage.js
 *.key
 *.p12
 *.pfx
+
+# Rust / Cargo
+/target/
+**/target/
+# Сгенерированные tauri-init директории (Android/iOS проекты)
+mobile/src-tauri/gen/

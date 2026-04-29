@@ -1,0 +1,119 @@
+name: Mobile Android
+
+on:
+  push:
+    branches: [master, dev]
+    paths:
+      - 'mobile/**'
+      - 'frontend/**'
+      - '.github/workflows/mobile-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  ANDROID_PLATFORM_VERSION: '34'
+  ANDROID_BUILD_TOOLS_VERSION: '34.0.0'
+  ANDROID_NDK_VERSION: '27.0.12077973'
+  MIN_SDK_VERSION: '26'
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Rust (stable + Android targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: mobile/src-tauri
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-${{ env.ANDROID_PLATFORM_VERSION }} build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }} ndk;${{ env.ANDROID_NDK_VERSION }}'
+
+      - name: Export NDK env
+        run: |
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}" >> $GITHUB_ENV
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend (PWA assets)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli@^2.0 --locked
+
+      - name: Generate debug keystore
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkey -v \
+              -keystore ~/.android/debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Tauri Android init
+        working-directory: mobile/src-tauri
+        env:
+          NDK_HOME: ${{ env.NDK_HOME }}
+        run: |
+          cargo tauri android init --ci
+
+      - name: Apply Android manifest template (intent-filter, permissions)
+        run: bash mobile/scripts/apply-android-template.sh
+
+      - name: Build APK (debug)
+        working-directory: mobile/src-tauri
+        env:
+          NDK_HOME: ${{ env.NDK_HOME }}
+        run: |
+          cargo tauri android build --debug --apk
+
+      - name: Locate APK
+        id: locate
+        run: |
+          APK=$(find mobile/src-tauri/gen/android -name '*-debug.apk' | head -n1)
+          echo "apk=$APK" >> $GITHUB_OUTPUT
+          echo "Built APK: $APK"
+          ls -lh "$APK"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: focus-mobile-debug-apk
+          path: ${{ steps.locate.outputs.apk }}
+          retention-days: 14
+
+      - name: Run mobile crate tests
+        working-directory: mobile/src-tauri
+        run: cargo test
