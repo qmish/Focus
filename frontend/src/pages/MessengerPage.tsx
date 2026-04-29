@@ -118,6 +118,12 @@ export default function MessengerPage() {
         })
       })
     }
+    // Регистрация Web Push подписки. Идемпотентна; не блокирует UI.
+    import('../lib/pushSubscribe').then(({ subscribePush }) => {
+      subscribePush({ skipIfAlreadyRegistered: true }).catch(err =>
+        console.warn('push subscribe skipped:', err)
+      )
+    })
   }, [])
 
   useEffect(() => {

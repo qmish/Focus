@@ -22,6 +22,7 @@ type Config struct {
 	Email     EmailConfig
 	Log       LogConfig
 	Messages  MessagesConfig
+	Push      PushConfig
 }
 
 // MessagesConfig конфигурация поведения чат-сообщений
@@ -130,6 +131,24 @@ type LogConfig struct {
 	Format string
 }
 
+// PushConfig — конфигурация push-уведомлений (Web Push, FCM, APNs).
+//
+// Ключи VAPID — Base64URL без padding. Их можно сгенерировать через
+// `webpush-go` или `web-push generate-vapid-keys`.
+type PushConfig struct {
+	Enabled bool
+
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
+	VAPIDSubject    string
+
+	WebPushTTL     time.Duration
+	WebPushTimeout time.Duration
+
+	FCMEnabled  bool
+	APNSEnabled bool
+}
+
 // Load загружает конфигурацию из переменных окружения
 func Load() *Config {
 	env := getEnv("ENV", "development")
@@ -229,6 +248,16 @@ func Load() *Config {
 		},
 		Messages: MessagesConfig{
 			EditWindow: getMessageEditWindow("MESSAGE_EDIT_WINDOW_HOURS", 24*time.Hour),
+		},
+		Push: PushConfig{
+			Enabled:         getBoolEnv("PUSH_ENABLED", false),
+			VAPIDPublicKey:  getEnv("VAPID_PUBLIC_KEY", ""),
+			VAPIDPrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
+			VAPIDSubject:    getEnv("VAPID_SUBJECT", "mailto:admin@focus.local"),
+			WebPushTTL:      getDurationEnv("PUSH_WEBPUSH_TTL", 24*time.Hour),
+			WebPushTimeout:  getDurationEnv("PUSH_WEBPUSH_TIMEOUT", 10*time.Second),
+			FCMEnabled:      getBoolEnv("PUSH_FCM_ENABLED", false),
+			APNSEnabled:     getBoolEnv("PUSH_APNS_ENABLED", false),
 		},
 	}
 

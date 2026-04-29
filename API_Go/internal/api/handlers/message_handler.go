@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
@@ -15,20 +16,28 @@ import (
 	"github.com/qmish/focus-api/internal/auth"
 	"github.com/qmish/focus-api/internal/bots"
 	"github.com/qmish/focus-api/internal/models"
+	"github.com/qmish/focus-api/internal/push"
 	"github.com/qmish/focus-api/internal/repository"
 	"github.com/qmish/focus-api/internal/websocket"
 )
+
+// PushNotifier — узкий интерфейс к push-сервису, чтобы handler оставался
+// тестируемым без поднятия настоящего Service.
+type PushNotifier interface {
+	NotifyUsers(ctx context.Context, userIDs []uuid.UUID, n *push.Notification) error
+}
 
 var mentionRegex = regexp.MustCompile(`@(\w+)`)
 
 // MessageHandler обработчики для messages
 type MessageHandler struct {
-	msgRepo    *repository.MessageRepository
-	userRepo   *repository.UserRepository
-	roomRepo   *repository.RoomRepository
-	wsHub      *websocket.Hub
-	botEngine  *bots.BotEngine
-	editWindow time.Duration
+	msgRepo     *repository.MessageRepository
+	userRepo    *repository.UserRepository
+	roomRepo    *repository.RoomRepository
+	wsHub       *websocket.Hub
+	botEngine   *bots.BotEngine
+	editWindow  time.Duration
+	pushService PushNotifier
 }
 
 // NewMessageHandler создаёт новый MessageHandler
@@ -50,6 +59,11 @@ func (h *MessageHandler) SetRoomRepository(roomRepo *repository.RoomRepository) 
 // duration <= 0 — без ограничения (редактировать можно в любое время).
 func (h *MessageHandler) SetEditWindow(window time.Duration) {
 	h.editWindow = window
+}
+
+// SetPushService подключает push-сервис для офлайн-уведомлений.
+func (h *MessageHandler) SetPushService(svc PushNotifier) {
+	h.pushService = svc
 }
 
 // ListMessages GET /api/v1/messages
@@ -280,9 +294,109 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		_ = h.botEngine.HandleMessage(r.Context(), roomID.String(), userID.String(), req.Content)
 	}
 
+	// Push-уведомления оффлайн-получателям. Отправляются асинхронно,
+	// ошибки не должны влиять на ответ API.
+	if h.pushService != nil && h.roomRepo != nil {
+		go h.notifyOffline(context.Background(), roomID, userID, message)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(message)
+}
+
+// notifyOffline отправляет push-уведомления участникам комнаты, которые
+// сейчас не подключены к WebSocket. Упомянутые пользователи (mentions)
+// получают приоритетное уведомление с тегом "mention", даже если они онлайн —
+// это типичное поведение мессенджеров.
+func (h *MessageHandler) notifyOffline(ctx context.Context, roomID, authorID uuid.UUID, message *models.Message) {
+	if h.pushService == nil || h.roomRepo == nil {
+		return
+	}
+	participants, err := h.roomRepo.ListParticipantsWithUsers(ctx, roomID)
+	if err != nil {
+		return
+	}
+
+	mentionSet := make(map[string]struct{}, len(message.Metadata.Mentions))
+	for _, m := range message.Metadata.Mentions {
+		mentionSet[m] = struct{}{}
+	}
+
+	authorName := "Сообщение"
+	if message.User != nil && message.User.Name != "" {
+		authorName = message.User.Name
+	}
+	roomLabel := roomID.String()
+
+	preview := message.Content
+	if message.IsDeleted {
+		preview = "Сообщение удалено"
+	}
+	if len(preview) > 140 {
+		preview = preview[:140] + "…"
+	}
+	if preview == "" {
+		switch message.Type {
+		case models.MessageTypeImage:
+			preview = "📷 Изображение"
+		case models.MessageTypeFile:
+			preview = "📎 Файл"
+		default:
+			preview = "Новое сообщение"
+		}
+	}
+
+	url := fmt.Sprintf("/rooms/%s", roomID.String())
+
+	mentionTargets := make([]uuid.UUID, 0)
+	offlineTargets := make([]uuid.UUID, 0)
+	for _, p := range participants {
+		if p.UserID == authorID {
+			continue
+		}
+		uidStr := p.UserID.String()
+		_, mentioned := mentionSet[uidStr]
+		online := false
+		if h.wsHub != nil {
+			online = h.wsHub.IsUserOnline(uidStr)
+		}
+		if mentioned {
+			mentionTargets = append(mentionTargets, p.UserID)
+			continue
+		}
+		if !online {
+			offlineTargets = append(offlineTargets, p.UserID)
+		}
+	}
+
+	if len(mentionTargets) > 0 {
+		_ = h.pushService.NotifyUsers(ctx, mentionTargets, &push.Notification{
+			Title: fmt.Sprintf("%s упомянул(а) вас", authorName),
+			Body:  preview,
+			URL:   url,
+			Tag:   "mention-" + message.ID.String(),
+			Data: map[string]interface{}{
+				"room_id":    roomID.String(),
+				"message_id": message.ID.String(),
+				"kind":       "mention",
+			},
+		})
+	}
+
+	if len(offlineTargets) > 0 {
+		_ = h.pushService.NotifyUsers(ctx, offlineTargets, &push.Notification{
+			Title: authorName,
+			Body:  preview,
+			URL:   url,
+			Tag:   "room-" + roomLabel,
+			Data: map[string]interface{}{
+				"room_id":    roomID.String(),
+				"message_id": message.ID.String(),
+				"kind":       "message",
+			},
+		})
+	}
 }
 
 // GetMessage GET /api/v1/messages/{id}

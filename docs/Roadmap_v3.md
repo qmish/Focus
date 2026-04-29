@@ -412,24 +412,28 @@
 
 Стратегия: **Tauri 2 Mobile** — переиспользование 100% React-фронтенда и Rust-бэкенда десктопного клиента. Альтернатива (React Native / Flutter) отклонена из-за необходимости переписывания UI и дублирования Rust-команд.
 
-### Фаза 5.1 — Подготовка и адаптивный UI (2 недели)
+### Фаза 5.1 — Подготовка и адаптивный UI (2 недели) ✅ PR #17
 
-- [ ] Рефакторинг `MessengerPage.tsx`: извлечь в переиспользуемые компоненты
-  - `RoomSidebar` — список комнат
-  - `ChatArea` — лента сообщений + форма ввода
-  - `MessageBubble` — (уже из этапа 1)
-  - `ThreadPanel` — (уже из этапа 1)
-- [ ] Адаптивный CSS: media queries для экранов < 768px
-  - Sidebar: скрыт по умолчанию, открывается по hamburger-кнопке или свайпу
+- [x] Рефакторинг `MessengerPage.tsx`: извлечь в переиспользуемые компоненты
+  - `RoomSidebar` — список комнат (`frontend/src/components/RoomSidebar.tsx`)
+  - `ChatHeader` — шапка чата (`frontend/src/components/ChatHeader.tsx`)
+  - `MessageBubble` — (из этапа 1)
+  - `ThreadPanel` — (из этапа 1)
+- [x] Адаптивный CSS: media queries для экранов < 768px
+  - Sidebar: slide-in по hamburger-кнопке или свайпу вправо + backdrop
   - Chat: занимает 100% ширины
-  - Thread panel: fullscreen overlay вместо slide-in
+  - Thread panel: fullscreen overlay
+  - safe-area для iOS notch / Android cutout
   - Файл: `frontend/src/index.css`
-- [ ] Touch UX:
-  - Long-press на сообщении → контекстное меню (вместо hover)
-  - Pull-to-refresh для обновления сообщений
-  - Swipe right на сообщении → быстрый ответ в треде
-- [ ] Определить структуру: `mobile/` (новая директория) или расширение `desktop/`
-  - Рекомендация: `mobile/` с отдельным `tauri.conf.json`, общим `src-tauri/` через workspace
+- [x] Touch UX:
+  - `useLongPress` — long-press на сообщении открывает emoji-picker
+  - `useSwipe` — свайп вправо/влево управляет sidebar
+  - `usePullToRefresh` — каркас для будущего pull-to-refresh
+  - Файлы: `frontend/src/hooks/{useLongPress,useSwipe,usePullToRefresh}.ts`
+- [x] PWA: `vite-plugin-pwa` (injectManifest), manifest.webmanifest, service worker
+  - `frontend/src/sw-push.ts` — обработчики push/notificationclick
+  - `frontend/public/icons/icon-{192,512,maskable}.png`
+- [x] Структура: `mobile/` создаётся в фазе 5.2 как отдельный Cargo-крейт workspace
 
 ### Фаза 5.2 — Android (3–4 недели)
 
@@ -462,18 +466,23 @@
 - [ ] Сборка .ipa, тестирование на симуляторе и реальном устройстве
 - [ ] CI: GitHub Actions (macOS runner) для iOS build
 
-### Фаза 5.4 — Backend: Push-инфраструктура (параллельно с 5.2/5.3)
+### Фаза 5.4 — Backend: Push-инфраструктура (PR-B)
 
-- [ ] Новая таблица `push_tokens` (user_id, device_token, platform, created_at)
-  - Модель: `API_Go/internal/models/push_token.go` (новый)
-- [ ] Эндпоинты:
-  - `POST /api/v1/push/register` — регистрация токена
-  - `DELETE /api/v1/push/unregister` — удаление токена (при logout)
-- [ ] Push-сервис: `API_Go/internal/push/` (новый пакет)
-  - Отправка через FCM (Android) и APNs (iOS)
-  - Триггеры: новое сообщение в комнате (если пользователь не онлайн), @упоминание
-  - Rate limiting: не более 1 push в 5 секунд на пользователя
-- [ ] Интеграция с `CreateMessage`: после сохранения — проверить офлайн-участников, отправить push
+- [x] Новая таблица `push_tokens` (user_id, platform, endpoint, p256dh, auth, ...)
+  - Модель: `API_Go/internal/models/push_token.go`
+  - GORM AutoMigrate подключён в `cmd/server/main.go`
+- [x] Эндпоинты:
+  - `GET /api/v1/push/vapid-public-key` — публичный VAPID-ключ
+  - `POST /api/v1/push/register` — регистрация подписки (Web Push / FCM / APNs)
+  - `POST /api/v1/push/unregister` — удаление подписки
+- [x] Push-сервис: `API_Go/internal/push/` (новый пакет)
+  - Pluggable Sender: `WebPushSender` (готов), `FCMSender` / `APNSSender` (заглушки-каркасы)
+  - `Service` параллельно отправляет уведомления и удаляет Gone-подписки
+- [x] Интеграция с `CreateMessage`: офлайн-участники получают push,
+      упомянутые — приоритетный push с тегом `mention-*`
+- [x] Frontend: `frontend/src/lib/pushSubscribe.ts` + автоподписка в `MessengerPage`
+- [x] VAPID-генератор: `cmd/vapidgen` (`go run ./cmd/vapidgen`)
+- [x] Утилита online/offline в WS Hub: `IsUserOnline(userID)`
 
 ### Фаза 5.5 — Публикация (2 недели)
 

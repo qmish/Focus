@@ -195,6 +195,25 @@ spec:
             secretKeyRef:
               name: focus-secrets
               key: session-secret
+        # Push-уведомления (Web Push). Ключи VAPID генерируются один раз
+        # утилитой `go run ./cmd/vapidgen` из API_Go и добавляются в
+        # Secret focus-secrets под ключами vapid-public-key/vapid-private-key.
+        - name: PUSH_ENABLED
+          value: "true"
+        - name: VAPID_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: focus-secrets
+              key: vapid-public-key
+              optional: true
+        - name: VAPID_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: focus-secrets
+              key: vapid-private-key
+              optional: true
+        - name: VAPID_SUBJECT
+          value: mailto:admin@focus.local
         - name: EXCHANGE_PROVIDER
           value: ews
         - name: EXCHANGE_EWS_URL

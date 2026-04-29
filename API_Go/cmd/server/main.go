@@ -23,6 +23,7 @@ import (
 	"github.com/qmish/focus-api/internal/jitsi"
 	"github.com/qmish/focus-api/internal/models"
 	"github.com/qmish/focus-api/internal/notifications"
+	"github.com/qmish/focus-api/internal/push"
 	"github.com/qmish/focus-api/internal/repository"
 	"github.com/qmish/focus-api/internal/webhooks"
 	"github.com/qmish/focus-api/internal/websocket"
@@ -86,6 +87,7 @@ func main() {
 			&models.AuditLog{},
 			&models.ConferencePolicy{},
 			&models.RevokedSession{},
+			&models.PushToken{},
 			&bots.BotCommandEvent{},
 			&models.BotReminder{},
 			&models.BotDialogState{},
@@ -115,6 +117,7 @@ func main() {
 	auditLogRepo := repository.NewAuditLogRepository(db.DB)
 	conferencePolicyRepo := repository.NewConferencePolicyRepository(db.DB)
 	sessionRevocationRepo := repository.NewSessionRevocationRepository(db.DB)
+	pushTokenRepo := repository.NewPushTokenRepository(db.DB)
 
 	// Инициализация Exchange EWS клиента (on-prem)
 	var calendarService exchange.CalendarService
@@ -220,6 +223,31 @@ func main() {
 	messageHandler.SetRoomRepository(roomRepo)
 	messageHandler.SetEditWindow(cfg.Messages.EditWindow)
 	reactionHandler := handlers.NewReactionHandler(messageRepo, wsHub)
+
+	// Push-сервис: собирается из настроенных провайдеров. На stage поднимаем
+	// Web Push (если заданы VAPID-ключи), FCM/APNs пока заглушки.
+	var pushService *push.Service
+	pushSenders := []push.Sender{}
+	if cfg.Push.Enabled && cfg.Push.VAPIDPublicKey != "" && cfg.Push.VAPIDPrivateKey != "" {
+		webPushSender, err := push.NewWebPushSender(push.WebPushOptions{
+			VAPIDPublicKey:  cfg.Push.VAPIDPublicKey,
+			VAPIDPrivateKey: cfg.Push.VAPIDPrivateKey,
+			Subject:         cfg.Push.VAPIDSubject,
+			TTL:             cfg.Push.WebPushTTL,
+			Timeout:         cfg.Push.WebPushTimeout,
+		})
+		if err != nil {
+			logger.Warn("Web Push sender init failed", zap.Error(err))
+		} else {
+			pushSenders = append(pushSenders, webPushSender)
+			logger.Info("Web Push sender enabled")
+		}
+	}
+	pushSenders = append(pushSenders, push.NewFCMSender(cfg.Push.FCMEnabled))
+	pushSenders = append(pushSenders, push.NewAPNSSender(cfg.Push.APNSEnabled))
+	pushService = push.NewService(pushTokenRepo, logger.WithContext(context.Background()), pushSenders...)
+	pushHandler := handlers.NewPushHandler(pushTokenRepo, cfg.Push.VAPIDPublicKey)
+	messageHandler.SetPushService(pushService)
 	uploadDir := os.Getenv("UPLOAD_DIR")
 	if uploadDir == "" {
 		uploadDir = "/data/uploads"
@@ -435,6 +463,13 @@ func main() {
 			// Files
 			r.Post("/files/upload", fileHandler.Upload)
 			r.Get("/files/{fileId}", fileHandler.Download)
+
+			// Push notifications
+			r.Route("/push", func(r chi.Router) {
+				r.Get("/vapid-public-key", pushHandler.GetVAPIDPublicKey)
+				r.Post("/register", pushHandler.Register)
+				r.Post("/unregister", pushHandler.Unregister)
+			})
 
 			// Calendar
 			if calendarService != nil {
