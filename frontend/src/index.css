@@ -1742,3 +1742,37 @@ body { margin: 0; min-height: 100vh; }
     border: none;
   }
 }
+
+/* === IN-CHAT SEARCH (локальный поиск внутри открытого чата) === */
+.inchat-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+.inchat-search-input {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 6px 10px;
+  outline: none;
+  font-size: 0.9rem;
+}
+.inchat-search-input:focus { border-color: var(--bg-hover); }
+.inchat-search-counter {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  min-width: 36px;
+  text-align: center;
+}
+.inchat-search-error {
+  color: #ef4444;
+  font-size: 0.78rem;
+}
+@media (max-width: 768px) {
+  .inchat-search { padding: 8px; }
+}

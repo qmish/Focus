@@ -7,6 +7,8 @@ interface ChatHeaderProps {
   onMenuClick?: () => void
   /** Открывает глобальный поиск (Ctrl/Cmd+K). */
   onSearch?: () => void
+  /** Открывает поиск в текущей комнате (Telegram in-chat search). */
+  onLocalSearch?: () => void
   showMenu?: boolean
 }
 
@@ -17,6 +19,7 @@ export default function ChatHeader({
   onSettings,
   onMenuClick,
   onSearch,
+  onLocalSearch,
   showMenu = true,
 }: ChatHeaderProps) {
   return (
@@ -43,13 +46,29 @@ export default function ChatHeader({
         </span>
       </div>
       <div className="chat-header-actions">
+        {onLocalSearch && (
+          <button
+            className="icon-btn"
+            onClick={onLocalSearch}
+            title="Поиск в чате"
+            type="button"
+            aria-label="Поиск в текущем чате"
+            data-testid="chat-header-local-search"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              <line x1="8" y1="11" x2="14" y2="11" />
+            </svg>
+          </button>
+        )}
         {onSearch && (
           <button
             className="icon-btn"
             onClick={onSearch}
-            title="Поиск (Ctrl+K)"
+            title="Глобальный поиск (Ctrl+K)"
             type="button"
-            aria-label="Открыть поиск"
+            aria-label="Открыть глобальный поиск"
             data-testid="chat-header-search"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
