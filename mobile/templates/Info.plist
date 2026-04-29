@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Шаблон Info.plist для Focus Mobile (iOS).
+  После выполнения `tauri ios init` копируется поверх
+  mobile/src-tauri/gen/apple/focus_mobile_iOS/Info.plist
+  скриптом mobile/scripts/apply-ios-template.sh (см. README).
+
+  Минимальный target: iOS 14.0 (соответствует roadmap).
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Описания назначений (требуются App Store Review) -->
+    <key>NSCameraUsageDescription</key>
+    <string>Focus использует камеру для видеозвонков.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Focus использует микрофон для аудио и видеозвонков.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Focus использует библиотеку фотографий для отправки изображений в чат.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Focus использует локальную сеть для подключения к корпоративным серверам.</string>
+
+    <!-- Минимальная версия iOS -->
+    <key>MinimumOSVersion</key>
+    <string>14.0</string>
+
+    <!-- Push-уведомления -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>remote-notification</string>
+        <string>voip</string>
+    </array>
+    <key>aps-environment</key>
+    <string>development</string>
+
+    <!-- Custom URL scheme focus:// для OAuth-callback и универсальные ссылки -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.focus.messenger.mobile.auth</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>focus</string>
+            </array>
+        </dict>
+    </array>
+
+    <!-- Разрешённые external URL-схемы (для openURL) -->
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>https</string>
+        <string>tel</string>
+    </array>
+
+    <!-- ATS: разрешаем только корпоративный домен по http (для dev-stage) -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>focus.local</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+            </dict>
+        </dict>
+    </dict>
+</dict>
+</plist>

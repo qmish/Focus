@@ -435,36 +435,44 @@
   - `frontend/public/icons/icon-{192,512,maskable}.png`
 - [x] Структура: `mobile/` создаётся в фазе 5.2 как отдельный Cargo-крейт workspace
 
-### Фаза 5.2 — Android (3–4 недели)
+### Фаза 5.2 — Android (PR-C, каркас)
 
-- [ ] Инициализация: `npx tauri android init` в `mobile/`
-- [ ] Конфигурация `mobile/src-tauri/tauri.conf.json`:
+- [x] Инициализация: `cargo tauri android init` через CI
+  (`.github/workflows/mobile-android.yml`)
+- [x] Конфигурация `mobile/src-tauri/tauri.conf.json`:
   - `identifier`: `com.focus.messenger.mobile`
-  - Permissions: `INTERNET`, `CAMERA`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `VIBRATE`
-- [ ] Адаптировать Rust-команды из `desktop/src-tauri/src/commands.rs`:
-  - OAuth: использовать Custom Tab (Chrome) вместо `open::that()`
-  - Callback: intent-фильтр для `focus://auth/callback` или localhost
-- [ ] Push-уведомления:
-  - Интеграция Firebase Cloud Messaging (FCM)
-  - Tauri plugin или нативный Kotlin bridge
-  - Backend: новый эндпоинт `POST /api/v1/push/register` (device_token, platform)
-  - Backend: отправка push при новых сообщениях / упоминаниях
-- [ ] Сборка и тестирование APK на эмуляторе и реальном устройстве
-- [ ] CI: workflow `mobile-release.yml` → Android APK/AAB артефакт
+  - Permissions: `INTERNET`, `CAMERA`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`,
+    `VIBRATE`, foreground services (см. `mobile/templates/AndroidManifest.xml`)
+- [x] Rust-команды для OAuth (PKCE) с deep-link `focus://auth/callback`
+  (`mobile/src-tauri/src/commands.rs`: `prepare_oauth_url`, `exchange_code`)
+- [x] Push-уведомления:
+  - Web Push в WebView через PWA service worker (PR-A) — работает «из коробки»
+  - Backend pluggable Sender (PR-B): WebPush готов, FCM/APNs — каркасы-заглушки
+  - Эндпоинты `POST /api/v1/push/{register,unregister}` и
+    `GET /api/v1/push/vapid-public-key`
+- [x] Реальная сборка debug APK в CI (ubuntu-latest, debug keystore,
+  Android SDK 34, NDK 27, JDK 17, Rust + 4 Android-таргета)
+- [x] Артефакт `focus-mobile-debug-apk` публикуется на 14 дней
+- [ ] Production keystore + signed AAB для Google Play (TBD после первого reviewа)
+- [ ] Реализовать FCM-провайдер вместо заглушки (для нативных push)
 
-### Фаза 5.3 — iOS (3–4 недели)
+### Фаза 5.3 — iOS (PR-C, каркас)
 
-- [ ] Инициализация: `npx tauri ios init` в `mobile/`
-- [ ] Конфигурация:
-  - Capabilities: Push Notifications, Camera, Microphone
-  - Info.plist: URL scheme `focus://`
-  - Signing: Apple Developer Certificate + Provisioning Profile
-- [ ] OAuth callback: Universal Links (`applinks:chat.focus.local`) или custom scheme
-- [ ] Push-уведомления:
-  - Apple Push Notification service (APNs)
-  - Регистрация device token через `POST /api/v1/push/register`
-- [ ] Сборка .ipa, тестирование на симуляторе и реальном устройстве
-- [ ] CI: GitHub Actions (macOS runner) для iOS build
+- [x] Инициализация: `cargo tauri ios init` через CI
+  (`.github/workflows/mobile-ios.yml`)
+- [x] Конфигурация:
+  - Capabilities: Push Notifications, Background Modes (remote-notification, voip),
+    Camera, Microphone (`mobile/templates/Info.plist`)
+  - Info.plist: URL scheme `focus://`, ATS-исключение для `focus.local`
+  - Bundle ID: `com.focus.messenger.mobile`, минимальный таргет iOS 14.0
+- [x] OAuth callback: custom scheme `focus://auth/callback` (Universal Links —
+      готовы в манифесте, требуют публичного AASA-файла)
+- [x] Push-уведомления:
+  - Web Push в WebView (для PWA, добавленной в Safari, iOS 16.4+)
+  - APNs-канал в backend (заглушка, готова к расширению)
+- [x] CI macos-latest, debug build на симуляторе без подписи
+- [ ] Подпись и публикация (требует Apple Developer аккаунта на MacBook Pro)
+- [ ] Реализовать APNs-провайдер вместо заглушки (HTTP/2 + .p8 ключ)
 
 ### Фаза 5.4 — Backend: Push-инфраструктура (PR-B)
 
@@ -610,4 +618,7 @@
 - [x] Этап 3.1–3.4: backend реакции (подключить существующий репозиторий к HTTP + WS)
 - [x] Этап 4.1–4.9: редактирование/удаление сообщений (24-часовое окно, гибрид-авторизация, WS-broadcast)
 - [x] Этап 6: развёртывание stage (Kaniko + Argo CD + Nexus), фикс Keycloak SSO/локального логина, фикс Jitsi JWT (`sub`, `aud` как строка)
-- [ ] Этап 5: мобильные приложения (iOS/Android через Tauri 2 Mobile)
+- [x] Этап 5.1: адаптивный UI, Touch UX и PWA (PR #17)
+- [x] Этап 5.4: backend push-инфраструктура (Web Push + каркасы FCM/APNs, PR #18)
+- [x] Этап 5.2 / 5.3 (каркас): Tauri 2 Mobile workspace, реальный APK в CI, iOS-каркас (PR #?)
+- [ ] Этап 5.5: подпись release-сборок и публикация в Google Play / App Store

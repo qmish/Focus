@@ -1,0 +1,70 @@
+name: Mobile iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-ios.yml'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust + iOS targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: mobile/src-tauri
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli@^2.0 --locked
+
+      - name: Tauri iOS init
+        working-directory: mobile/src-tauri
+        run: cargo tauri ios init --ci
+
+      - name: Apply iOS Info.plist template
+        run: bash mobile/scripts/apply-ios-template.sh
+
+      - name: Build iOS (simulator, unsigned)
+        working-directory: mobile/src-tauri
+        env:
+          # Не публикуем ключи в CI: собираем без подписи для проверки сборки.
+          IOS_CERTIFICATE: ''
+        run: |
+          cargo tauri ios build --debug --target aarch64-apple-ios-sim || \
+            cargo tauri ios build --debug --target x86_64-apple-ios
+
+      - name: Run mobile crate tests
+        working-directory: mobile/src-tauri
+        run: cargo test

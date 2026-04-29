@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "Capability для Focus Mobile (Android/iOS): UI, OS info, deep-link, notifications.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:webview:default",
+    "core:window:default",
+    "shell:allow-open",
+    "notification:default",
+    "deep-link:default",
+    "store:default",
+    "os:default"
+  ]
+}
