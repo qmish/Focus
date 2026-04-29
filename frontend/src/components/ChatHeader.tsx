@@ -5,6 +5,8 @@ interface ChatHeaderProps {
   onSettings: () => void
   /** Кнопка-гамбургер для открытия sidebar на мобильном */
   onMenuClick?: () => void
+  /** Открывает глобальный поиск (Ctrl/Cmd+K). */
+  onSearch?: () => void
   showMenu?: boolean
 }
 
@@ -14,6 +16,7 @@ export default function ChatHeader({
   onVideoCall,
   onSettings,
   onMenuClick,
+  onSearch,
   showMenu = true,
 }: ChatHeaderProps) {
   return (
@@ -40,6 +43,21 @@ export default function ChatHeader({
         </span>
       </div>
       <div className="chat-header-actions">
+        {onSearch && (
+          <button
+            className="icon-btn"
+            onClick={onSearch}
+            title="Поиск (Ctrl+K)"
+            type="button"
+            aria-label="Открыть поиск"
+            data-testid="chat-header-search"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+        )}
         <button
           className="icon-btn"
           onClick={onVideoCall}
