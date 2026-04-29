@@ -585,6 +585,84 @@
 
 ---
 
+## Этап 7. Глобальный и локальный поиск (Telegram-style) ✅ PR #20
+
+Оценка: 1 неделя
+Приоритет: высокий
+Зависимости: Этапы 1–4 (модели Message/Room/User), Этап 5.1 (адаптивный UI),
+Postgres `pg_trgm` доступен.
+
+Стратегия: **pluggable SearchProvider** — текущая реализация на ILIKE +
+`pg_trgm` GIN-индексах; контракт API заранее совместим с будущей
+интеграцией Meilisearch без изменений на фронте. Подробности —
+[`docs/Search.md`](Search.md).
+
+### Фаза 7.1 — Backend (PR-D) ✅ PR #20
+
+- [x] `internal/database/search_indexes.go` — `EnsureSearchExtensions`
+  (pg_trgm + GIN-индексы users.name/email, rooms.name, messages.content),
+  идемпотентно; флаг `ENSURE_SEARCH_INDEXES=true` (или dev). `permission
+  denied` → Warn (стенд без superuser продолжит работу).
+- [x] `internal/search/` — pluggable `SearchProvider` (контракт совместим
+  с Meilisearch), реализация `PgProvider` на ILIKE+`%q%` для users / rooms
+  / messages / files / meetings. ABAC: участники + публичные комнаты,
+  meetings — участник или организатор по email.
+- [x] `Service` с `errgroup` fan-out (Global) и `LocalMessages`
+  (курсор по `before=msgID`).
+- [x] Handlers: `GET /api/v1/search`, `GET /api/v1/rooms/{id}/messages/search`.
+- [x] `HighlightSnippet` — отрывок ~160 символов c HTML-escape и
+  `<mark>...</mark>` вокруг совпадения.
+- [x] Тесты: `highlight_test.go`, `service_test.go`, `pg_provider_test.go`
+  (integration, skip-if-no-DB), `search_handler_test.go` (auth, валидация
+  `q`, фильтры типов, clamp limit).
+
+### Фаза 7.2 — Frontend overlay (PR-E) ✅ PR #20
+
+- [x] `hooks/useHotkey.ts` (модификаторы, фильтрация input) и
+  `hooks/useDebounce.ts`.
+- [x] `lib/searchClient.ts` (fetch с `AbortSignal` + `SearchAbortError`)
+  и `types/search.ts`.
+- [x] `store/searchStore.ts` — Zustand-стор с отменой устаревших запросов.
+- [x] `components/GlobalSearch.tsx` — portal overlay в `document.body`
+  с группами Чаты/Люди/Сообщения/Файлы/Встречи, навигация ↑/↓, Enter,
+  Esc; mobile fullscreen.
+- [x] Точки входа: иконки в `ChatHeader` и `RoomSidebar`, `Ctrl/Cmd+K`
+  и `/` в `MessengerPage`.
+- [x] Подсветка таргетного сообщения по `?messageId=...`
+  (`scrollIntoView` + `msg--search-target` flash).
+- [x] Sidebar-фильтр переименован в «Фильтр комнат» (отделён от
+  глобального поиска).
+- [x] Тесты: `useHotkey`, `searchStore` (отмена AbortController),
+  `GlobalSearch` (debounce, группы, Enter, Escape).
+
+### Фаза 7.3 — Локальный поиск в чате (PR-F) ✅ PR #20
+
+- [x] `components/InChatSearch.tsx` — input + prev/next + счётчик
+  `N / total` + крестик. `Enter` — следующий, `Shift+Enter` —
+  предыдущий, `Esc` — выход. `scrollIntoView` + класс
+  `msg--search-target`.
+- [x] Иконка-лупа «в чате» в `ChatHeader` (`onLocalSearch`).
+- [x] Закрывается автоматически при смене комнаты.
+- [x] Тесты: `InChatSearch.test.tsx` (счётчик 0/0 vs N/M, prev/next,
+  хоткеи, Escape, scrollIntoView).
+
+### Документация
+
+- [x] [`docs/Search.md`](Search.md) — архитектура, API-контракт, ABAC,
+  хоткеи, план миграции на Meilisearch.
+
+### Критерии готовности этапа 7
+
+- [x] `Ctrl/Cmd+K` открывает overlay с группами результатов из API.
+- [x] Поиск возвращает только видимые пользователю комнаты/сообщения/
+  файлы (ABAC).
+- [x] Локальный поиск в открытом чате с навигацией prev/next и
+  подсветкой совпавшего сообщения.
+- [x] Подсветка совпадений `<mark>` в snippet'ах.
+- [x] Все backend и frontend тесты проходят.
+
+---
+
 ## Зависимости между этапами
 
 ```
@@ -592,6 +670,9 @@
                                                                           │
                                                                           ▼
                                                               Этап 6 (Stage-деплой) ──► Этап 5 (Мобильные)
+                                                                                              │
+                                                                                              ▼
+                                                                                      Этап 7 (Поиск)
 ```
 
 Этапы 1–4 последовательные: каждый расширяет модель `Message`, WS-протокол и компонент `MessageBubble`.  
@@ -622,3 +703,4 @@
 - [x] Этап 5.4: backend push-инфраструктура (Web Push + каркасы FCM/APNs, PR #18)
 - [x] Этап 5.2 / 5.3 (каркас): Tauri 2 Mobile workspace, реальный APK в CI, iOS-каркас (PR #?)
 - [ ] Этап 5.5: подпись release-сборок и публикация в Google Play / App Store
+- [x] Этап 7: Telegram-style поиск (pg_trgm, GlobalSearch overlay, InChatSearch, PR #20)

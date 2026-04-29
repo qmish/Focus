@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { useParams, useNavigate, Outlet } from 'react-router-dom'
+import { useParams, useNavigate, Outlet, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useRoomsStore, type Room, type Message } from '../store/roomsStore'
 import { apiClient } from '../lib/apiClient'
@@ -12,7 +12,11 @@ import ThreadPanel from '../components/ThreadPanel'
 import MentionPopup from '../components/MentionPopup'
 import RoomSidebar from '../components/RoomSidebar'
 import ChatHeader from '../components/ChatHeader'
+import GlobalSearch from '../components/GlobalSearch'
+import InChatSearch from '../components/InChatSearch'
 import { useSwipe } from '../hooks/useSwipe'
+import { useHotkey } from '../hooks/useHotkey'
+import { useSearchStore } from '../store/searchStore'
 import { JITSI_DOMAIN } from '../lib/config'
 
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -33,8 +37,12 @@ interface ScheduledMeeting {
 export default function MessengerPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
+  const [urlSearchParams, setUrlSearchParams] = useSearchParams()
   const { user, token, logout } = useAuthStore()
   const { rooms, fetchRooms, createRoom, deleteRoom } = useRoomsStore()
+  const isGlobalSearchOpen = useSearchStore((s) => s.isOpen)
+  const openGlobalSearch = useSearchStore((s) => s.open)
+  const closeGlobalSearch = useSearchStore((s) => s.close)
 
   const [messages, setMessages] = useState<Message[]>([])
   const [messageInput, setMessageInput] = useState('')
@@ -75,6 +83,7 @@ export default function MessengerPage() {
   const [mentionCursorPos, setMentionCursorPos] = useState(0)
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isInChatSearchOpen, setIsInChatSearchOpen] = useState(false)
   const chatInputRef = useRef<HTMLInputElement>(null)
 
   const isGlobalAdmin = useMemo(
@@ -126,6 +135,36 @@ export default function MessengerPage() {
     })
   }, [])
 
+  // Глобальный хоткей открытия поиска: Ctrl+K / Cmd+K и `/` (вне input).
+  useHotkey(
+    [
+      { key: 'k', ctrl: true, allowInInput: true, preventDefault: true },
+      { key: 'k', cmd: true, allowInInput: true, preventDefault: true },
+      { key: '/', preventDefault: true },
+    ],
+    () => openGlobalSearch(),
+  )
+
+  // Подсветка сообщения, когда переход осуществлён из глобального поиска.
+  // Срабатывает только когда комната уже открыта и сообщения подгружены.
+  const targetMessageId = urlSearchParams.get('messageId')
+  useEffect(() => {
+    if (!targetMessageId) return
+    if (isLoadingMessages) return
+    if (!messages.find(m => m.id === targetMessageId)) return
+    const el = document.getElementById(`message-${targetMessageId}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('msg--search-target')
+    const t = window.setTimeout(() => {
+      el.classList.remove('msg--search-target')
+      const next = new URLSearchParams(urlSearchParams)
+      next.delete('messageId')
+      setUrlSearchParams(next, { replace: true })
+    }, 1800)
+    return () => window.clearTimeout(t)
+  }, [targetMessageId, isLoadingMessages, messages, urlSearchParams, setUrlSearchParams])
+
   useEffect(() => {
     if (roomId) {
       loadRoom(roomId)
@@ -136,6 +175,7 @@ export default function MessengerPage() {
       setShowVideo(false)
       setActiveThread(null)
     }
+    setIsInChatSearchOpen(false)
   }, [roomId])
 
   useEffect(() => {
@@ -774,6 +814,7 @@ export default function MessengerPage() {
         onRefreshScheduled={fetchScheduledMeetings}
         onProfileClick={() => setShowProfileModal(true)}
         onLogout={logout}
+        onGlobalSearch={openGlobalSearch}
         onCloseMobile={() => setIsSidebarOpen(false)}
         isMobileOpen={isSidebarOpen}
         scheduledMeetings={scheduledMeetings}
@@ -781,6 +822,8 @@ export default function MessengerPage() {
         user={user}
         getInitials={getInitials}
       />
+
+      <GlobalSearch open={isGlobalSearchOpen} onClose={closeGlobalSearch} />
 
       {isSidebarOpen && (
         <div
@@ -806,8 +849,14 @@ export default function MessengerPage() {
               wsConnected={wsConnected}
               onVideoCall={() => setShowVideo(true)}
               onSettings={() => setShowRoomSettings(true)}
+              onSearch={openGlobalSearch}
+              onLocalSearch={() => setIsInChatSearchOpen(o => !o)}
               onMenuClick={() => setIsSidebarOpen(o => !o)}
             />
+
+            {isInChatSearchOpen && roomId && (
+              <InChatSearch roomId={roomId} onClose={() => setIsInChatSearchOpen(false)} />
+            )}
 
             <div className="chat-messages">
               {isLoadingMessages ? (

@@ -107,6 +107,8 @@ export default function MessageBubble({
 
   return (
     <div
+      id={`message-${msg.id}`}
+      data-message-id={msg.id}
       className={`msg ${isMine ? 'msg-mine' : 'msg-other'}${showPicker ? ' msg--emoji-picker-open' : ''}`}
     >
       {!isMine && <div className="msg-avatar">{getInitials(msg.user?.name)}</div>}

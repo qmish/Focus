@@ -25,6 +25,7 @@ import (
 	"github.com/qmish/focus-api/internal/notifications"
 	"github.com/qmish/focus-api/internal/push"
 	"github.com/qmish/focus-api/internal/repository"
+	"github.com/qmish/focus-api/internal/search"
 	"github.com/qmish/focus-api/internal/webhooks"
 	"github.com/qmish/focus-api/internal/websocket"
 	"github.com/qmish/focus-api/pkg/logger"
@@ -98,6 +99,16 @@ func main() {
 			os.Exit(1)
 		}
 		logger.Info("Database migrations completed")
+	}
+
+	// Полнотекстовый поиск: pg_trgm + GIN-индексы.
+	// Включается флагом ENSURE_SEARCH_INDEXES=true (или в development).
+	// На стенде, где у роли БД нет прав, расширение и индексы создаются DBA вручную.
+	if cfg.Env == "development" || os.Getenv("ENSURE_SEARCH_INDEXES") == "true" {
+		if err := database.EnsureSearchExtensions(context.Background(), db.DB, logger.WithContext(context.Background())); err != nil {
+			logger.Error("Failed to ensure search extensions", zap.Error(err))
+			os.Exit(1)
+		}
 	}
 
 	// Инициализация репозиториев
@@ -248,6 +259,11 @@ func main() {
 	pushService = push.NewService(pushTokenRepo, logger.WithContext(context.Background()), pushSenders...)
 	pushHandler := handlers.NewPushHandler(pushTokenRepo, cfg.Push.VAPIDPublicKey)
 	messageHandler.SetPushService(pushService)
+
+	// Поиск (глобальный + локальный): pluggable провайдер, сейчас Postgres+pg_trgm.
+	searchProvider := search.NewPgProvider(db.DB)
+	searchService := search.NewService(searchProvider)
+	searchHandler := handlers.NewSearchHandler(searchService)
 	uploadDir := os.Getenv("UPLOAD_DIR")
 	if uploadDir == "" {
 		uploadDir = "/data/uploads"
@@ -442,8 +458,13 @@ func main() {
 					r.Put("/", roomHandler.UpdateRoom)
 					r.Delete("/", roomHandler.DeleteRoom)
 					r.Post("/join", roomHandler.JoinRoom)
+					// Локальный поиск сообщений в комнате (Telegram-style).
+					r.Get("/messages/search", searchHandler.LocalMessages)
 				})
 			})
+
+			// Глобальный поиск (overlay Ctrl/Cmd+K).
+			r.Get("/search", searchHandler.Global)
 
 			// Messages
 			r.Route("/messages", func(r chi.Router) {

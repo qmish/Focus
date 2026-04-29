@@ -20,6 +20,8 @@ interface RoomSidebarProps<TMeeting extends ScheduledMeetingItem = ScheduledMeet
   onRefreshScheduled: () => void
   onProfileClick: () => void
   onLogout: () => void
+  /** Открыть глобальный поиск (Ctrl/Cmd+K). */
+  onGlobalSearch?: () => void
   /** Закрыть sidebar — на мобильном после выбора комнаты */
   onCloseMobile?: () => void
   /** Открыт ли sidebar на мобильном (slide-in) */
@@ -42,6 +44,7 @@ export default function RoomSidebar<TMeeting extends ScheduledMeetingItem = Sche
   onRefreshScheduled,
   onProfileClick,
   onLogout,
+  onGlobalSearch,
   onCloseMobile,
   isMobileOpen,
   scheduledMeetings,
@@ -71,6 +74,21 @@ export default function RoomSidebar<TMeeting extends ScheduledMeetingItem = Sche
         <div className="sidebar-brand">
           <h1>Focus</h1>
           <div className="sidebar-actions">
+            {onGlobalSearch && (
+              <button
+                className="icon-btn"
+                onClick={onGlobalSearch}
+                title="Поиск (Ctrl+K)"
+                type="button"
+                aria-label="Открыть глобальный поиск"
+                data-testid="sidebar-global-search"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </button>
+            )}
             <button
               className="icon-btn"
               onClick={onScheduleMeeting}
@@ -100,10 +118,10 @@ export default function RoomSidebar<TMeeting extends ScheduledMeetingItem = Sche
         <div className="sidebar-search">
           <input
             type="text"
-            placeholder="Поиск..."
+            placeholder="Фильтр комнат..."
             value={searchQuery}
             onChange={e => onSearchChange(e.target.value)}
-            aria-label="Поиск по комнатам"
+            aria-label="Фильтр по списку комнат"
           />
         </div>
       </div>
