@@ -3,6 +3,7 @@ package push
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 )
 
 type mockRepo struct {
+	mu             sync.Mutex
 	tokens         []*models.PushToken
 	deletedEndpts  []string
 	touched        []uuid.UUID
@@ -49,12 +51,24 @@ func (m *mockRepo) ListByUsers(_ context.Context, userIDs []uuid.UUID) ([]*model
 	return out, nil
 }
 func (m *mockRepo) DeleteByEndpoint(_ context.Context, endpoint string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.deletedEndpts = append(m.deletedEndpts, endpoint)
 	return nil
 }
 func (m *mockRepo) TouchLastUsed(_ context.Context, id uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.touched = append(m.touched, id)
 	return nil
+}
+
+func (m *mockRepo) snapshot() (touched []uuid.UUID, deleted []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	touched = append([]uuid.UUID(nil), m.touched...)
+	deleted = append([]string(nil), m.deletedEndpts...)
+	return
 }
 
 type goneSender struct{ count atomic.Int32 }
@@ -81,7 +95,8 @@ func TestService_NotifyUser_DispatchesAndTouches(t *testing.T) {
 
 	assert.Len(t, web.Calls, 1)
 	assert.Len(t, fcm.Calls, 1)
-	assert.Len(t, repo.touched, 2)
+	touched, _ := repo.snapshot()
+	assert.Len(t, touched, 2)
 }
 
 func TestService_NotifyUsers_FiltersByPlatformsWithSender(t *testing.T) {
@@ -113,8 +128,9 @@ func TestService_RemovesGoneSubscriptions(t *testing.T) {
 	svc := NewService(repo, nil, gone)
 
 	require.NoError(t, svc.NotifyUser(context.Background(), uid, &Notification{Title: "x"}))
-	assert.Equal(t, []string{"expired"}, repo.deletedEndpts)
-	assert.Empty(t, repo.touched)
+	touched, deleted := repo.snapshot()
+	assert.Equal(t, []string{"expired"}, deleted)
+	assert.Empty(t, touched)
 }
 
 func TestService_EmptyUsersIsNoop(t *testing.T) {
